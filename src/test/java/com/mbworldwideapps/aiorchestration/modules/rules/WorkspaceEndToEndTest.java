@@ -63,8 +63,9 @@ class WorkspaceEndToEndTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired PlatformTransactionManager transactions;
     @MockitoBean MemoryVectorIndex vectors;
-    // job memory talks to Qdrant when it starts; these tests do not use it
+    // job and personal memory talk to Qdrant when they start; these tests use neither
     @MockitoBean com.mbworldwideapps.aiorchestration.modules.mcp.server.JobMemoryMcpTool jobMemory;
+    @MockitoBean com.mbworldwideapps.aiorchestration.modules.mcp.server.PersonalMemoryMcpTool personalMemory;
 
     @Test
     void memoryBackedRevisionUsesFreshPendingOriginAndRejectsTamperedApproval() throws Exception {
