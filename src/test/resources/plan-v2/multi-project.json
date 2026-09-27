@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 2,
+  "planId": "55555555-5555-5555-5555-555555555555",
+  "revision": 1,
+  "goal": "Apply two independent project changes",
+  "projects": [
+    {
+      "projectRef": "consumer",
+      "projectKey": "CONSUMER",
+      "baseline": {
+        "repositoryFingerprint": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "headCommit": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "dirtyStateHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "scannerRevision": "scan-consumer-1",
+        "scannerEvidenceStatus": "PRESENT"
+      }
+    },
+    {
+      "projectRef": "producer",
+      "projectKey": "PRODUCER",
+      "baseline": {
+        "repositoryFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "dirtyStateHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scannerRevision": "scan-producer-1",
+        "scannerEvidenceStatus": "PRESENT"
+      }
+    }
+  ],
+  "targets": [
+    {
+      "targetId": "t-consumer-doc",
+      "projectRef": "consumer",
+      "operation": "MODIFY",
+      "repoRelativePath": "docs/consumer.md",
+      "previousPath": null,
+      "proposedSymbol": null,
+      "language": "MARKDOWN",
+      "sourceSet": "MAIN",
+      "artifactKind": "DOCUMENTATION",
+      "generated": false,
+      "roleHints": [],
+      "annotationHints": [],
+      "intentIds": ["i-consumer-doc"],
+      "confidence": 0.8,
+      "evidence": []
+    },
+    {
+      "targetId": "t-producer-doc",
+      "projectRef": "producer",
+      "operation": "MODIFY",
+      "repoRelativePath": "docs/producer.md",
+      "previousPath": null,
+      "proposedSymbol": null,
+      "language": "MARKDOWN",
+      "sourceSet": "MAIN",
+      "artifactKind": "DOCUMENTATION",
+      "generated": false,
+      "roleHints": [],
+      "annotationHints": [],
+      "intentIds": ["i-producer-doc"],
+      "confidence": 0.8,
+      "evidence": []
+    }
+  ],
+  "intents": [
+    {
+      "intentId": "i-consumer-doc",
+      "kind": "OTHER",
+      "description": "Clarify consumer ownership",
+      "targetIds": ["t-consumer-doc"],
+      "dependencies": []
+    },
+    {
+      "intentId": "i-producer-doc",
+      "kind": "OTHER",
+      "description": "Clarify producer ownership",
+      "targetIds": ["t-producer-doc"],
+      "dependencies": []
+    }
+  ],
+  "steps": [
+    {
+      "stepId": "s-consumer",
+      "description": "Update consumer documentation",
+      "targetIds": ["t-consumer-doc"],
+      "intentIds": ["i-consumer-doc"]
+    },
+    {
+      "stepId": "s-producer",
+      "description": "Update producer documentation",
+      "targetIds": ["t-producer-doc"],
+      "intentIds": ["i-producer-doc"]
+    }
+  ],
+  "coordination": [],
+  "validationPlan": [
+    {
+      "validationId": "v-consumer",
+      "kind": "MANUAL",
+      "targetIds": ["t-consumer-doc"],
+      "description": "Review consumer documentation"
+    },
+    {
+      "validationId": "v-producer",
+      "kind": "MANUAL",
+      "targetIds": ["t-producer-doc"],
+      "description": "Review producer documentation"
+    }
+  ],
+  "risks": [],
+  "citations": [],
+  "confidence": 0.8
+}

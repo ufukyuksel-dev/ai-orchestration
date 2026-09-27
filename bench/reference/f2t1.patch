@@ -1,0 +1,110 @@
+diff --git a/src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java b/src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java
+index 70e60b8..b73781a 100644
+--- a/src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java
++++ b/src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java
+@@ -24,6 +24,7 @@ import org.springframework.data.domain.PageRequest;
+ import org.springframework.data.domain.Pageable;
+ import org.springframework.stereotype.Controller;
+ import org.springframework.ui.Model;
++import org.springframework.util.StringUtils;
+ import org.springframework.validation.BindingResult;
+ import org.springframework.web.bind.WebDataBinder;
+ import org.springframework.web.bind.annotation.GetMapping;
+@@ -101,7 +102,7 @@ class OwnerController {
+ 		}
+ 
+ 		// find owners by last name
+-		Page<Owner> ownersResults = findPaginatedForOwnersLastName(page, lastName);
++		Page<Owner> ownersResults = findPaginatedForOwners(page, lastName, owner.getCity());
+ 		if (ownersResults.isEmpty()) {
+ 			// no owners found
+ 			result.rejectValue("lastName", "notFound", "not found");
+@@ -127,9 +128,12 @@ class OwnerController {
+ 		return "owners/ownersList";
+ 	}
+ 
+-	private Page<Owner> findPaginatedForOwnersLastName(int page, String lastname) {
++	private Page<Owner> findPaginatedForOwners(int page, String lastname, String city) {
+ 		int pageSize = 5;
+ 		Pageable pageable = PageRequest.of(page - 1, pageSize);
++		if (StringUtils.hasText(city)) {
++			return owners.findByLastNameStartingWithAndCity(lastname, city, pageable);
++		}
+ 		return owners.findByLastNameStartingWith(lastname, pageable);
+ 	}
+ 
+diff --git a/src/main/java/org/springframework/samples/petclinic/owner/OwnerRepository.java b/src/main/java/org/springframework/samples/petclinic/owner/OwnerRepository.java
+index d2b3dde..aae872f 100644
+--- a/src/main/java/org/springframework/samples/petclinic/owner/OwnerRepository.java
++++ b/src/main/java/org/springframework/samples/petclinic/owner/OwnerRepository.java
+@@ -44,6 +44,15 @@ public interface OwnerRepository extends JpaRepository<Owner, Integer> {
+ 	 */
+ 	Page<Owner> findByLastNameStartingWith(String lastName, Pageable pageable);
+ 
++	/**
++	 * Retrieve {@link Owner}s whose last name starts with the given name and who live in
++	 * the given city.
++	 * @param lastName Value to search for
++	 * @param city the exact city
++	 * @return a page of matching {@link Owner}s
++	 */
++	Page<Owner> findByLastNameStartingWithAndCity(String lastName, String city, Pageable pageable);
++
+ 	/**
+ 	 * Retrieve an {@link Owner} from the data store by id.
+ 	 * <p>
+diff --git a/src/main/resources/templates/owners/findOwners.html b/src/main/resources/templates/owners/findOwners.html
+index 703351c..1da7436 100644
+--- a/src/main/resources/templates/owners/findOwners.html
++++ b/src/main/resources/templates/owners/findOwners.html
+@@ -20,6 +20,14 @@
+         </div>
+       </div>
+     </div>
++    <div class="form-group">
++      <div class="control-group" id="cityGroup">
++        <label class="col-sm-2 control-label" th:text="#{city}">City</label>
++        <div class="col-sm-10">
++          <input class="form-control" th:field="*{city}" size="30" maxlength="80" />
++        </div>
++      </div>
++    </div>
+     <div class="form-group">
+       <div class="col-sm-offset-2 col-sm-10">
+         <button type="submit" class="btn btn-primary" th:text="#{findOwner}">Find Owner</button>
+diff --git a/src/main/resources/templates/owners/ownersList.html b/src/main/resources/templates/owners/ownersList.html
+index 01223c1..216b91c 100644
+--- a/src/main/resources/templates/owners/ownersList.html
++++ b/src/main/resources/templates/owners/ownersList.html
+@@ -32,26 +32,26 @@
+     <span th:text="#{pages}">Pages:</span>
+     <span>[</span>
+     <span th:each="i: ${#numbers.sequence(1, totalPages)}">
+-      <a th:if="${currentPage != i}" th:href="@{'/owners?page=' + ${i}}">[[${i}]]</a>
++      <a th:if="${currentPage != i}" th:href="@{/owners(page=${i},lastName=${owner.lastName},city=${owner.city})}">[[${i}]]</a>
+       <span th:unless="${currentPage != i}">[[${i}]]</span>
+     </span>
+     <span>]&nbsp;</span>
+     <span>
+-      <a th:if="${currentPage > 1}" th:href="@{'/owners?page=1'}" th:title="#{first}" class="fa fa-fast-backward"></a>
++      <a th:if="${currentPage > 1}" th:href="@{/owners(page=1,lastName=${owner.lastName},city=${owner.city})}" th:title="#{first}" class="fa fa-fast-backward"></a>
+       <span th:unless="${currentPage > 1}" th:title="#{first}" class="fa fa-fast-backward"></span>
+     </span>
+     <span>
+-      <a th:if="${currentPage > 1}" th:href="@{'/owners?page=__${currentPage - 1}__'}" th:title="#{previous}"
++      <a th:if="${currentPage > 1}" th:href="@{/owners(page=${currentPage - 1},lastName=${owner.lastName},city=${owner.city})}" th:title="#{previous}"
+         class="fa fa-step-backward"></a>
+       <span th:unless="${currentPage > 1}" th:title="#{previous}" class="fa fa-step-backward"></span>
+     </span>
+     <span>
+-      <a th:if="${currentPage < totalPages}" th:href="@{'/owners?page=__${currentPage + 1}__'}" th:title="#{next}"
++      <a th:if="${currentPage < totalPages}" th:href="@{/owners(page=${currentPage + 1},lastName=${owner.lastName},city=${owner.city})}" th:title="#{next}"
+         class="fa fa-step-forward"></a>
+       <span th:unless="${currentPage < totalPages}" th:title="#{next}" class="fa fa-step-forward"></span>
+     </span>
+     <span>
+-      <a th:if="${currentPage < totalPages}" th:href="@{'/owners?page=__${totalPages}__'}" th:title="#{last}"
++      <a th:if="${currentPage < totalPages}" th:href="@{/owners(page=${totalPages},lastName=${owner.lastName},city=${owner.city})}" th:title="#{last}"
+         class="fa fa-fast-forward"></a>
+       <span th:unless="${currentPage < totalPages}" th:title="#{last}" class="fa fa-fast-forward"></span>
+     </span>

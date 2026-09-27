@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="466" viewBox="0 0 1000 466" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+<rect width="1000" height="466" rx="18" fill="#080b18"/>
+<text x="40" y="52" fill="#eceff6" font-size="26" font-weight="700">Tokens per successful task on follow-up tasks</text>
+<text x="40" y="80" fill="#808aa0" font-size="16">Same agent, same tasks: without (grey) and with AI Orchestration (cyan). Lower is better.</text>
+<text x="40" y="160" fill="#eceff6" font-size="22" font-weight="600">Claude Code</text>
+<text x="40" y="186" fill="#808aa0" font-size="14">success 12/12 vs 12/12</text>
+<rect x="250" y="116" width="500.0" height="36" rx="8" fill="#5b6478"/>
+<text x="762.0" y="141" fill="#eceff6" font-size="18">1.12M <tspan fill="#808aa0" font-size="14">without</tspan></text>
+<rect x="250" y="164" width="401.8" height="36" rx="8" fill="#22d3ee"/>
+<text x="663.8" y="189" fill="#eceff6" font-size="18">0.90M <tspan fill="#808aa0" font-size="14">with</tspan></text>
+<text x="960" y="172" fill="#34d399" font-size="34" font-weight="700" text-anchor="end">-20%</text>
+<text x="40" y="310" fill="#eceff6" font-size="22" font-weight="600">Codex</text>
+<text x="40" y="336" fill="#808aa0" font-size="14">success 12/12 vs 12/12</text>
+<rect x="250" y="266" width="252.7" height="36" rx="8" fill="#5b6478"/>
+<text x="514.7" y="291" fill="#eceff6" font-size="18">0.57M <tspan fill="#808aa0" font-size="14">without</tspan></text>
+<rect x="250" y="314" width="159.9" height="36" rx="8" fill="#22d3ee"/>
+<text x="421.9" y="339" fill="#eceff6" font-size="18">0.36M <tspan fill="#808aa0" font-size="14">with</tspan></text>
+<text x="960" y="322" fill="#34d399" font-size="34" font-weight="700" text-anchor="end">-37%</text>
+<text x="40" y="428" fill="#808aa0" font-size="13">Spring Petclinic (holdout suite), 2 task families × 3 related tasks, 2 repetitions, cumulative learning chain</text>
+<text x="40" y="446" fill="#808aa0" font-size="13">models: default, sonnet · 2026-09-27 · development measurement: fixes were found on these tasks</text>
+</svg>

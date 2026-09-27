@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-09-17",
+  "measurementSource": "isolated_java_adapter_assertions",
+  "liveRuntimeStatus": "NOT_RUN",
+  "scenarios": [
+    {
+      "id": "metadata_skip",
+      "report": "target/surefire-reports/TEST-com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryVectorProjectionCoordinatorTest.xml",
+      "testCase": "metadataOnlyChangeSkipsSecondEmbeddingTrigger",
+      "observed": {
+        "events": 2,
+        "vectorUpsertCalls": 1,
+        "avoidedEmbeddingTriggeringAdapterCalls": 1
+      }
+    },
+    {
+      "id": "fingerprint_refresh",
+      "report": "target/surefire-reports/TEST-com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryVectorProjectionCoordinatorTest.xml",
+      "testCase": "embeddingFingerprintChangeForcesUpsertWithCurrentFingerprint",
+      "observed": {
+        "events": 1,
+        "vectorUpsertCalls": 1
+      }
+    },
+    {
+      "id": "exclusive_outbox",
+      "report": "target/surefire-reports/TEST-com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryVectorProjectionCoordinatorTest.xml",
+      "testCase": "outboxModeEnqueuesAndNeverAlsoPublishesSynchronously",
+      "observed": {
+        "events": 1,
+        "outboxEnqueueCalls": 1,
+        "synchronousVectorCalls": 0
+      }
+    },
+    {
+      "id": "crash_retry",
+      "report": "target/surefire-reports/TEST-com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryVectorProjectionWorkerTest.xml",
+      "testCase": "workerCrashRetriesSameRevisionAndCompletesIdempotently",
+      "observed": {
+        "workerAttempts": 2,
+        "retryTransitions": 1,
+        "completedRevisions": 1
+      }
+    },
+    {
+      "id": "archive_wins",
+      "report": "target/surefire-reports/TEST-com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryVectorProjectionWorkerTest.xml",
+      "testCase": "delayedUpsertRehydratesArchivedStateAndCannotReviveIt",
+      "observed": {
+        "vectorDeleteCalls": 1,
+        "vectorUpsertCalls": 0
+      }
+    },
+    {
+      "id": "bounded_backpressure",
+      "report": "target/surefire-reports/TEST-com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryVectorProjectionWorkerTest.xml",
+      "testCase": "boundedQueueRejectsWithoutDroppingExistingWork",
+      "observed": {
+        "acceptedWorkRows": 2,
+        "queueRejectedCalls": 1,
+        "silentlyDroppedRows": 0
+      }
+    },
+    {
+      "id": "judge_guard",
+      "report": "target/surefire-reports/TEST-com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryRelationJudgeWorkerTest.xml",
+      "testCase": "transactionAndEmbeddingOrderFirstActivationAndCompletedGuard",
+      "observed": {
+        "eligibleEvents": 2,
+        "judgeModelCalls": 1
+      }
+    },
+    {
+      "id": "status_recovery",
+      "report": "target/surefire-reports/TEST-com.mbworldwideapps.aiorchestration.modules.agentlearning.AgentLearningServiceTest.xml",
+      "testCase": "operationStatusRecoversCompletedResultAfterCallerTimeoutWithoutCreatingMemory",
+      "observed": {
+        "createdMemories": 1,
+        "statusReads": 1,
+        "duplicateMemories": 0
+      }
+    }
+  ]
+}

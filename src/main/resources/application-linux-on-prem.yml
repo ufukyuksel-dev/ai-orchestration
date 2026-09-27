@@ -1,0 +1,55 @@
+spring:
+  ai:
+    model:
+      embedding: ollama
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      chat:
+        model: ${AI_ORCH_CHAT_MODEL:qwen3:8b}
+      embedding:
+        model: bge-m3
+        options:
+          model: bge-m3
+          dimensions: 1024
+    vectorstore:
+      qdrant:
+        collection-name: knowledge_chunks_bge_m3_1024
+
+ai-orchestration:
+  embedding-dimensions: 1024
+  chat-model: ${AI_ORCH_CHAT_MODEL:qwen3:8b}
+  generation:
+    enabled: ${AI_ORCH_GENERATION_ENABLED:false}
+    provider: ${AI_ORCH_GENERATION_PROVIDER:local-qwen}
+    fallback-to-extractive: true
+    timeout-ms: ${AI_ORCH_GENERATION_TIMEOUT_MS:8000}
+    max-tokens: ${AI_ORCH_GENERATION_MAX_TOKENS:192}
+    temperature: ${AI_ORCH_GENERATION_TEMPERATURE:0.0}
+    thinking-enabled: ${AI_ORCH_GENERATION_THINKING_ENABLED:false}
+    canary:
+      enabled: ${AI_ORCH_GENERATION_CANARY_ENABLED:false}
+      allowed-user-ids: ${AI_ORCH_GENERATION_CANARY_USERS:}
+      percentage-rollout: ${AI_ORCH_GENERATION_CANARY_PERCENTAGE:0}
+  secrets:
+    vault:
+      enabled: ${AI_ORCH_VAULT_ENABLED:false}
+      fail-fast: ${AI_ORCH_VAULT_FAIL_FAST:true}
+  ide-bridge:
+    encryption-key-ref: ${AI_ORCH_IDE_BRIDGE_KEY_REF:vault:secret/data/ai-orchestration/ide-bridge#key}
+  memory:
+    episodic-collection-name: memory_episodic_bge_m3_1024
+    embedding:
+      provider: ollama
+      model-identity: bge-m3
+      model-revision: ${AI_ORCH_MEMORY_EMBEDDING_MODEL_REVISION:unverified}
+      normalization: ollama-bge-m3-default
+      retrieval-text-schema-version: legacy-v1
+      shadow-provider: ${AI_ORCH_MEMORY_SHADOW_PROVIDER:ollama}
+      shadow-model-identity: ${AI_ORCH_MEMORY_SHADOW_MODEL:bge-m3}
+      shadow-model-revision: ${AI_ORCH_MEMORY_SHADOW_MODEL_REVISION:unverified}
+      shadow-normalization: ${AI_ORCH_MEMORY_SHADOW_NORMALIZATION:ollama-bge-m3-default}
+  policy:
+    admin-token-required: true
+    admin-token: ${AI_ORCH_ADMIN_TOKEN:}
+  ollama:
+    preflight-enabled: true

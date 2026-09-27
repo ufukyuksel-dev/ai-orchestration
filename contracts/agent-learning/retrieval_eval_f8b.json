@@ -1,0 +1,132 @@
+{
+  "schemaVersion": "f8b-heldout-v1",
+  "provenance": "rights-clean synthetic repository navigation cases authored for this evaluation",
+  "frozenBeforeRun": true,
+  "arms": ["DENSE", "LEXICAL", "HYBRID_RRF"],
+  "cases": [
+    {
+      "id": "TR-01",
+      "slice": "tr_domain",
+      "query": "ödeme iade koşulu nerede uygulanıyor",
+      "goldId": "mem-tr-refund",
+      "denseCandidates": ["mem-tr-refund", "mem-en-routing", "mem-tr-ledger"],
+      "lexicalCandidates": ["mem-tr-refund", "mem-tr-ledger"]
+    },
+    {
+      "id": "TR-02",
+      "slice": "tr_domain",
+      "query": "müşteri limit aşımı davranışı",
+      "goldId": "mem-tr-limit",
+      "denseCandidates": ["mem-en-limit", "mem-tr-limit", "mem-tr-ledger"],
+      "lexicalCandidates": ["mem-tr-limit", "mem-en-limit"]
+    },
+    {
+      "id": "TR-03",
+      "slice": "tr_domain",
+      "query": "mutabakat gecikmesi yeniden deneme şartı",
+      "goldId": "mem-tr-reconcile",
+      "denseCandidates": ["mem-tr-reconcile", "mem-en-retry", "mem-tr-ledger"],
+      "lexicalCandidates": ["mem-tr-reconcile", "mem-en-retry"]
+    },
+    {
+      "id": "EN-01",
+      "slice": "en_domain",
+      "query": "chargeback routing condition",
+      "goldId": "mem-en-chargeback",
+      "denseCandidates": ["mem-en-chargeback", "mem-en-routing", "mem-tr-refund"],
+      "lexicalCandidates": ["mem-en-chargeback", "mem-en-routing"]
+    },
+    {
+      "id": "EN-02",
+      "slice": "en_domain",
+      "query": "ledger posting retry boundary",
+      "goldId": "mem-en-ledger-retry",
+      "denseCandidates": ["mem-en-routing", "mem-en-ledger-retry", "mem-en-retry"],
+      "lexicalCandidates": ["mem-en-ledger-retry", "mem-en-retry"]
+    },
+    {
+      "id": "EN-03",
+      "slice": "en_domain",
+      "query": "settlement batch ownership",
+      "goldId": "mem-en-settlement",
+      "denseCandidates": ["mem-en-settlement", "mem-tr-reconcile", "mem-en-routing"],
+      "lexicalCandidates": ["mem-en-settlement"]
+    },
+    {
+      "id": "SYM-01",
+      "slice": "symbol",
+      "query": "PaymentService#mapError",
+      "goldId": "mem-symbol-map-error",
+      "denseCandidates": ["mem-en-routing", "mem-en-retry", "mem-tr-refund", "mem-symbol-map-error"],
+      "lexicalCandidates": ["mem-symbol-map-error", "mem-en-routing"]
+    },
+    {
+      "id": "SYM-02",
+      "slice": "symbol",
+      "query": "RetryPolicy.shouldRetry",
+      "goldId": "mem-symbol-should-retry",
+      "denseCandidates": ["mem-en-retry", "mem-en-routing", "mem-symbol-should-retry", "mem-tr-limit"],
+      "lexicalCandidates": ["mem-symbol-should-retry", "mem-en-retry", "mem-symbol-should-retry"]
+    },
+    {
+      "id": "SYM-03",
+      "slice": "symbol",
+      "query": "LedgerWriter::appendEntry",
+      "goldId": "mem-symbol-append-entry",
+      "denseCandidates": ["mem-tr-ledger", "mem-en-ledger-retry", "mem-en-routing", "mem-symbol-append-entry"],
+      "lexicalCandidates": ["mem-symbol-append-entry", "mem-tr-ledger"]
+    },
+    {
+      "id": "ERR-01",
+      "slice": "error_code",
+      "query": "ERR_PAY_042",
+      "goldId": "mem-error-pay-042",
+      "denseCandidates": ["mem-en-routing", "mem-tr-refund", "mem-en-retry", "mem-error-pay-042"],
+      "lexicalCandidates": [
+        {"id": "mem-foreign-pay-042", "eligible": false},
+        "mem-error-pay-042",
+        "mem-en-routing"
+      ]
+    },
+    {
+      "id": "ERR-02",
+      "slice": "error_code",
+      "query": "LEDGER_E17",
+      "goldId": "mem-error-ledger-e17",
+      "denseCandidates": ["mem-tr-ledger", "mem-en-ledger-retry", "mem-error-ledger-e17", "mem-en-routing"],
+      "lexicalCandidates": ["mem-error-ledger-e17", "mem-tr-ledger"]
+    },
+    {
+      "id": "ERR-03",
+      "slice": "error_code",
+      "query": "SETTLEMENT_TIMEOUT_9",
+      "goldId": "mem-error-settlement-9",
+      "denseCandidates": ["mem-en-settlement", "mem-en-retry", "mem-en-routing", "mem-error-settlement-9"],
+      "lexicalCandidates": ["mem-error-settlement-9", "mem-en-settlement"]
+    },
+    {
+      "id": "SPARSE-01",
+      "slice": "sparse_exact",
+      "query": "payments.retry.max-attempts",
+      "goldId": "mem-config-max-attempts",
+      "denseCandidates": ["mem-en-retry", "mem-en-routing", "mem-tr-limit", "mem-config-max-attempts"],
+      "lexicalCandidates": ["mem-config-max-attempts", "mem-en-retry"]
+    },
+    {
+      "id": "SPARSE-02",
+      "slice": "sparse_exact",
+      "query": "/internal/settlements/{batchId}/retry",
+      "goldId": "mem-endpoint-settlement-retry",
+      "denseCandidates": ["mem-en-settlement", "mem-en-routing", "mem-en-retry", "mem-endpoint-settlement-retry"],
+      "lexicalCandidates": ["mem-endpoint-settlement-retry", "mem-en-settlement"]
+    },
+    {
+      "id": "SPARSE-03",
+      "slice": "sparse_exact",
+      "query": "config/payment-routing.yml",
+      "goldId": "mem-path-payment-routing",
+      "denseCandidates": ["mem-en-routing", "mem-tr-refund", "mem-en-chargeback", "mem-path-payment-routing"],
+      "lexicalCandidates": ["mem-path-payment-routing", "mem-en-routing"]
+    }
+  ]
+}

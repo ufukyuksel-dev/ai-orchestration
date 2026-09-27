@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-orchestration.local/contracts/agent-learning/learning-candidate.schema.json",
+  "title": "AI Orchestration automatic learning sidecar",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["learningCandidates"],
+  "properties": {
+    "learningCandidates": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 3,
+      "items": { "$ref": "#/$defs/learning" }
+    }
+  },
+  "$defs": {
+    "boundedListItem": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "boundedList": {
+      "type": "array",
+      "maxItems": 6,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/boundedListItem" }
+    },
+    "locator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "ref", "role"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["symbol", "file", "directory"] },
+        "ref": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "signature": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "path": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "role": {
+          "type": "string",
+          "enum": ["primary_change_point", "supporting", "validation", "configuration", "entry_point"]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "symbol" } } },
+          "then": { "required": ["path"] },
+          "else": {
+            "not": { "anyOf": [{ "required": ["path"] }, { "required": ["signature"] }] }
+          }
+        }
+      ]
+    },
+    "learning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "summary", "content", "locators"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "behavior",
+            "navigation",
+            "procedure",
+            "field_mapping",
+            "debug_finding",
+            "change_point",
+            "test_address"
+          ]
+        },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "content": { "type": "string", "minLength": 1, "maxLength": 700 },
+        "locators": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "contains": {
+            "type": "object",
+            "properties": { "kind": { "enum": ["symbol", "file"] } },
+            "required": ["kind"]
+          },
+          "items": { "$ref": "#/$defs/locator" }
+        },
+        "appliesWhen": { "$ref": "#/$defs/boundedList" },
+        "limitations": { "$ref": "#/$defs/boundedList" },
+        "reusableFor": { "$ref": "#/$defs/boundedList" },
+        "correctionRef": {
+          "type": "string",
+          "pattern": "^k[1-9][0-9]*$"
+        },
+        "reference": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["details"],
+          "properties": {
+            "details": { "type": "string", "minLength": 1, "maxLength": 4000 }
+          }
+        }
+      }
+    }
+  }
+}

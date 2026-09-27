@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 2,
+  "planId": "66666666-6666-6666-6666-666666666666",
+  "revision": 7,
+  "goal": "Move a producer contract and update its consumer safely",
+  "projects": [
+    {
+      "projectRef": "api",
+      "projectKey": "API",
+      "baseline": {
+        "repositoryFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "dirtyStateHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scannerRevision": "scan-api-7",
+        "scannerEvidenceStatus": "STALE"
+      }
+    },
+    {
+      "projectRef": "gateway",
+      "projectKey": "GATEWAY",
+      "baseline": {
+        "repositoryFingerprint": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "headCommit": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "dirtyStateHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "scannerRevision": "scan-gateway-4",
+        "scannerEvidenceStatus": "PRESENT"
+      }
+    }
+  ],
+  "targets": [
+    {
+      "targetId": "t-api",
+      "projectRef": "api",
+      "operation": "MOVE",
+      "repoRelativePath": "src/main/java/com/acme/api/v2/ContractController.java",
+      "previousPath": "src/main/java/com/acme/api/v1/ContractController.java",
+      "proposedSymbol": "com.acme.api.v2.ContractController",
+      "language": "JAVA",
+      "sourceSet": "MAIN",
+      "artifactKind": "CODE",
+      "generated": false,
+      "roleHints": ["web.http-controller"],
+      "annotationHints": ["org.springframework.web.bind.annotation.RestController"],
+      "intentIds": ["i-contract"],
+      "confidence": 0.93,
+      "evidence": ["existing v1 controller", "planned v2 package"]
+    },
+    {
+      "targetId": "t-gateway",
+      "projectRef": "gateway",
+      "operation": "MODIFY",
+      "repoRelativePath": "src/main/java/com/acme/gateway/ContractClient.java",
+      "previousPath": null,
+      "proposedSymbol": "com.acme.gateway.ContractClient",
+      "language": "JAVA",
+      "sourceSet": "MAIN",
+      "artifactKind": "CODE",
+      "generated": false,
+      "roleHints": ["integration.http-client"],
+      "annotationHints": [],
+      "intentIds": ["i-contract"],
+      "confidence": 0.88,
+      "evidence": ["consumer dependency edge"]
+    }
+  ],
+  "intents": [
+    {
+      "intentId": "i-contract",
+      "kind": "API_CONTRACT_CHANGE",
+      "description": "Move the producer contract and preserve gateway compatibility",
+      "targetIds": ["t-api", "t-gateway"],
+      "dependencies": ["com.acme.api.v2.ContractController"]
+    }
+  ],
+  "steps": [
+    {
+      "stepId": "s-contract",
+      "description": "Apply the compatible producer and consumer changes",
+      "targetIds": ["t-api", "t-gateway"],
+      "intentIds": ["i-contract"]
+    }
+  ],
+  "coordination": [
+    {
+      "coordinationId": "c-contract",
+      "producerTargetIds": ["t-api"],
+      "consumerTargetIds": ["t-gateway"],
+      "contractKind": "API",
+      "compatibilityStrategy": "EXPAND_CONTRACT",
+      "applyBefore": [
+        {"fromTargetId": "t-api", "toTargetId": "t-gateway"}
+      ],
+      "deployBefore": [
+        {"fromTargetId": "t-gateway", "toTargetId": "t-api"}
+      ],
+      "manualDeployment": false,
+      "validationIds": ["v-contract"],
+      "rollout": "Expand the API, update the gateway, then contract later",
+      "rollback": "Restore the v1 route and gateway client"
+    }
+  ],
+  "validationPlan": [
+    {
+      "validationId": "v-contract",
+      "kind": "CONTRACT_TEST",
+      "targetIds": ["t-api", "t-gateway"],
+      "description": "Verify both sides against the same contract fixture"
+    }
+  ],
+  "risks": [
+    {
+      "riskId": "r-rollout",
+      "description": "Producer and consumer rollout can drift",
+      "severity": "HIGH",
+      "mitigation": "Use expand-contract and explicit deployment ordering"
+    }
+  ],
+  "citations": [
+    {
+      "citationId": "citation-baseline",
+      "type": "BASELINE",
+      "referenceId": "symbol:ContractController"
+    },
+    {
+      "citationId": "citation-human",
+      "type": "HUMAN",
+      "referenceId": "turn:contract-move"
+    }
+  ],
+  "confidence": 0.89
+}

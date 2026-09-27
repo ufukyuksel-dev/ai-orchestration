@@ -1,0 +1,85 @@
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+!.vscode/
+!.vscode/mcp.json
+*.iml
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+!.env.template
+deploy/.env
+deploy/.env.*
+!deploy/.env.example
+!deploy/**/.env.template
+.ai_orch/
+.claude/*
+!.claude/settings.json
+.codex/*
+!.codex/hooks.json
+.mcp/
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+
+# Java / Maven build output
+target/
+*.class
+
+# Gradle / JetBrains plugin build output
+.gradle/
+.kotlin/
+.intellijPlatform/
+out/
+
+# Node / VS Code extension build output
+node_modules/
+vscode-extension/node_modules/
+vscode-extension/out/
+vscode-extension/*.vsix
+coverage/
+dist/
+build/
+
+# Runtime artifacts and logs
+.benchmark/
+__pycache__/
+logs/
+artifacts/
+/workspace/
+attachments/
+output/reports/*.jsonl
+output/reports/live-mcp-memory-ab-*/
+output/reports/live-mcp-memory-ab-*.md
+output/reports/codex-live-mcp-memory-ab-*.md
+output/reports/memoryai-live-ab-*.csv
+output/reports/memoryai-live-ab-*.md
+output/reports/memoryai-post-fix-ab.csv
+output/reports/memoryai-post-fix-ab.md
+output/run-live-mcp-memory-ab-*.sh
+*.log
+*.log.*
+*.tmp
+*.bak
+*.backup
+*.orig
+*.rej
+*.pid
+*.db
+*.sqlite
+*.sqlite3
+
+# Local model binaries
+models/
+*.onnx
+
+# Internal binary documents
+*.docx
+
+# Benchmark scratch (repos, worktrees, raw agent events)
+bench/.work/

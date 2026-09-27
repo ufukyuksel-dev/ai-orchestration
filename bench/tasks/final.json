@@ -1,0 +1,74 @@
+{
+  "suite": "final",
+  "note": "Final families: run once after the levers are tuned on dev.json. Different subsystems than dev (no i18n/validation messages, no new entity fields). Prompts state WHAT is required unambiguously (paths, parameters, redirects, what must be deleted/kept); project gotchas are left for the agent to discover. Reference solutions: bench/reference/<taskId>.patch; details in final-notes.md.",
+  "repo": "spring-petclinic",
+  "hiddenTarget": "src/test/java/org/springframework/samples/petclinic",
+  "qualityCommand": [
+    "./mvnw",
+    "-q",
+    "-DskipTests",
+    "validate"
+  ],
+  "families": [
+    {
+      "id": "F1",
+      "title": "Deleting parts of the owner aggregate",
+      "tasks": [
+        {
+          "id": "f1t1",
+          "prompt": "Add a way to delete a single visit: `POST /owners/{ownerId}/pets/{petId}/visits/{visitId}/delete` must delete that visit from the database and redirect to `/owners/{ownerId}`. All other visits and pets must stay unchanged. No UI changes are required. Make sure the project's build and tests still pass.",
+          "hidden": [
+            "BenchF1T1Test.java"
+          ],
+          "tests": "!MySqlIntegrationTests,!PostgresIntegrationTests"
+        },
+        {
+          "id": "f1t2",
+          "prompt": "Add a way to delete a pet: `POST /owners/{ownerId}/pets/{petId}/delete` must delete the pet and all of its visits from the database and redirect to `/owners/{ownerId}`. The owner's other pets and their visits must stay unchanged. No UI changes are required. Make sure the project's build and tests still pass.",
+          "hidden": [
+            "BenchF1T2Test.java"
+          ],
+          "tests": "!MySqlIntegrationTests,!PostgresIntegrationTests"
+        },
+        {
+          "id": "f1t3",
+          "prompt": "Add a way to purge old visits of a pet: `POST /owners/{ownerId}/pets/{petId}/visits/purge` with the request parameter `before` (an ISO date, `yyyy-MM-dd`) must delete from the database every visit of that pet dated strictly before `before`, and redirect to `/owners/{ownerId}`. Visits on or after that date and the visits of other pets must stay unchanged. No UI changes are required. Make sure the project's build and tests still pass.",
+          "hidden": [
+            "BenchF1T3Test.java"
+          ],
+          "tests": "!MySqlIntegrationTests,!PostgresIntegrationTests"
+        }
+      ]
+    },
+    {
+      "id": "F2",
+      "title": "List filters that survive pagination",
+      "tasks": [
+        {
+          "id": "f2t1",
+          "prompt": "The owner search (`GET /owners`) should also filter by city: an optional request parameter `city` restricts the results to owners whose city is exactly that value, combined with the existing last-name search; a missing or empty `city` means no city filter. Add a City input (request parameter `city`) to the Find Owners form. When the results span several pages, every pagination link on the owner list must keep the active search parameters (`lastName` and `city`). Existing behavior stays: a single match redirects to that owner's page, no match shows the Find Owners form again. Make sure the project's build and tests still pass.",
+          "hidden": [
+            "BenchF2T1Test.java"
+          ],
+          "tests": "!MySqlIntegrationTests,!PostgresIntegrationTests"
+        },
+        {
+          "id": "f2t2",
+          "prompt": "The veterinarians page (`GET /vets.html`) should support filtering by specialty: an optional request parameter `specialty` (a specialty name, e.g. `radiology`) restricts the list to vets having that specialty; a missing or empty `specialty` means no filter. Paging stays as it is (5 vets per page), and every pagination link on the page must keep the active `specialty` filter. No other UI changes are required. Make sure the project's build and tests still pass.",
+          "hidden": [
+            "BenchF2T2Test.java"
+          ],
+          "tests": "!MySqlIntegrationTests,!PostgresIntegrationTests"
+        },
+        {
+          "id": "f2t3",
+          "prompt": "The owner search (`GET /owners`) should also filter by pet type: an optional request parameter `petType` (a pet type name, e.g. `hamster`) restricts the results to owners who have at least one pet of that type, combined with the existing last-name search; every matching owner appears only once; a missing or empty `petType` means no pet type filter. Add a pet type input (request parameter `petType`) to the Find Owners form. When the results span several pages, every pagination link on the owner list must keep the active search parameters (`lastName` and `petType`). Existing behavior stays: a single match redirects to that owner's page, no match shows the Find Owners form again. Make sure the project's build and tests still pass.",
+          "hidden": [
+            "BenchF2T3Test.java"
+          ],
+          "tests": "!MySqlIntegrationTests,!PostgresIntegrationTests"
+        }
+      ]
+    }
+  ]
+}

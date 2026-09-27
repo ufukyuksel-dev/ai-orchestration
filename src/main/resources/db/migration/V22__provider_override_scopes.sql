@@ -1,0 +1,3 @@
+-- Provider override ACL scopes are stored in mcp_api_keys.scopes.
+-- No schema change is required; new key generation defaults include provider.* scopes.
+-- Existing keys remain unchanged and can be rotated through the MCP admin endpoint.

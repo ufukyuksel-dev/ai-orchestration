@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "fixtureSet": "agent-learning-f0-baseline-v1",
+  "rights": "repository-authored synthetic fixtures; no production or personal content",
+  "leakagePolicy": "T1 contains only facts observable in T1 sources; T2 expected actions are separate evaluator fields",
+  "tasks": [
+    {
+      "taskId": "FX-READ-001",
+      "kind": "memory_read",
+      "prompt": "Find the stored routing discovery and report its current source address.",
+      "expectedCapability": "bounded project memory retrieval",
+      "gold": {"keptOutsideProducerContext": true}
+    },
+    {
+      "taskId": "FX-WRITE-001",
+      "kind": "memory_write",
+      "prompt": "Store one observed field mapping with its source evidence.",
+      "expectedCapability": "one evidence-bound discovery write",
+      "gold": {"keptOutsideProducerContext": true}
+    },
+    {
+      "taskId": "FX-DUPLICATE-001",
+      "kind": "duplicate_write",
+      "prompt": "Submit the same canonical claim from a second runtime.",
+      "expectedCapability": "EXISTS with the original memory ID",
+      "gold": {"keptOutsideProducerContext": true}
+    },
+    {
+      "taskId": "FX-LOCATE-001",
+      "kind": "code_locate",
+      "prompt": "Locate the exact implementation and validation test for a related new task.",
+      "expectedCapability": "focused source and test targets",
+      "gold": {"keptOutsideProducerContext": true}
+    },
+    {
+      "taskId": "FX-CHANGE-001",
+      "kind": "code_change",
+      "prompt": "After the related source changes, refresh only the stale evidence and validate the narrow test.",
+      "expectedCapability": "T3 narrow refresh without whole-repository rediscovery",
+      "gold": {"keptOutsideProducerContext": true}
+    }
+  ],
+  "arms": {
+    "A": "no discovery support; equal mandatory rules, security and baseline access",
+    "B": "current integration baseline measured separately per runtime",
+    "C": "compact output and consistent skill/decoder only",
+    "D": "learning and navigation with legacy separate-tool cost",
+    "E": "combined learning, navigation and short task-focused operations"
+  },
+  "runtimes": ["COPILOT", "CLAUDE_CODE", "CODEX"]
+}

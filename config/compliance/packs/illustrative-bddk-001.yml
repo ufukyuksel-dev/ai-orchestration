@@ -1,0 +1,57 @@
+id: illustrative-bddk-001
+version: "1.0.0"
+source: "illustrative-bddk"
+legal_owner: "compliance-lab"
+status: illustrative
+effective_date: "2026-05-20"
+rules:
+  - id: bddk-001
+    title: "Administrative override needs maker-checker"
+    severity: critical
+    pattern: "adminOverride|bypassApproval|skipMakerChecker"
+    description: "Illustrative BDDK rule; advisory-only until approved."
+  - id: bddk-002
+    title: "Credit approval thresholds should not be hardcoded"
+    severity: high
+    pattern: "credit.*threshold\\s*=|approvalThreshold\\s*="
+    description: "Illustrative credit policy guidance."
+  - id: bddk-003
+    title: "Financial amount must use MoneyTL"
+    severity: high
+    pattern: "double\\s+amount|float\\s+amount|BigDecimal\\s+amount"
+    description: "Illustrative money type guidance."
+  - id: bddk-004
+    title: "Audit events are required for state changes"
+    severity: medium
+    pattern: "setStatus\\(|updateStatus\\("
+    description: "Illustrative audit guidance."
+  - id: bddk-005
+    title: "Privileged endpoints require admin guard"
+    severity: high
+    pattern: "/api/admin|adminEndpoint"
+    description: "Illustrative endpoint guidance."
+  - id: bddk-006
+    title: "External network calls require allowlist"
+    severity: high
+    pattern: "HttpClient|RestTemplate|WebClient"
+    description: "Illustrative egress guidance."
+  - id: bddk-007
+    title: "Operational errors should be redacted"
+    severity: medium
+    pattern: "printStackTrace\\(|getMessage\\(\\)"
+    description: "Illustrative error handling guidance."
+  - id: bddk-008
+    title: "Batch jobs require idempotency"
+    severity: medium
+    pattern: "@Scheduled|Cron"
+    description: "Illustrative batch guidance."
+  - id: bddk-009
+    title: "Feature flags require default-safe values"
+    severity: medium
+    pattern: "featureFlag|rollout|canary"
+    description: "Illustrative rollout guidance."
+  - id: bddk-010
+    title: "Database migrations require versioned history"
+    severity: low
+    pattern: "CREATE TABLE|ALTER TABLE"
+    description: "Illustrative schema governance guidance."

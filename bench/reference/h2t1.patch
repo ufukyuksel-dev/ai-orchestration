@@ -1,0 +1,115 @@
+diff --git a/src/main/java/org/springframework/samples/petclinic/owner/OwnerCsvController.java b/src/main/java/org/springframework/samples/petclinic/owner/OwnerCsvController.java
+new file mode 100644
+index 0000000..e217b33
+--- /dev/null
++++ b/src/main/java/org/springframework/samples/petclinic/owner/OwnerCsvController.java
+@@ -0,0 +1,45 @@
++/*
++ * Copyright 2012-2025 the original author or authors.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      https://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.springframework.samples.petclinic.owner;
++
++import org.springframework.data.domain.Sort;
++import org.springframework.samples.petclinic.system.Csv;
++import org.springframework.web.bind.annotation.GetMapping;
++import org.springframework.web.bind.annotation.RestController;
++
++/**
++ * CSV export of the owners.
++ */
++@RestController
++class OwnerCsvController {
++
++	private final OwnerRepository owners;
++
++	OwnerCsvController(OwnerRepository owners) {
++		this.owners = owners;
++	}
++
++	@GetMapping(value = "/owners.csv", produces = Csv.TEXT_CSV)
++	String exportOwners() {
++		StringBuilder csv = new StringBuilder(Csv.line("id", "firstName", "lastName", "city", "telephone"));
++		for (Owner owner : this.owners.findAll(Sort.by("id"))) {
++			csv.append(Csv.line(owner.getId(), owner.getFirstName(), owner.getLastName(), owner.getCity(),
++					owner.getTelephone()));
++		}
++		return csv.toString();
++	}
++
++}
+diff --git a/src/main/java/org/springframework/samples/petclinic/system/Csv.java b/src/main/java/org/springframework/samples/petclinic/system/Csv.java
+new file mode 100644
+index 0000000..01fe9cd
+--- /dev/null
++++ b/src/main/java/org/springframework/samples/petclinic/system/Csv.java
+@@ -0,0 +1,58 @@
++/*
++ * Copyright 2012-2025 the original author or authors.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      https://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.springframework.samples.petclinic.system;
++
++import java.util.Arrays;
++import java.util.stream.Collectors;
++
++/**
++ * Minimal RFC 4180 CSV writing helpers.
++ */
++public final class Csv {
++
++	/** Media type of CSV responses. */
++	public static final String TEXT_CSV = "text/csv";
++
++	private Csv() {
++	}
++
++	/**
++	 * Formats one CSV record, terminated by CRLF. {@code null} values become empty
++	 * fields.
++	 * @param values the field values
++	 * @return the record line
++	 */
++	public static String line(Object... values) {
++		return Arrays.stream(values).map(Csv::field).collect(Collectors.joining(",")) + "\r\n";
++	}
++
++	/**
++	 * Quotes a value if it contains a comma, a double quote or a line break.
++	 * @param value the value, may be {@code null}
++	 * @return the escaped field
++	 */
++	public static String field(Object value) {
++		if (value == null) {
++			return "";
++		}
++		String text = value.toString();
++		if (text.contains(",") || text.contains("\"") || text.contains("\n") || text.contains("\r")) {
++			return '"' + text.replace("\"", "\"\"") + '"';
++		}
++		return text;
++	}
++
++}

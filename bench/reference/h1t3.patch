@@ -1,0 +1,71 @@
+diff --git a/src/main/java/org/springframework/samples/petclinic/owner/VisitRestController.java b/src/main/java/org/springframework/samples/petclinic/owner/VisitRestController.java
+new file mode 100644
+index 0000000..37c93b6
+--- /dev/null
++++ b/src/main/java/org/springframework/samples/petclinic/owner/VisitRestController.java
+@@ -0,0 +1,65 @@
++/*
++ * Copyright 2012-2025 the original author or authors.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      https://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.springframework.samples.petclinic.owner;
++
++import java.time.LocalDate;
++import java.util.Comparator;
++import java.util.List;
++
++import org.springframework.http.HttpStatus;
++import org.springframework.web.bind.annotation.GetMapping;
++import org.springframework.web.bind.annotation.PathVariable;
++import org.springframework.web.bind.annotation.RestController;
++import org.springframework.web.server.ResponseStatusException;
++
++/**
++ * Read-only JSON API for the visits of a pet. Deliberately not part of
++ * {@link VisitController}: its model attribute adds a blank visit to the pet and fails
++ * with a 500 for unknown ids.
++ */
++@RestController
++class VisitRestController {
++
++	private final OwnerRepository owners;
++
++	VisitRestController(OwnerRepository owners) {
++		this.owners = owners;
++	}
++
++	@GetMapping("/api/owners/{ownerId}/pets/{petId}/visits")
++	List<VisitJson> listVisits(@PathVariable int ownerId, @PathVariable int petId) {
++		Owner owner = this.owners.findById(ownerId)
++			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Owner not found: " + ownerId));
++		Pet pet = owner.getPet(petId);
++		if (pet == null) {
++			throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Pet " + petId + " not found for owner " + ownerId);
++		}
++		return pet.getVisits()
++			.stream()
++			.sorted(Comparator.comparing(Visit::getDate, Comparator.nullsLast(Comparator.naturalOrder())))
++			.map(VisitJson::of)
++			.toList();
++	}
++
++	record VisitJson(Integer id, LocalDate date, String description) {
++
++		static VisitJson of(Visit visit) {
++			return new VisitJson(visit.getId(), visit.getDate(), visit.getDescription());
++		}
++
++	}
++
++}

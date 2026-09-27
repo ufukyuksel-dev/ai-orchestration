@@ -1,0 +1,25 @@
+# Isolated panel/space browser-test server (port 18184, throw-away DB ai_orch_panel_uitest). Never the user 18080 stack.
+server:
+  port: 18184
+  address: 127.0.0.1
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:56432/ai_orch_panel_uitest
+    username: benchmark
+    password: benchmark_local_only
+  ai:
+    vectorstore:
+      qdrant:
+        host: localhost
+        port: 6434
+ai-orchestration:
+  references:
+    root-path: ${user.dir}/.benchmark/panel-references
+  local-trust:
+    auto-active-write: true
+  memory:
+    load-on-startup: false
+    write-gate:
+      provider: heuristic
+    relation-judge:
+      enabled: false

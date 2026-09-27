@@ -1,0 +1,74 @@
+{
+  "suite": "dev",
+  "note": "Development families: used to tune levers. Final families live in final.json and are run once. Prompts state WHAT is required unambiguously (error code, message key); project gotchas are left for the agent to discover.",
+  "repo": "spring-petclinic",
+  "hiddenTarget": "src/test/java/org/springframework/samples/petclinic/owner",
+  "qualityCommand": [
+    "./mvnw",
+    "-q",
+    "-DskipTests",
+    "validate"
+  ],
+  "families": [
+    {
+      "id": "D1",
+      "title": "Validation messages",
+      "tasks": [
+        {
+          "id": "d1t1",
+          "prompt": "When a pet is added or edited, reject pet names longer than 30 characters (30 is still allowed). Reject the name field with the error code `tooLong`, and add the user-facing message (\"must be at most 30 characters\") to the project's message bundle under the key `tooLong`. Make sure the project's build and tests still pass.",
+          "hidden": [
+            "BenchD1T1Test.java"
+          ],
+          "tests": "BenchD1T1Test,PetValidatorTests,I18nPropertiesSyncTest"
+        },
+        {
+          "id": "d1t2",
+          "prompt": "When a pet is added or edited, reject birth dates in the future. Reject the birthDate field with the error code `futureDate`, and add a suitable user-facing message to the project's message bundle under the key `futureDate`. Make sure the project's build and tests still pass.",
+          "hidden": [
+            "BenchD1T2Test.java"
+          ],
+          "tests": "BenchD1T2Test,PetValidatorTests,I18nPropertiesSyncTest"
+        },
+        {
+          "id": "d1t3",
+          "prompt": "When a visit is booked, reject visit dates before today (today is allowed); the form is shown again with the error. Reject the date field with the error code `pastDate`, and add a suitable user-facing message to the project's message bundle under the key `pastDate`. Make sure the project's build and tests still pass.",
+          "hidden": [
+            "BenchD1T3Test.java"
+          ],
+          "tests": "BenchD1T3Test,VisitControllerTests,I18nPropertiesSyncTest"
+        }
+      ]
+    },
+    {
+      "id": "D2",
+      "title": "New optional field end to end",
+      "tasks": [
+        {
+          "id": "d2t1",
+          "prompt": "Owners should have an optional email address. It must be editable on the owner form, stored with the owner, and shown on the owner details page. Make sure the project's build and tests still pass.",
+          "hidden": [
+            "BenchD2T1Test.java"
+          ],
+          "tests": "!MySqlIntegrationTests,!PostgresIntegrationTests"
+        },
+        {
+          "id": "d2t2",
+          "prompt": "Pets should have an optional nickname. It must be editable on the pet form, stored with the pet, and shown in the pet list on the owner details page. Make sure the project's build and tests still pass.",
+          "hidden": [
+            "BenchD2T2Test.java"
+          ],
+          "tests": "!MySqlIntegrationTests,!PostgresIntegrationTests"
+        },
+        {
+          "id": "d2t3",
+          "prompt": "Pets should have an optional microchip id (property name `microchipId`). It must be editable on the pet form, stored with the pet, and shown in the pet list on the owner details page. Make sure the project's build and tests still pass.",
+          "hidden": [
+            "BenchD2T3Test.java"
+          ],
+          "tests": "!MySqlIntegrationTests,!PostgresIntegrationTests"
+        }
+      ]
+    }
+  ]
+}

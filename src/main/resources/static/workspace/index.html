@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Atlas · AI Orchestration</title>
+  <!-- Absolute URLs: the panel is served at /, /workspace and /workspace/index.html. The Turkish text below is
+       translated at load by panel/i18n.js (localize) when the panel language is English. -->
+  <link rel="stylesheet" href="/workspace/panel/panel.css">
+  <link rel="stylesheet" href="/graph/graph.css">
+</head>
+<body>
+  <div class="shell">
+    <nav class="rail" aria-label="Bölümler">
+      <a class="mark" href="#/overview" aria-label="Genel bakış">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" /><circle cx="16" cy="16" r="5" /><path d="M16 3v26M3 16h26" /></svg>
+        <span>Atlas</span>
+      </a>
+      <a class="rail-link" data-route="overview" href="#/overview"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 16V9m5 7V4m5 12v-5m4 5V7" /></svg><span>Genel bakış</span></a>
+      <a class="rail-link" data-route="memory" href="#/memory"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 5h12M4 10h12M4 15h8" /></svg><span>Hafıza</span></a>
+      <a class="rail-link" data-route="pending" href="#/pending"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7" /><path d="M10 6v4l3 2" /></svg><span>Onay bekleyen</span><b class="badge" id="pending-badge" hidden></b></a>
+      <a class="rail-link" data-route="rules" href="#/rules"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3h10v14l-5-3-5 3z" /></svg><span>Kurallar</span></a>
+      <a class="rail-link" data-route="references" href="#/references"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h5l2 2h7v9H3z" /></svg><span>Referanslar</span></a>
+      <a class="rail-link" data-route="graph" href="#/graph"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3.5l2.2 1.3-2.2 1.3-2.2-1.3zM3 10h14M5 14.5h10" /><path d="M10 6.1V10M6 10l-1 4.5M14 10l1 4.5" /></svg><span>Kod grafı</span></a>
+      <a class="rail-link" data-route="jobs" href="#/jobs"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="6" width="14" height="10" rx="1.5" /><path d="M7 6V4h6v2M3 10.5h14" /></svg><span>İşler</span></a>
+      <a class="rail-link space-link" href="/universe.html" target="_blank" rel="noopener" id="fullscreen-link"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 8V4h4M16 8V4h-4M4 12v4h4M16 12v4h-4" /></svg><span>Tam ekran graf</span></a>
+      <div class="rail-foot">
+        <span class="health" id="health" data-state="unknown" title="Sunucu durumu"><i></i><span id="health-text">Kontrol ediliyor</span></span>
+        <span class="lang-switch" role="group" aria-label="Dil"><button type="button" data-lang="en">EN</button><span aria-hidden="true">|</span><button type="button" data-lang="tr">TR</button></span>
+      </div>
+    </nav>
+
+    <div class="stage">
+      <header class="topbar">
+        <label class="project-pick">
+          <span class="visually-hidden">Proje</span>
+          <select id="project"><option value="">Tüm projeler</option></select>
+        </label>
+        <button class="btn quiet add-project" id="add-project" type="button" title="Bir kod klasörünü proje olarak ekle ve yapısal olarak indeksle">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12" /></svg><span>Proje ekle</span>
+        </button>
+        <button class="palette-open" id="palette-open" type="button">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5" /><path d="M13 13l4 4" /></svg>
+          <span>Kayıt, kural veya sayfa bul</span><kbd>⌘K</kbd>
+        </button>
+      </header>
+      <main id="view" tabindex="-1"></main>
+    </div>
+  </div>
+
+  <section class="onboarding" id="onboarding" hidden aria-label="Proje ekle"></section>
+
+  <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+
+  <dialog class="palette" id="palette" aria-label="Hızlı arama">
+    <input id="palette-input" placeholder="Hafıza, kural ya da bölüm ara" autocomplete="off">
+    <ul id="palette-results" role="listbox"></ul>
+  </dialog>
+
+  <dialog class="modal" id="modal"><form method="dialog" id="modal-form"></form></dialog>
+  <dialog class="modal" id="project-dialog" aria-label="Proje ekle"></dialog>
+
+  <script type="module" src="/workspace/panel/app.js"></script>
+</body>
+</html>

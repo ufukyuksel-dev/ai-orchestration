@@ -1,0 +1,136 @@
+spring:
+  ai:
+    mcp:
+      server:
+        enabled: ${AI_ORCH_MCP_ENABLED:true}
+        name: ai-orchestration-mcp
+        protocol: ${AI_ORCH_MCP_SERVER_PROTOCOL:STREAMABLE}
+        request-timeout: ${AI_ORCH_MCP_REQUEST_TIMEOUT:10s}
+        sse-endpoint: ${AI_ORCH_MCP_SSE_ENDPOINT:/mcp/sse}
+        sse-message-endpoint: ${AI_ORCH_MCP_MESSAGE_ENDPOINT:/mcp/message}
+        streamable-http:
+          mcp-endpoint: ${AI_ORCH_MCP_STREAMABLE_ENDPOINT:/mcp}
+    model:
+      embedding: ollama
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      chat:
+        model: ${AI_ORCH_CHAT_MODEL:qwen3:8b}
+      embedding:
+        model: bge-m3
+        options:
+          model: bge-m3
+          dimensions: 1024
+    vectorstore:
+      qdrant:
+        collection-name: knowledge_chunks_bge_m3_1024
+
+ai-orchestration:
+  embedding-dimensions: 1024
+  chat-model: ${AI_ORCH_CHAT_MODEL:qwen3:8b}
+  graph:
+    context-retrieval:
+      enabled: ${AI_ORCH_GRAPH_CONTEXT_RETRIEVAL_ENABLED:true}
+  learning-context:
+    enabled: ${AI_ORCH_LEARNING_CONTEXT_ENABLED:true}
+    include-memory-fallback: ${AI_ORCH_LEARNING_CONTEXT_INCLUDE_MEMORY:true}
+  generation:
+    enabled: ${AI_ORCH_GENERATION_ENABLED:false}
+    provider: ${AI_ORCH_GENERATION_PROVIDER:local-qwen}
+    fallback-to-extractive: true
+    timeout-ms: ${AI_ORCH_GENERATION_TIMEOUT_MS:8000}
+    max-tokens: ${AI_ORCH_GENERATION_MAX_TOKENS:192}
+    temperature: ${AI_ORCH_GENERATION_TEMPERATURE:0.0}
+    thinking-enabled: ${AI_ORCH_GENERATION_THINKING_ENABLED:false}
+    canary:
+      enabled: ${AI_ORCH_GENERATION_CANARY_ENABLED:false}
+      allowed-user-ids: ${AI_ORCH_GENERATION_CANARY_USERS:}
+      percentage-rollout: ${AI_ORCH_GENERATION_CANARY_PERCENTAGE:0}
+  mcp:
+    enabled: ${AI_ORCH_MCP_ENABLED:true}
+    transport: ${AI_ORCH_MCP_TRANSPORT:http}
+    base-path: ${AI_ORCH_MCP_BASE_PATH:/mcp}
+    audit-enabled: ${AI_ORCH_MCP_AUDIT_ENABLED:true}
+    default-top-k: ${AI_ORCH_MCP_DEFAULT_TOPK:5}
+    max-top-k: ${AI_ORCH_MCP_MAX_TOPK:50}
+    request-timeout-ms: ${AI_ORCH_MCP_TIMEOUT_MS:10000}
+    client-providers:
+      claude-code: claude
+      codex: codex
+      self-pipeline: qwen
+  orchestrator:
+    routing:
+      hybrid-enabled: ${AI_ORCH_ORCHESTRATOR_HYBRID_ENABLED:true}
+      llm-provider: ${AI_ORCH_ORCHESTRATOR_PROVIDER:local-qwen}
+      llm-timeout-ms: ${AI_ORCH_ORCHESTRATOR_TIMEOUT_MS:2500}
+      llm-max-tokens: ${AI_ORCH_ORCHESTRATOR_MAX_TOKENS:128}
+      llm-temperature: ${AI_ORCH_ORCHESTRATOR_TEMPERATURE:0.0}
+      commit-threshold: ${AI_ORCH_ORCHESTRATOR_COMMIT_THRESHOLD:0.85}
+      ambiguous-floor: ${AI_ORCH_ORCHESTRATOR_AMBIGUOUS_FLOOR:0.5}
+      memory-top-k: ${AI_ORCH_ORCHESTRATOR_MEMORY_TOPK:3}
+      knowledge-top-k: ${AI_ORCH_ORCHESTRATOR_KNOWLEDGE_TOPK:3}
+      memory-context-token-cap: ${AI_ORCH_ORCHESTRATOR_MEMORY_CAP:1200}
+      knowledge-context-token-cap: ${AI_ORCH_ORCHESTRATOR_KNOWLEDGE_CAP:2800}
+      total-context-token-cap: ${AI_ORCH_ORCHESTRATOR_TOTAL_CAP:4000}
+  software:
+    codegen:
+      enabled: ${AI_ORCH_SOFTWARE_CODEGEN_ENABLED:true}
+      max-retry-attempts: ${AI_ORCH_SOFTWARE_CODEGEN_RETRIES:3}
+      repo-context-token-cap: ${AI_ORCH_SOFTWARE_CODEGEN_CONTEXT_CAP:20000}
+      test-feedback-max-lines: ${AI_ORCH_SOFTWARE_CODEGEN_FEEDBACK_LINES:200}
+      small-edit-line-threshold: ${AI_ORCH_SOFTWARE_CODEGEN_SMALL_THRESHOLD:20}
+      codegen-timeout-ms: ${AI_ORCH_SOFTWARE_CODEGEN_TIMEOUT_MS:60000}
+      codegen-max-tokens: ${AI_ORCH_SOFTWARE_CODEGEN_MAX_TOKENS:4096}
+      external-cli:
+        enabled: ${AI_ORCH_EXTERNAL_CLI_ENABLED:true}
+        claude-cli-path: ${AI_ORCH_CLAUDE_CLI_PATH:claude}
+        claude-cli-model: ${AI_ORCH_CLAUDE_CLI_MODEL:}
+        claude-cli-timeout-ms: ${AI_ORCH_CLAUDE_CLI_TIMEOUT_MS:60000}
+        codex-cli-path: ${AI_ORCH_CODEX_CLI_PATH:codex}
+        codex-cli-model: ${AI_ORCH_CODEX_CLI_MODEL:}
+        codex-cli-timeout-ms: ${AI_ORCH_CODEX_CLI_TIMEOUT_MS:60000}
+        codex-cli-args-extra: ${AI_ORCH_CODEX_CLI_ARGS_EXTRA:}
+        fallback-to-local-qwen: ${AI_ORCH_EXTERNAL_CLI_FALLBACK_QWEN:true}
+      language-provider-map:
+        java: claude
+        kt: claude
+        kts: claude
+        kotlin: claude
+        js: codex
+        jsx: codex
+        ts: codex
+        tsx: codex
+        py: claude
+        default: local-qwen
+  secrets:
+    vault:
+      enabled: ${AI_ORCH_VAULT_ENABLED:false}
+      fail-fast: ${AI_ORCH_VAULT_FAIL_FAST:true}
+  ide-bridge:
+    encryption-key-ref: ${AI_ORCH_IDE_BRIDGE_KEY_REF:vault:secret/data/ai-orchestration/ide-bridge#key}
+  memory:
+    episodic-collection-name: memory_episodic_bge_m3_1024
+    embedding:
+      provider: ollama
+      model-identity: bge-m3
+      model-revision: ${AI_ORCH_MEMORY_EMBEDDING_MODEL_REVISION:unverified}
+      normalization: ollama-bge-m3-default
+      retrieval-text-schema-version: legacy-v1
+      shadow-provider: ${AI_ORCH_MEMORY_SHADOW_PROVIDER:ollama}
+      shadow-model-identity: ${AI_ORCH_MEMORY_SHADOW_MODEL:bge-m3}
+      shadow-model-revision: ${AI_ORCH_MEMORY_SHADOW_MODEL_REVISION:unverified}
+      shadow-normalization: ${AI_ORCH_MEMORY_SHADOW_NORMALIZATION:ollama-bge-m3-default}
+    injection-enabled: ${AI_ORCH_MEMORY_INJECTION_ENABLED:true}
+    write-gate:
+      provider: sessionProvider
+      session-fallback-provider: qwen
+      auto-active-confidence: 0.85
+      gate-timeout: 3s
+      trusted-client-ids: self-pipeline,claude-code,codex
+    confirm:
+      min-agent-confidence: 0.75
+  policy:
+    admin-token-required: true
+    admin-token: ${AI_ORCH_ADMIN_TOKEN:}
+  ollama:
+    preflight-enabled: true

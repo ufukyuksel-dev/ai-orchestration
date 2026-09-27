@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 2,
+  "planId": "11111111-1111-1111-1111-111111111111",
+  "revision": 1,
+  "goal": "Create a controller that delegates to a service",
+  "projects": [
+    {
+      "projectRef": "orders-api",
+      "projectKey": "ORDERS_API",
+      "baseline": {
+        "repositoryFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "dirtyStateHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scannerRevision": null,
+        "scannerEvidenceStatus": "MISSING"
+      }
+    }
+  ],
+  "targets": [
+    {
+      "targetId": "t-controller",
+      "projectRef": "orders-api",
+      "operation": "CREATE",
+      "repoRelativePath": "src/main/java/com/acme/orders/OrderController.java",
+      "previousPath": null,
+      "proposedSymbol": "com.acme.orders.OrderController",
+      "language": "JAVA",
+      "sourceSet": "MAIN",
+      "artifactKind": "CODE",
+      "generated": false,
+      "roleHints": ["web.http-controller"],
+      "annotationHints": ["org.springframework.web.bind.annotation.RestController"],
+      "intentIds": ["i-delegate", "i-http"],
+      "confidence": 0.91,
+      "evidence": ["neighbor controller", "package convention"]
+    }
+  ],
+  "intents": [
+    {
+      "intentId": "i-http",
+      "kind": "HTTP_MAPPING",
+      "description": "Expose POST /orders",
+      "targetIds": ["t-controller"],
+      "dependencies": []
+    },
+    {
+      "intentId": "i-delegate",
+      "kind": "DELEGATE_TO_SERVICE",
+      "description": "Delegate the use case",
+      "targetIds": ["t-controller"],
+      "dependencies": ["com.acme.orders.OrderService"]
+    }
+  ],
+  "steps": [
+    {
+      "stepId": "s-controller",
+      "description": "Create the endpoint and delegation",
+      "targetIds": ["t-controller"],
+      "intentIds": ["i-http", "i-delegate"]
+    }
+  ],
+  "coordination": [],
+  "validationPlan": [
+    {
+      "validationId": "v-controller",
+      "kind": "UNIT_TEST",
+      "targetIds": ["t-controller"],
+      "description": "Verify mapping, validation, and delegation"
+    }
+  ],
+  "risks": [
+    {
+      "riskId": "r-contract",
+      "description": "The endpoint contract may drift",
+      "severity": "LOW",
+      "mitigation": "Lock the contract with a test"
+    }
+  ],
+  "citations": [],
+  "confidence": 0.91
+}

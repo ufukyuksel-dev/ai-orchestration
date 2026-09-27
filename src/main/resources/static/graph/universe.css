@@ -1,0 +1,12 @@
+/* Full-screen graph page: only the page chrome; the graph itself is styled by graph.css. */
+html, body { margin: 0; height: 100%; overflow: hidden; background: #11161d; color: #e5eaf0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color-scheme: dark; }
+:focus-visible { outline: 2px solid #5bc0be; outline-offset: 2px; }
+.hud-top { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 5; display: flex; align-items: baseline; gap: 14px; padding: 8px 14px; border-radius: 10px; background: rgba(24, 31, 40, .94); border: 1px solid rgba(160, 180, 210, .14); backdrop-filter: blur(12px); }
+.hud-top .back { color: #a3adbb; text-decoration: none; font-size: 13px; }
+.hud-top .back:hover { color: #fff; }
+.hud-top h1 { margin: 0; font: 600 17px/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.hud-top select { background: rgba(0, 0, 0, .3); color: inherit; border: 1px solid rgba(160, 180, 210, .2); border-radius: 6px; padding: 4px 8px; font: inherit; }
+.page-message { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(520px, 90vw); padding: 24px; border-radius: 12px; text-align: center; background: rgba(24, 31, 40, .94); border: 1px solid rgba(160, 180, 210, .14); }
+.page-message h2 { margin: 0 0 8px; font: 600 20px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.page-message p { color: #a3adbb; margin: 0 0 14px; }
+.page-message a { color: #5bc0be; }

@@ -1,0 +1,17 @@
+id: approved-stub-001
+version: "1.0.0"
+source: "approved-compliance-stub"
+legal_owner: "compliance-owner"
+status: approved
+effective_date: "2026-05-20"
+rules:
+  - id: approved-001
+    title: "Approved critical blocker smoke rule"
+    severity: critical
+    pattern: "APPROVED_COMPLIANCE_BLOCK"
+    description: "Approved stub rule used to prove critical findings block diff apply."
+  - id: approved-002
+    title: "Approved high severity advisory smoke rule"
+    severity: high
+    pattern: "APPROVED_COMPLIANCE_ADVISORY"
+    description: "Approved non-critical finding remains non-blocking."

@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "fixtureSet": "agent-learning-transfer-f11-v1",
+  "rights": "repository-authored synthetic fixture; no production, personal, or hidden model content",
+  "runtimes": ["COPILOT", "CLAUDE_CODE", "CODEX"],
+  "arms": {
+    "A": "no discovery support with equal mandatory rules, security and baseline access",
+    "B": "current integration baseline measured separately per runtime",
+    "C": "compact output and consistent skill/decoder only",
+    "D": "learning and navigation with legacy separate-tool cost",
+    "E": "combined learning, navigation and short task-focused operations"
+  },
+  "scenario": {
+    "scenarioId": "CARD-FALLBACK-T1-T4-001",
+    "scenarioRevision": "fixture-v1",
+    "stages": [
+      {
+        "stage": "T1",
+        "kind": "research_and_capture",
+        "newSession": true,
+        "prompt": "Investigate where a card without a primary route selects its fallback and which focused test covers that behavior.",
+        "observableSources": ["fixture/src/CardResolver.java", "fixture/test/CardResolverTest.java"]
+      },
+      {
+        "stage": "T2",
+        "kind": "different_transfer_task",
+        "newSession": true,
+        "prompt": "Add a metric when fallback selection occurs without changing primary-route behavior.",
+        "requiredCurrentChecks": ["fixture/src/CardResolver.java", "fixture/test/CardResolverTest.java"]
+      },
+      {
+        "stage": "T3",
+        "kind": "narrow_stale_refresh",
+        "newSession": true,
+        "prompt": "The fallback resolver changed; refresh only the affected discovery and rerun its focused validation.",
+        "changedSources": ["fixture/src/CardResolver.java"],
+        "requiredCurrentChecks": ["fixture/src/CardResolver.java", "fixture/test/CardResolverTest.java"]
+      },
+      {
+        "stage": "T4",
+        "kind": "unrelated_task",
+        "newSession": true,
+        "prompt": "Change the profile display-label formatter and its focused test.",
+        "requiredCurrentChecks": ["fixture/src/ProfileLabel.java", "fixture/test/ProfileLabelTest.java"]
+      }
+    ],
+    "gold": {
+      "keptOutsideAllPrompts": true,
+      "t2ExpectedBehavior": "one fallback metric after secondary selection",
+      "t2NegativeTest": "primary selection records no fallback metric",
+      "t3ExpectedScope": "refresh the resolver discovery without rescanning profile formatting",
+      "t4ExpectedScope": "no fallback discovery injection or administration call"
+    }
+  },
+  "slices": ["runtime", "arm", "stage", "cold_session", "failed_attempt"],
+  "measurementPolicy": {
+    "minimumRepeatsPerCell": 3,
+    "uncertaintyMethod": "paired_percentile_bootstrap_fixed_seed_2000",
+    "requiredComparisonFields": ["runtimeVersion", "modelIdentity", "rulesHash", "baselineRevision", "scenarioRevision", "tokenizer"],
+    "unknownValue": "unknown",
+    "cachedTokensAreReportedSeparately": true,
+    "failedAttemptTokensIncludedInTaskTokenUnits": true,
+    "parentUsageExcludesSeparatelyReportedSubagentUsage": true,
+    "modelAndToolCountsIncludeFailedAttemptsAndSubagents": true,
+    "taskTokenComposition": ["inputTokens", "outputTokens", "failedAttemptTokens", "subagentInputTokens", "subagentOutputTokens"],
+    "diagnosticInputSubsets": ["cachedInputTokens", "toolSchemaTokens", "instructionTokens", "toolResultTokens", "repeatedContextTokens"],
+    "crossRuntimeTokenAggregation": false
+  },
+  "gates": {
+    "t2P50TaskTokenReductionVsB": 0.30,
+    "t2AvoidableDiscoveryReductionVsB": 0.50,
+    "t1P50LearningTaxVsBMax": 0.15,
+    "qualityNonInferiorityMargin": 0.02,
+    "criticalFailuresAllowed": 0,
+    "t3RequiredCurrentChecksRate": 1.0
+  }
+}

@@ -1,0 +1,71 @@
+diff --git a/src/main/java/org/springframework/samples/petclinic/owner/OwnerRestController.java b/src/main/java/org/springframework/samples/petclinic/owner/OwnerRestController.java
+new file mode 100644
+index 0000000..84da1fa
+--- /dev/null
++++ b/src/main/java/org/springframework/samples/petclinic/owner/OwnerRestController.java
+@@ -0,0 +1,65 @@
++/*
++ * Copyright 2012-2025 the original author or authors.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      https://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.springframework.samples.petclinic.owner;
++
++import java.time.LocalDate;
++import java.util.List;
++
++import org.springframework.http.HttpStatus;
++import org.springframework.web.bind.annotation.GetMapping;
++import org.springframework.web.bind.annotation.PathVariable;
++import org.springframework.web.bind.annotation.RestController;
++import org.springframework.web.server.ResponseStatusException;
++
++/**
++ * Read-only JSON API for owners.
++ */
++@RestController
++class OwnerRestController {
++
++	private final OwnerRepository owners;
++
++	OwnerRestController(OwnerRepository owners) {
++		this.owners = owners;
++	}
++
++	@GetMapping("/api/owners/{ownerId}")
++	OwnerJson showOwner(@PathVariable int ownerId) {
++		Owner owner = this.owners.findById(ownerId)
++			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Owner not found: " + ownerId));
++		return OwnerJson.of(owner);
++	}
++
++	record OwnerJson(Integer id, String firstName, String lastName, String address, String city, String telephone,
++			List<PetJson> pets) {
++
++		static OwnerJson of(Owner owner) {
++			return new OwnerJson(owner.getId(), owner.getFirstName(), owner.getLastName(), owner.getAddress(),
++					owner.getCity(), owner.getTelephone(), owner.getPets().stream().map(PetJson::of).toList());
++		}
++
++	}
++
++	record PetJson(Integer id, String name, LocalDate birthDate, String type) {
++
++		static PetJson of(Pet pet) {
++			return new PetJson(pet.getId(), pet.getName(), pet.getBirthDate(),
++					pet.getType() != null ? pet.getType().getName() : null);
++		}
++
++	}
++
++}

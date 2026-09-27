@@ -1,0 +1,26 @@
+{
+  "projectRefs" : [ "consumer", "producer" ],
+  "targetIds" : [ "t-consumer-doc", "t-producer-doc" ],
+  "intentIds" : [ "i-consumer-doc", "i-producer-doc" ],
+  "stepIds" : [ "s-consumer", "s-producer" ],
+  "coordinationIds" : [ ],
+  "validationIds" : [ "v-consumer", "v-producer" ],
+  "riskIds" : [ ],
+  "citationIds" : [ ],
+  "ruleCheckIds" : [ ],
+  "counts" : {
+    "checks" : 0,
+    "citations" : 0,
+    "coordination" : 0,
+    "intents" : 2,
+    "projects" : 2,
+    "risks" : 0,
+    "steps" : 2,
+    "targets" : 2,
+    "validations" : 2
+  },
+  "expectedLeafPointers" : [ "/citations", "/confidence", "/coordination", "/goal", "/intents/0/dependencies", "/intents/0/description", "/intents/0/intentId", "/intents/0/kind", "/intents/0/targetIds/0", "/intents/1/dependencies", "/intents/1/description", "/intents/1/intentId", "/intents/1/kind", "/intents/1/targetIds/0", "/planId", "/projects/0/baseline/dirtyStateHash", "/projects/0/baseline/headCommit", "/projects/0/baseline/repositoryFingerprint", "/projects/0/baseline/scannerEvidenceStatus", "/projects/0/baseline/scannerRevision", "/projects/0/projectKey", "/projects/0/projectRef", "/projects/1/baseline/dirtyStateHash", "/projects/1/baseline/headCommit", "/projects/1/baseline/repositoryFingerprint", "/projects/1/baseline/scannerEvidenceStatus", "/projects/1/baseline/scannerRevision", "/projects/1/projectKey", "/projects/1/projectRef", "/revision", "/risks", "/ruleChecks", "/schemaVersion", "/steps/0/description", "/steps/0/intentIds/0", "/steps/0/stepId", "/steps/0/targetIds/0", "/steps/1/description", "/steps/1/intentIds/0", "/steps/1/stepId", "/steps/1/targetIds/0", "/targets/0/annotationHints", "/targets/0/artifactKind", "/targets/0/confidence", "/targets/0/evidence", "/targets/0/generated", "/targets/0/intentIds/0", "/targets/0/language", "/targets/0/operation", "/targets/0/previousPath", "/targets/0/projectRef", "/targets/0/proposedSymbol", "/targets/0/repoRelativePath", "/targets/0/roleHints", "/targets/0/sourceSet", "/targets/0/targetId", "/targets/1/annotationHints", "/targets/1/artifactKind", "/targets/1/confidence", "/targets/1/evidence", "/targets/1/generated", "/targets/1/intentIds/0", "/targets/1/language", "/targets/1/operation", "/targets/1/previousPath", "/targets/1/projectRef", "/targets/1/proposedSymbol", "/targets/1/repoRelativePath", "/targets/1/roleHints", "/targets/1/sourceSet", "/targets/1/targetId", "/validationPlan/0/description", "/validationPlan/0/kind", "/validationPlan/0/targetIds/0", "/validationPlan/0/validationId", "/validationPlan/1/description", "/validationPlan/1/kind", "/validationPlan/1/targetIds/0", "/validationPlan/1/validationId" ],
+  "visitedLeafPointers" : [ "/citations", "/confidence", "/coordination", "/goal", "/intents/0/dependencies", "/intents/0/description", "/intents/0/intentId", "/intents/0/kind", "/intents/0/targetIds/0", "/intents/1/dependencies", "/intents/1/description", "/intents/1/intentId", "/intents/1/kind", "/intents/1/targetIds/0", "/planId", "/projects/0/baseline/dirtyStateHash", "/projects/0/baseline/headCommit", "/projects/0/baseline/repositoryFingerprint", "/projects/0/baseline/scannerEvidenceStatus", "/projects/0/baseline/scannerRevision", "/projects/0/projectKey", "/projects/0/projectRef", "/projects/1/baseline/dirtyStateHash", "/projects/1/baseline/headCommit", "/projects/1/baseline/repositoryFingerprint", "/projects/1/baseline/scannerEvidenceStatus", "/projects/1/baseline/scannerRevision", "/projects/1/projectKey", "/projects/1/projectRef", "/revision", "/risks", "/ruleChecks", "/schemaVersion", "/steps/0/description", "/steps/0/intentIds/0", "/steps/0/stepId", "/steps/0/targetIds/0", "/steps/1/description", "/steps/1/intentIds/0", "/steps/1/stepId", "/steps/1/targetIds/0", "/targets/0/annotationHints", "/targets/0/artifactKind", "/targets/0/confidence", "/targets/0/evidence", "/targets/0/generated", "/targets/0/intentIds/0", "/targets/0/language", "/targets/0/operation", "/targets/0/previousPath", "/targets/0/projectRef", "/targets/0/proposedSymbol", "/targets/0/repoRelativePath", "/targets/0/roleHints", "/targets/0/sourceSet", "/targets/0/targetId", "/targets/1/annotationHints", "/targets/1/artifactKind", "/targets/1/confidence", "/targets/1/evidence", "/targets/1/generated", "/targets/1/intentIds/0", "/targets/1/language", "/targets/1/operation", "/targets/1/previousPath", "/targets/1/projectRef", "/targets/1/proposedSymbol", "/targets/1/repoRelativePath", "/targets/1/roleHints", "/targets/1/sourceSet", "/targets/1/targetId", "/validationPlan/0/description", "/validationPlan/0/kind", "/validationPlan/0/targetIds/0", "/validationPlan/0/validationId", "/validationPlan/1/description", "/validationPlan/1/kind", "/validationPlan/1/targetIds/0", "/validationPlan/1/validationId" ],
+  "coverageHash" : "d1dcba910141cf149b02e1176c2393795b792cce90ef0580638332e1efae7b58",
+  "displayHash" : "4e836eee265b3ae408bfb97e83c2d119d71227e2d9cdb800aa53ccded165baae"
+}

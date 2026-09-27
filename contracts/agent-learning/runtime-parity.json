@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 5,
+  "contractId": "agent-learning-runtime-parity-v5-direct-mcp",
+  "learningSchema": "contracts/agent-learning/learning-candidate.schema.json",
+  "domainOperations": [
+    "runtime.prefetch",
+    "runtime.capture"
+  ],
+  "successfulLearningOutcomes": [
+    "ACCEPTED"
+  ],
+  "sharedDurableState": [
+    "semanticIdentity",
+    "contentRevision",
+    "evidenceRevision",
+    "discoveryContent",
+    "humanReadableLocators",
+    "minimalEvidenceProvenance"
+  ],
+  "runtimePrivateState": [
+    "workspaceBindingId",
+    "taskRunId",
+    "memoryId",
+    "scannerSymbolId",
+    "sessionState",
+    "permissionState",
+    "ruleLoadedState"
+  ],
+  "producerRuntimeSemantics": "provenance_only_not_acl_or_collection",
+  "modelForbidden": [
+    "learning.capture",
+    "operation.status",
+    "agent_authored_persistence_id"
+  ],
+  "adapters": {
+    "COPILOT": {
+      "transport": "single_direct_ai_orch_terminal_command",
+      "producerRuntime": "copilot",
+      "operations": {
+        "runtime.prefetch": "ai_orch memory search",
+        "runtime.capture": "ai_orch memory learn"
+      },
+      "prefetchMode": "model_driven_optional_search",
+      "requestFiles": [
+        "runtime.capture"
+      ],
+      "forbidden": [
+        "native_mcp",
+        "runtime_finalization_hook",
+        "raw_http",
+        "agent_authored_persistence_id"
+      ]
+    },
+    "CLAUDE_CODE": {
+      "transport": "direct_mcp_tools",
+      "producerRuntime": "claude_code",
+      "operations": {
+        "runtime.prefetch": "IMPLEMENTED: model-driven optional MCP memory.search after one session.bootstrap",
+        "runtime.capture": "IMPLEMENTED: at most one MCP memory.learn call at task end, only for verified reusable knowledge"
+      },
+      "prefetchMode": "model_driven_optional_search",
+      "requestFiles": [],
+      "forbidden": [
+        "runtime_finalization_hook",
+        "raw_http",
+        "agent_authored_persistence_id",
+        "retry_after_connection_failure"
+      ]
+    },
+    "CODEX": {
+      "transport": "direct_mcp_tools",
+      "producerRuntime": "codex",
+      "operations": {
+        "runtime.prefetch": "IMPLEMENTED: model-driven optional MCP memory.search after one session.bootstrap",
+        "runtime.capture": "IMPLEMENTED: at most one MCP memory.learn call at task end, only for verified reusable knowledge"
+      },
+      "prefetchMode": "model_driven_optional_search",
+      "requestFiles": [],
+      "forbidden": [
+        "runtime_finalization_hook",
+        "raw_http",
+        "agent_authored_persistence_id",
+        "retry_after_connection_failure"
+      ]
+    }
+  },
+  "transferFixture": "contracts/agent-learning/transfer-fixtures.json",
+  "liveEvidencePolicy": {
+    "schemaVersion": 1,
+    "fixtureDoesNotProveLiveRuntime": true,
+    "unavailableOperationStatus": "NOT_RUN",
+    "allDirectionsRequiredForPass": true,
+    "requiredTripleStory": [
+      "CLAUDE_CODE",
+      "CODEX",
+      "COPILOT"
+    ]
+  }
+}

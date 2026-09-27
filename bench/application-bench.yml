@@ -1,0 +1,23 @@
+# Isolated benchmark backend. Uses the normal local compose (Postgres + Qdrant) but its own database and
+# its own Qdrant collections, so benchmark runs never touch your real memories or code baseline.
+server:
+  port: ${AI_ORCH_BENCH_PORT:18200}
+  address: 127.0.0.1
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:55432/ai_orch_bench
+ai-orchestration:
+  agent:
+    # The benchmark user has answered "always" to "load the rules?"; no question interrupts a run.
+    prefs-file: ${user.dir}/bench/prefs-always.json
+  references:
+    root-path: ${user.dir}/bench/.work/references
+  local-trust:
+    auto-active-write: true
+  memory:
+    load-on-startup: false
+    episodic-collection-name: bench_memory_episodic_bge_m3_1024
+    relation-judge:
+      enabled: false
+  scanner:
+    baseline-collection-name: bench_code_baseline_bge_m3_1024

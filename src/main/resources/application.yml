@@ -1,0 +1,453 @@
+server:
+  port: ${AI_ORCH_SERVER_PORT:18080}
+
+spring:
+  profiles:
+    # Local-first is the default for any launch (IntelliJ, java -jar, mvn) when no
+    # profile is set explicitly. Prod/CI override with SPRING_PROFILES_ACTIVE=prod.
+    default: local-first
+  application:
+    name: ai-orchestration
+  datasource:
+    url: jdbc:postgresql://localhost:55432/ai_orchestration
+    username: ai_orch
+    password: ${AI_ORCH_DB_PASSWORD:}
+  sql:
+    init:
+      mode: never
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+  ai:
+    mcp:
+      server:
+        enabled: ${AI_ORCH_MCP_ENABLED:true}
+        name: ai-orchestration-mcp
+        # Shown by MCP clients (Claude Code, Codex) in the system prompt. Keep it short; the full contract is
+        # skills/session-instructions.md. Measured in scripts/benchmarks/lean_bench.py (after-v4).
+        instructions: >-
+          AI Orchestration holds this repository's approved rules and project memory.
+          1) First call session.bootstrap(rootPath=<current working directory>, task=<the request in one line>),
+          follow the rules it returns and start from its memory cards.
+          2) Before the final answer call memory.learn once if the task taught reusable project knowledge or the
+          user asked you to remember something.
+          3) If this server fails to connect or times out, do not retry any of its tools; continue locally.
+        protocol: ${AI_ORCH_MCP_SERVER_PROTOCOL:STREAMABLE}
+        request-timeout: ${AI_ORCH_MCP_REQUEST_TIMEOUT:10s}
+        sse-endpoint: ${AI_ORCH_MCP_SSE_ENDPOINT:/mcp/sse}
+        sse-message-endpoint: ${AI_ORCH_MCP_MESSAGE_ENDPOINT:/mcp/message}
+        streamable-http:
+          mcp-endpoint: ${AI_ORCH_MCP_STREAMABLE_ENDPOINT:/mcp}
+    vectorstore:
+      qdrant:
+        host: localhost
+        port: 6334
+        api-key: ${AI_ORCH_QDRANT_API_KEY:}
+        collection-name: knowledge_chunks_hash_384
+        use-tls: false
+        initialize-schema: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+
+ai-orchestration:
+  learning:
+    enabled: ${AI_ORCH_LEARNING_ENABLED:false}
+    capture-enabled: ${AI_ORCH_LEARNING_CAPTURE_ENABLED:false}
+    navigation-enabled: ${AI_ORCH_LEARNING_NAVIGATION_ENABLED:false}
+    # Admission rollout observation only; unrelated to memory.embedding.shadow-mode vector routing.
+    shadow-mode: ${AI_ORCH_LEARNING_SHADOW_MODE:true}
+    max-candidates-per-write: 3
+    max-evidence-per-candidate: 12
+    default-context-token-budget: 1200
+    max-context-token-budget: 4000
+    max-source-targets-per-open: 3
+    research-context-ttl-hours: 24
+    operation-retention-days: 7
+    operation-lease-seconds: 300
+    max-source-file-bytes: 1048576
+    cleanup-batch-size: 500
+    cleanup-interval-ms: 3600000
+  references:
+    root-path: ${AI_REFERENCE_ROOT:${user.home}/Projects/ai-references}
+  cli:
+    chain-await-ms: ${AI_ORCH_CLI_CHAIN_AWAIT_MS:600000}
+  rules:
+    # Rule authority is on by default; RULE memories become active only via rules.promote.
+    enabled: ${AI_ORCH_RULES_ENABLED:true}
+    max-bindings-per-rule: ${AI_ORCH_RULES_MAX_BINDINGS_PER_RULE:20}
+    max-glob-length: ${AI_ORCH_RULES_MAX_GLOB_LENGTH:256}
+    max-detector-config-bytes: ${AI_ORCH_RULES_MAX_DETECTOR_CONFIG_BYTES:4096}
+    max-active-glob-rules-per-project: ${AI_ORCH_RULES_MAX_ACTIVE_GLOB_RULES_PER_PROJECT:200}
+  chunk-size-characters: 1200
+  chunk-overlap-characters: 160
+  default-top-k: 5
+  telemetry-log-path: logs/telemetry.jsonl
+  embedding-dimensions: 384
+  freshness-stale-after-days: 365
+  qdrant:
+    check-compatibility-skipped: true
+  ollama:
+    preflight-enabled: false
+  generation:
+    enabled: false
+    provider: local-qwen
+    fallback-to-extractive: true
+    timeout-ms: 8000
+    max-tokens: 192
+    temperature: 0.0
+    thinking-enabled: false
+    canary:
+      enabled: false
+      allowed-user-ids: []
+      percentage-rollout: 0
+  graph:
+    context-retrieval:
+      enabled: ${AI_ORCH_GRAPH_CONTEXT_RETRIEVAL_ENABLED:true}
+      default-top-k: ${AI_ORCH_GRAPH_CONTEXT_DEFAULT_TOPK:5}
+      max-top-k: ${AI_ORCH_GRAPH_CONTEXT_MAX_TOPK:20}
+      default-max-depth: ${AI_ORCH_GRAPH_CONTEXT_DEFAULT_DEPTH:2}
+      max-depth: ${AI_ORCH_GRAPH_CONTEXT_MAX_DEPTH:3}
+      seed-limit: ${AI_ORCH_GRAPH_CONTEXT_SEED_LIMIT:8}
+      max-nodes: ${AI_ORCH_GRAPH_CONTEXT_MAX_NODES:80}
+      max-edges: ${AI_ORCH_GRAPH_CONTEXT_MAX_EDGES:160}
+      max-paths: ${AI_ORCH_GRAPH_CONTEXT_MAX_PATHS:12}
+      neighbors-per-node: ${AI_ORCH_GRAPH_CONTEXT_NEIGHBORS_PER_NODE:12}
+      frontier-per-hop: ${AI_ORCH_GRAPH_CONTEXT_FRONTIER_PER_HOP:32}
+      max-capsule-text-chars: ${AI_ORCH_GRAPH_CONTEXT_MAX_CAPSULE_TEXT_CHARS:800}
+      max-memory-summary-chars: ${AI_ORCH_GRAPH_CONTEXT_MAX_MEMORY_SUMMARY_CHARS:500}
+      token-budget: ${AI_ORCH_GRAPH_CONTEXT_TOKEN_BUDGET:4000}
+      include-similarity-backfill-by-default: ${AI_ORCH_GRAPH_CONTEXT_INCLUDE_SIMILARITY:false}
+      include-stale-by-default: ${AI_ORCH_GRAPH_CONTEXT_INCLUDE_STALE:false}
+  learning-context:
+    enabled: ${AI_ORCH_LEARNING_CONTEXT_ENABLED:false}
+    default-top-k: ${AI_ORCH_LEARNING_CONTEXT_DEFAULT_TOPK:5}
+    max-top-k: ${AI_ORCH_LEARNING_CONTEXT_MAX_TOPK:20}
+    default-max-depth: ${AI_ORCH_LEARNING_CONTEXT_DEFAULT_DEPTH:2}
+    max-depth: ${AI_ORCH_LEARNING_CONTEXT_MAX_DEPTH:3}
+    default-token-budget: ${AI_ORCH_LEARNING_CONTEXT_TOKEN_BUDGET:1200}
+    max-token-budget: ${AI_ORCH_LEARNING_CONTEXT_MAX_TOKEN_BUDGET:4000}
+    catastrophic-item-multiplier: ${AI_ORCH_LEARNING_CONTEXT_CATASTROPHIC_MULTIPLIER:2}
+    max-rendered-item-chars: ${AI_ORCH_LEARNING_CONTEXT_MAX_RENDERED_ITEM_CHARS:800}
+    include-memory-fallback: ${AI_ORCH_LEARNING_CONTEXT_INCLUDE_MEMORY:true}
+    include-semantic-anchors: ${AI_ORCH_LEARNING_CONTEXT_INCLUDE_SEMANTIC:true}
+    include-raw-source-lines: ${AI_ORCH_LEARNING_CONTEXT_INCLUDE_RAW_SOURCE_LINES:false}
+    include-stale: ${AI_ORCH_LEARNING_CONTEXT_INCLUDE_STALE:false}
+    include-similarity-backfill: ${AI_ORCH_LEARNING_CONTEXT_INCLUDE_SIMILARITY:false}
+  mcp:
+    enabled: ${AI_ORCH_MCP_ENABLED:true}
+    transport: ${AI_ORCH_MCP_TRANSPORT:http}
+    base-path: ${AI_ORCH_MCP_BASE_PATH:/mcp}
+    audit-enabled: ${AI_ORCH_MCP_AUDIT_ENABLED:true}
+    default-top-k: ${AI_ORCH_MCP_DEFAULT_TOPK:5}
+    max-top-k: ${AI_ORCH_MCP_MAX_TOPK:50}
+    request-timeout-ms: ${AI_ORCH_MCP_TIMEOUT_MS:10000}
+    client-providers:
+      claude-code: claude
+      codex: codex
+      self-pipeline: qwen
+  local-trust:
+    enabled: ${AI_ORCH_LOCAL_TRUST_ENABLED:false}
+    default-project-key: ${AI_ORCH_LOCAL_TRUST_PROJECT_KEY:AI_ORCHESTRATION}
+    default-client-id: ${AI_ORCH_LOCAL_TRUST_CLIENT_ID:local-client}
+    auto-active-write: ${AI_ORCH_LOCAL_TRUST_AUTO_ACTIVE_WRITE:false}
+    local-scopes:
+      - memory.read
+      - memory.write
+      - memory.delete
+      - memory.pending
+      - memory.human_confirmed_approve
+      - rules.read
+      - rules.write
+      - rules.confirm
+      - rules.global.confirm
+      - knowledge.read
+      - codebase.read
+      - context.graph.read
+      - context.semantic.read
+      - knowledge.ingest
+      - scanner.scan
+      - transcript.write
+      - provider.local-qwen
+      - provider.claude
+      - provider.codex
+  orchestrator:
+    routing:
+      hybrid-enabled: ${AI_ORCH_ORCHESTRATOR_HYBRID_ENABLED:true}
+      llm-provider: ${AI_ORCH_ORCHESTRATOR_PROVIDER:local-qwen}
+      llm-timeout-ms: ${AI_ORCH_ORCHESTRATOR_TIMEOUT_MS:2500}
+      llm-max-tokens: ${AI_ORCH_ORCHESTRATOR_MAX_TOKENS:128}
+      llm-temperature: ${AI_ORCH_ORCHESTRATOR_TEMPERATURE:0.0}
+      commit-threshold: ${AI_ORCH_ORCHESTRATOR_COMMIT_THRESHOLD:0.85}
+      ambiguous-floor: ${AI_ORCH_ORCHESTRATOR_AMBIGUOUS_FLOOR:0.5}
+      memory-top-k: ${AI_ORCH_ORCHESTRATOR_MEMORY_TOPK:3}
+      knowledge-top-k: ${AI_ORCH_ORCHESTRATOR_KNOWLEDGE_TOPK:3}
+      memory-context-token-cap: ${AI_ORCH_ORCHESTRATOR_MEMORY_CAP:1200}
+      knowledge-context-token-cap: ${AI_ORCH_ORCHESTRATOR_KNOWLEDGE_CAP:2800}
+      total-context-token-cap: ${AI_ORCH_ORCHESTRATOR_TOTAL_CAP:4000}
+  judge:
+    provider: claude-stub
+    external-opt-in: false
+    external-providers: []
+    semantic-pass-threshold: 4
+    min-concept-overlap: 0.6
+  secrets:
+    vault:
+      enabled: ${AI_ORCH_VAULT_ENABLED:false}
+      url: ${AI_ORCH_VAULT_URL:http://localhost:8200}
+      token: ${AI_ORCH_VAULT_TOKEN:}
+      token-ref: ${AI_ORCH_VAULT_TOKEN_REF:}
+      namespace: ${AI_ORCH_VAULT_NAMESPACE:}
+      timeout-ms: ${AI_ORCH_VAULT_TIMEOUT_MS:3000}
+      fail-fast: ${AI_ORCH_VAULT_FAIL_FAST:false}
+  ide-bridge:
+    mode: stub
+    request-timeout-ms: 30000
+    poll-timeout-ms: 25000
+    tenant-id: local
+    ttl-minutes: 30
+    purge-interval-ms: ${AI_ORCH_IDE_BRIDGE_PURGE_INTERVAL_MS:60000}
+    encryption-key-ref: ${AI_ORCH_IDE_BRIDGE_KEY_REF:env:AI_ORCH_IDE_BRIDGE_KEY}
+  memory:
+    episodic-collection-name: memory_episodic_hash_384
+    embedding:
+      provider: internal
+      model-identity: hashing-sha256-char4
+      model-revision: v1
+      normalization: nfkc-lower-root-token-v1
+      retrieval-text-schema-version: legacy-v1
+      # Empty means UNVERIFIED, never MATCH. Set only to a fingerprint observed for the indexed collection.
+      expected-index-fingerprint: ${AI_ORCH_MEMORY_EXPECTED_EMBEDDING_FINGERPRINT:}
+      # Shadow is opt-in. OFF performs no shadow collection initialization or writes.
+      shadow-mode: ${AI_ORCH_MEMORY_SHADOW_MODE:OFF}
+      shadow-collection-name: ${AI_ORCH_MEMORY_SHADOW_COLLECTION:}
+      shadow-provider: ${AI_ORCH_MEMORY_SHADOW_PROVIDER:internal}
+      shadow-model-identity: ${AI_ORCH_MEMORY_SHADOW_MODEL:hashing-sha256-char4}
+      shadow-model-revision: ${AI_ORCH_MEMORY_SHADOW_MODEL_REVISION:v1}
+      shadow-normalization: ${AI_ORCH_MEMORY_SHADOW_NORMALIZATION:nfkc-lower-root-token-v1}
+      shadow-retrieval-text-schema-version: ${AI_ORCH_MEMORY_SHADOW_TEXT_SCHEMA:discovery-v2}
+      shadow-expected-index-fingerprint: ${AI_ORCH_MEMORY_SHADOW_EXPECTED_FINGERPRINT:}
+    projection:
+      # SYNC preserves the existing in-transaction indexing guarantee. OUTBOX is opt-in after capacity review.
+      mode: ${AI_ORCH_MEMORY_PROJECTION_MODE:SYNC}
+      queue-capacity: ${AI_ORCH_MEMORY_PROJECTION_QUEUE_CAPACITY:10000}
+      batch-size: ${AI_ORCH_MEMORY_PROJECTION_BATCH_SIZE:20}
+      max-attempts: ${AI_ORCH_MEMORY_PROJECTION_MAX_ATTEMPTS:5}
+      poll-interval-ms: ${AI_ORCH_MEMORY_PROJECTION_POLL_INTERVAL_MS:1000}
+    context-token-cap: 2000
+    default-confidence: 0.3
+    global-path: config/memory/global
+    project-path: .ai_orch/memory
+    project-key: AI_ORCHESTRATION
+    load-on-startup: true
+    # Repair-only operation: normal writes keep the vector index current incrementally.
+    backfill-on-startup: ${AI_ORCH_MEMORY_BACKFILL_ON_STARTUP:false}
+    injection-enabled: false
+    global-token-cap: 500
+    project-token-cap: 700
+    episodic-token-cap: 800
+    episodic-top-k: 5
+    stale-after-days: 365
+    # After each completed scan, memory→code links are re-resolved; a memory whose code changed is marked stale.
+    code-links:
+      enabled: ${AI_ORCH_MEMORY_CODE_LINKS_ENABLED:true}
+    ranking:
+      oversample-factor: ${AI_ORCH_MEMORY_OVERSAMPLE_FACTOR:2}
+      # Calibrated lower bound: useful local-embedding matches have been observed near 0.12.
+      min-injection-similarity: ${AI_ORCH_MEMORY_MIN_INJECTION_SIMILARITY:0.10}
+      min-search-similarity: ${AI_ORCH_MEMORY_MIN_SEARCH_SIMILARITY:0.10}
+    write-gate:
+      provider: sessionProvider
+      session-fallback-provider: qwen
+      auto-active-confidence: 0.85
+      gate-timeout: 3s
+      trusted-client-ids: self-pipeline,claude-code,codex
+    confirm:
+      min-agent-confidence: 0.75
+    relation-judge:
+      enabled: ${AI_ORCH_MEMORY_RELATION_JUDGE_ENABLED:true}
+      queue-capacity: ${AI_ORCH_MEMORY_RELATION_JUDGE_QUEUE_CAPACITY:256}
+      timeout: ${AI_ORCH_MEMORY_RELATION_JUDGE_TIMEOUT:20s}
+      confidence-threshold: ${AI_ORCH_MEMORY_RELATION_JUDGE_CONFIDENCE:0.85}
+  scanner:
+    project-key: AI_ORCHESTRATION
+    supported-extensions:
+      - .java
+      - .py
+      - pom.xml
+      - package.json
+    excluded-directories:
+      - .git
+      - target
+      - node_modules
+      - output
+      - logs
+      - models
+      - artifacts
+    max-file-bytes: 512000
+    default-confidence: 0.6
+    baseline-collection-name: code_baseline_bge_m3_1024
+    allowed-roots:
+      - .
+    vector-index:
+      enabled: ${AI_ORCH_SCANNER_VECTOR_INDEX_ENABLED:true}
+    semantic:
+      enabled: false
+      provider: local-qwen
+      model: qwen3:8b
+      allow-external: false
+      allowed-providers:
+        - local-qwen
+      timeout-ms: 8000
+      max-files-per-run: 200
+      max-methods-per-file: 12
+      max-prompt-tokens: 6000
+      max-output-tokens: 512
+      prompt-version: scanner-semantic-v1
+    resolved-edges:
+      # Çağrı hedefleri çözümlenmezse CALLS kenarları name-only kalır ve kod grafiğinde
+      # dosya sınırını geçen hiçbir bağ olmaz (görselleştirme boş çıkar).
+      enabled: ${AI_ORCH_SCANNER_RESOLVED_EDGES_ENABLED:true}
+      max-files-per-run: ${AI_ORCH_SCANNER_RESOLVED_EDGES_MAX_FILES:1000}
+      max-classpath-jars: ${AI_ORCH_SCANNER_RESOLVED_EDGES_MAX_JARS:200}
+  guardrails:
+    sandbox-root-path: artifacts/sandbox
+    command-timeout-ms: 60000
+    env-allowlist:
+      - PATH
+      - JAVA_HOME
+      - MAVEN_HOME
+      - HOME
+    secret-env-deny-patterns:
+      - PASSWORD
+      - TOKEN
+      - SECRET
+      - API_KEY
+      - QDRANT
+      - ADMIN
+    write-allowlist:
+      - src/**
+      - config/**
+      - eval/**
+      - output/**
+      - pom.xml
+    network-allowlist: []
+  policy:
+    enabled: true
+    admin-token-required: ${AI_ORCH_ADMIN_TOKEN_REQUIRED:false}
+    admin-token: ${AI_ORCH_ADMIN_TOKEN:}
+    sensitive-terms:
+      - ACME-LOAN-001
+      - internal-prod-svc
+  compliance:
+    enabled: true
+    pack-path: config/compliance/packs
+    load-on-startup: true
+  software:
+    codegen:
+      enabled: ${AI_ORCH_SOFTWARE_CODEGEN_ENABLED:true}
+      max-retry-attempts: ${AI_ORCH_SOFTWARE_CODEGEN_RETRIES:3}
+      repo-context-token-cap: ${AI_ORCH_SOFTWARE_CODEGEN_CONTEXT_CAP:20000}
+      test-feedback-max-lines: ${AI_ORCH_SOFTWARE_CODEGEN_FEEDBACK_LINES:200}
+      small-edit-line-threshold: ${AI_ORCH_SOFTWARE_CODEGEN_SMALL_THRESHOLD:20}
+      codegen-timeout-ms: ${AI_ORCH_SOFTWARE_CODEGEN_TIMEOUT_MS:60000}
+      codegen-max-tokens: ${AI_ORCH_SOFTWARE_CODEGEN_MAX_TOKENS:4096}
+      external-cli:
+        enabled: ${AI_ORCH_EXTERNAL_CLI_ENABLED:true}
+        claude-cli-path: ${AI_ORCH_CLAUDE_CLI_PATH:claude}
+        claude-cli-model: ${AI_ORCH_CLAUDE_CLI_MODEL:}
+        claude-cli-timeout-ms: ${AI_ORCH_CLAUDE_CLI_TIMEOUT_MS:60000}
+        codex-cli-path: ${AI_ORCH_CODEX_CLI_PATH:codex}
+        codex-cli-model: ${AI_ORCH_CODEX_CLI_MODEL:}
+        codex-cli-timeout-ms: ${AI_ORCH_CODEX_CLI_TIMEOUT_MS:60000}
+        codex-cli-args-extra: ${AI_ORCH_CODEX_CLI_ARGS_EXTRA:}
+        fallback-to-local-qwen: ${AI_ORCH_EXTERNAL_CLI_FALLBACK_QWEN:true}
+      language-provider-map:
+        java: claude
+        kt: claude
+        kts: claude
+        kotlin: claude
+        js: codex
+        jsx: codex
+        ts: codex
+        tsx: codex
+        py: claude
+        default: local-qwen
+  archaeology:
+    default-root: .
+    max-commits: 50
+    default-acl:
+      - public
+    project-key: AI_ORCHESTRATION
+  connectors:
+    atlassian:
+      base-url: ${AI_ORCH_ATLASSIAN_BASE_URL:}
+      username: ${AI_ORCH_ATLASSIAN_USERNAME:}
+      api-token: ${AI_ORCH_ATLASSIAN_API_TOKEN:}
+      default-jira-project: ${AI_ORCH_ATLASSIAN_DEFAULT_JIRA_PROJECT:SCRUM}
+      default-confluence-space-key: ${AI_ORCH_ATLASSIAN_DEFAULT_CONFLUENCE_SPACE_KEY:POC}
+      request-timeout-seconds: 20
+    github:
+      public-repo: ${AI_ORCH_GITHUB_PUBLIC_REPO:spring-projects/spring-petclinic}
+      workspace-root: ${AI_ORCH_GITHUB_WORKSPACE_ROOT:workspace}
+      max-pull-requests: ${AI_ORCH_GITHUB_MAX_PULL_REQUESTS:10}
+      request-timeout-seconds: 20
+  reranker:
+    enabled: true
+    provider: noop
+    candidate-limit: 20
+    timeout-ms: 2000
+    rrf-k: 60
+    source-type-boost:
+      confluence-page: 1.5
+      github-source-file: 1.3
+      source-file: 1.3
+      jira-issue: 1.0
+      github-pr: 0.8
+      pr-comment: 0.8
+      git-commit: 0.5
+    onnx:
+      model-path: models/reranker/ms-marco-MiniLM-L6-v2/model_qint8_arm64.onnx
+      tokenizer-path: models/reranker/ms-marco-MiniLM-L6-v2/tokenizer.json
+      model-sha256: "3573b6b9593cb2f75987a31815d409ca3dd8808629118fd20451bb1a5d90cec7"
+      tokenizer-sha256: "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66"
+      max-sequence-length: 512
+      allow-missing-model-fallback: false
+  architecture:
+    enabled: ${AI_ORCH_ARCH_ENABLED:false}
+    provider: ${AI_ORCH_ARCH_PROVIDER:codex}
+    allowed-providers: ${AI_ORCH_ARCH_ALLOWED_PROVIDERS:codex,claude}
+    max-ranked-candidates: ${AI_ORCH_ARCH_MAX_RANKED_CANDIDATES:40}
+    max-rounds: ${AI_ORCH_ARCH_MAX_ROUNDS:4}
+    max-targeted-reads: ${AI_ORCH_ARCH_MAX_TARGETED_READS:8}
+    max-context-tokens: ${AI_ORCH_ARCH_MAX_CONTEXT_TOKENS:6000}
+    timeout-ms: ${AI_ORCH_ARCH_TIMEOUT_MS:600000}
+    temperature: ${AI_ORCH_ARCH_TEMPERATURE:0.0}
+    max-line-window: ${AI_ORCH_ARCH_MAX_LINE_WINDOW:120}
+    prompt-version: ${AI_ORCH_ARCH_PROMPT_VERSION:architecture-understanding-v1}
+    scorer-version: ${AI_ORCH_ARCH_SCORER_VERSION:structural-importance-v1}
+    redaction-policy-version: ${AI_ORCH_ARCH_REDACTION_POLICY_VERSION:redaction-v1}
+  crawler:
+    allowed-domains:
+      - accuweather.com
+      - developer.accuweather.com
+      - docs.spring.io
+      - spring.io
+      - qdrant.tech
+      - qdrant.io
+    max-depth: 2
+    max-pages: 25
+    max-bytes: 5242880
+    request-timeout-ms: 20000
+    max-redirects: 5
+    allowed-content-types:
+      - text/html
+      - text/plain
+      - text/markdown
+      - application/xhtml+xml
+    crawl-delay-ms: 1000
+    robots-enabled: true

@@ -1,0 +1,118 @@
+# Plan V2 Approval View
+
+2 project / 2 target / 2 intents / 2 step / 0 coordination / 2 validation / 0 risk / 0 citations / 0 rule checks shown
+
+- planHash: `2d14a23c241cba0194b6ad9685c5aaab84ef9e188160b0443bf845383335cd1b`
+- rendererVersion: `plan-v2/renderer-v1`
+
+## Canonical Plan
+
+- citations: []
+- confidence: 0.8
+- coordination: []
+- goal: "Apply two independent project changes"
+- intents:
+  - item:
+    - dependencies: []
+    - description: "Clarify consumer ownership"
+    - intentId: "i-consumer-doc"
+    - kind: "OTHER"
+    - targetIds:
+      - "t-consumer-doc"
+  - item:
+    - dependencies: []
+    - description: "Clarify producer ownership"
+    - intentId: "i-producer-doc"
+    - kind: "OTHER"
+    - targetIds:
+      - "t-producer-doc"
+- planId: "55555555-5555-5555-5555-555555555555"
+- projects:
+  - item:
+    - baseline:
+      - dirtyStateHash: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      - headCommit: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      - repositoryFingerprint: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      - scannerEvidenceStatus: "PRESENT"
+      - scannerRevision: "scan-consumer-1"
+    - projectKey: "CONSUMER"
+    - projectRef: "consumer"
+  - item:
+    - baseline:
+      - dirtyStateHash: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      - headCommit: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      - repositoryFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      - scannerEvidenceStatus: "PRESENT"
+      - scannerRevision: "scan-producer-1"
+    - projectKey: "PRODUCER"
+    - projectRef: "producer"
+- revision: 1
+- risks: []
+- schemaVersion: 2
+- steps:
+  - item:
+    - description: "Update consumer documentation"
+    - intentIds:
+      - "i-consumer-doc"
+    - stepId: "s-consumer"
+    - targetIds:
+      - "t-consumer-doc"
+  - item:
+    - description: "Update producer documentation"
+    - intentIds:
+      - "i-producer-doc"
+    - stepId: "s-producer"
+    - targetIds:
+      - "t-producer-doc"
+- targets:
+  - item:
+    - annotationHints: []
+    - artifactKind: "DOCUMENTATION"
+    - confidence: 0.8
+    - evidence: []
+    - generated: false
+    - intentIds:
+      - "i-consumer-doc"
+    - language: "MARKDOWN"
+    - operation: "MODIFY"
+    - previousPath: null
+    - projectRef: "consumer"
+    - proposedSymbol: null
+    - repoRelativePath: "docs/consumer.md"
+    - roleHints: []
+    - sourceSet: "MAIN"
+    - targetId: "t-consumer-doc"
+  - item:
+    - annotationHints: []
+    - artifactKind: "DOCUMENTATION"
+    - confidence: 0.8
+    - evidence: []
+    - generated: false
+    - intentIds:
+      - "i-producer-doc"
+    - language: "MARKDOWN"
+    - operation: "MODIFY"
+    - previousPath: null
+    - projectRef: "producer"
+    - proposedSymbol: null
+    - repoRelativePath: "docs/producer.md"
+    - roleHints: []
+    - sourceSet: "MAIN"
+    - targetId: "t-producer-doc"
+- validationPlan:
+  - item:
+    - description: "Review consumer documentation"
+    - kind: "MANUAL"
+    - targetIds:
+      - "t-consumer-doc"
+    - validationId: "v-consumer"
+  - item:
+    - description: "Review producer documentation"
+    - kind: "MANUAL"
+    - targetIds:
+      - "t-producer-doc"
+    - validationId: "v-producer"
+
+## Rule Checks
+
+- ruleChecks: []

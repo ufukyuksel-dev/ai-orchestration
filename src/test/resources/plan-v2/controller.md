@@ -1,0 +1,144 @@
+# Plan V2 Approval View
+
+1 project / 2 target / 3 intents / 2 step / 0 coordination / 1 validation / 1 risk / 0 citations / 1 rule checks shown
+
+- planHash: `18b5ee7b0b0fa3872c8728ff42622a0ed5571dba26bd2f352d6ab14e63ab9f27`
+- rendererVersion: `plan-v2/renderer-v1`
+
+## Canonical Plan
+
+- citations: []
+- confidence: 0.82
+- coordination: []
+- goal: "Modify CmsMigrationController safely and add its missing unit test"
+- intents:
+  - item:
+    - dependencies:
+      - "com.acme.digital.card.paygate.cms.client.AesMigrationClient"
+      - "com.acme.digital.card.paygate.cms.services.SecureMessagingProvider"
+    - description: "Keep endpoint orchestration delegated to the existing collaborators"
+    - intentId: "i-controller-delegation"
+    - kind: "DELEGATE\_TO\_SERVICE"
+    - targetIds:
+      - "t-cms-controller"
+  - item:
+    - dependencies: []
+    - description: "Preserve the migrateCard HTTP mappings"
+    - intentId: "i-controller-http"
+    - kind: "HTTP\_MAPPING"
+    - targetIds:
+      - "t-cms-controller"
+  - item:
+    - dependencies:
+      - "com.acme.digital.card.paygate.cms.controllers.CmsMigrationController"
+    - description: "Add focused tests for mappings, collaborator delegation, and DTO conversion"
+    - intentId: "i-controller-test"
+    - kind: "TEST\_BEHAVIOR"
+    - targetIds:
+      - "t-cms-controller-test"
+- planId: "77777777-7777-7777-7777-777777777777"
+- projects:
+  - item:
+    - baseline:
+      - dirtyStateHash: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      - headCommit: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      - repositoryFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      - scannerEvidenceStatus: "MISSING"
+      - scannerRevision: null
+    - projectKey: "CARD\_CMS"
+    - projectRef: "card-cms"
+- revision: 1
+- risks:
+  - item:
+    - description: "Repository evidence is unavailable, so collaborator edges and existing behavior remain unverified"
+    - mitigation: "Require repository evidence before treating the controller rule as compatible"
+    - riskId: "r-evidence-gap"
+    - severity: "HIGH"
+- schemaVersion: 2
+- steps:
+  - item:
+    - description: "Modify the controller without moving domain decisions into HTTP orchestration"
+    - intentIds:
+      - "i-controller-delegation"
+      - "i-controller-http"
+    - stepId: "s-controller"
+    - targetIds:
+      - "t-cms-controller"
+  - item:
+    - description: "Create the missing controller unit test"
+    - intentIds:
+      - "i-controller-test"
+    - stepId: "s-controller-test"
+    - targetIds:
+      - "t-cms-controller-test"
+- targets:
+  - item:
+    - annotationHints:
+      - "lombok.Generated"
+      - "org.springframework.web.bind.annotation.RestController"
+    - artifactKind: "CODE"
+    - confidence: 0.88
+    - evidence:
+      - "AesMigrationClient field injection"
+      - "SecureMessagingProvider field injection"
+      - "existing @Generated and @RestController annotations"
+    - generated: false
+    - intentIds:
+      - "i-controller-delegation"
+      - "i-controller-http"
+    - language: "JAVA"
+    - operation: "MODIFY"
+    - previousPath: null
+    - projectRef: "card-cms"
+    - proposedSymbol: "com.acme.digital.card.paygate.cms.controllers.CmsMigrationController"
+    - repoRelativePath: "src/main/java/com/acme/digital/card/paygate/cms/controllers/CmsMigrationController.java"
+    - roleHints:
+      - "web.http-controller"
+    - sourceSet: "MAIN"
+    - targetId: "t-cms-controller"
+  - item:
+    - annotationHints: []
+    - artifactKind: "CODE"
+    - confidence: 0.75
+    - evidence:
+      - "planned test target; file does not yet exist"
+    - generated: false
+    - intentIds:
+      - "i-controller-test"
+    - language: "JAVA"
+    - operation: "CREATE"
+    - previousPath: null
+    - projectRef: "card-cms"
+    - proposedSymbol: "com.acme.digital.card.paygate.cms.controllers.CmsMigrationControllerTest"
+    - repoRelativePath: "src/test/java/com/acme/digital/card/paygate/cms/controllers/CmsMigrationControllerTest.java"
+    - roleHints:
+      - "test.unit"
+    - sourceSet: "TEST"
+    - targetId: "t-cms-controller-test"
+- validationPlan:
+  - item:
+    - description: "Verify HTTP mappings, delegation, DTO conversion, and collaborator failure propagation"
+    - kind: "UNIT\_TEST"
+    - targetIds:
+      - "t-cms-controller"
+      - "t-cms-controller-test"
+    - validationId: "v-controller-test"
+
+## Rule Checks
+
+- ruleChecks:
+  - item:
+    - checkId: "22222222-2222-2222-2222-222222222222"
+    - evidenceNodeIds:
+      - "i-controller-delegation"
+      - "s-controller"
+    - evidenceTrust:
+      - "REPOSITORY\_DERIVED"
+      - "RULE\_DERIVED"
+    - message: "The plan names existing collaborators, but repository evidence is missing"
+    - result: "INCOMPLETE\_EVIDENCE"
+    - ruleId: "33333333-3333-3333-3333-333333333333"
+    - ruleVersion: 1
+    - statement: "Controllers must not contain business logic"
+    - targetIds:
+      - "t-cms-controller"

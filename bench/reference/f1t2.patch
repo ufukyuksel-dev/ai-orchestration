@@ -1,0 +1,31 @@
+diff --git a/src/main/java/org/springframework/samples/petclinic/owner/Owner.java b/src/main/java/org/springframework/samples/petclinic/owner/Owner.java
+index 480a7a6..ead83df 100644
+--- a/src/main/java/org/springframework/samples/petclinic/owner/Owner.java
++++ b/src/main/java/org/springframework/samples/petclinic/owner/Owner.java
+@@ -61,7 +61,7 @@ public class Owner extends Person {
+ 	@Pattern(regexp = "\\d{10}", message = "{telephone.invalid}")
+ 	private String telephone;
+ 
+-	@OneToMany(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
++	@OneToMany(cascade = CascadeType.ALL, fetch = FetchType.EAGER, orphanRemoval = true)
+ 	@JoinColumn(name = "owner_id")
+ 	@OrderBy("name")
+ 	private final List<Pet> pets = new ArrayList<>();
+diff --git a/src/main/java/org/springframework/samples/petclinic/owner/PetController.java b/src/main/java/org/springframework/samples/petclinic/owner/PetController.java
+index ce1b8f4..277c9ed 100644
+--- a/src/main/java/org/springframework/samples/petclinic/owner/PetController.java
++++ b/src/main/java/org/springframework/samples/petclinic/owner/PetController.java
+@@ -159,6 +159,13 @@ class PetController {
+ 		return "redirect:/owners/{ownerId}";
+ 	}
+ 
++	@PostMapping("/pets/{petId}/delete")
++	public String processDeleteForm(Owner owner, @PathVariable("petId") int petId) {
++		owner.getPets().removeIf(pet -> Objects.equals(pet.getId(), petId));
++		this.owners.save(owner);
++		return "redirect:/owners/{ownerId}";
++	}
++
+ 	/**
+ 	 * Updates the pet details if it exists or adds a new pet to the owner.
+ 	 * @param owner The owner of the pet

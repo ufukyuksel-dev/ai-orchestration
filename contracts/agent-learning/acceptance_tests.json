@@ -1,0 +1,3042 @@
+{
+  "schemaVersion": 1,
+  "sourcePlan": "attachments/AI_ORCHESTRATION_MULTI_AGENT_LEARNING_OPTIMIZATION_PLAN.md",
+  "generatedAt": "2026-09-17",
+  "statusVocabulary": [
+    "FAIL",
+    "INCONCLUSIVE",
+    "NOT_RUN",
+    "PASS"
+  ],
+  "tests": [
+    {
+      "id": "AT-001",
+      "criterion": "Eski ai_orch plan/rule output snapshot biçimleri değişmeden çalışır.",
+      "phase": "F0–F2",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "INCONCLUSIVE",
+      "evidence": [],
+      "reason": "Unit snapshots passed, but every legacy external consumer was not executed."
+    },
+    {
+      "id": "AT-002",
+      "criterion": "Eski memory get/search CLI ve native MCP default biçimi korunur; agent görünümü additive ve eşdeğerdir.",
+      "phase": "F0–F2",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/mcp/server/McpServerIT.java",
+          "observation": "legacy/default and additive agent/debug view tests",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-003",
+      "criterion": "ai-orch-memory eski komutları ve sınırları çalışır.",
+      "phase": "F0–F2",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-004",
+      "criterion": "Yeni DISCOVERY Java/JSON/JDBC round-trip kayıpsızdır.",
+      "phase": "F0–F2",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/memoryai/DiscoveryMemoryTypeMigrationTest.java",
+          "observation": "DISCOVERY migration and JDBC acceptance",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-005",
+      "criterion": "DB migration eski verileri korur; eski uygulanmış migration değiştirilmez.",
+      "phase": "F0–F2",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/memoryai/MemoryRelationEventMigrationTest.java",
+          "observation": "full V54 to V57 upgrade preserves historical events",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-006",
+      "criterion": "Yeni tipi desteklemeyen aktif reader varken discovery yazımı açılmaz.",
+      "phase": "F0–F2",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-007",
+      "criterion": "Eski decision kayıtları otomatik discovery veya rule yapılmaz.",
+      "phase": "F0–F2",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "inspected_contract",
+          "path": "src/main/resources/db/migration/V56__discovery_memory_type.sql",
+          "observation": "additive enum constraint migration does not rewrite legacy decisions",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused contract inspection passed in this workspace."
+    },
+    {
+      "id": "AT-008",
+      "criterion": "Server operation/schema, CLI parser/allowlist ve üç runtime skill/capability eşlemeleri tutarlıdır.",
+      "phase": "F0–F2",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-009",
+      "criterion": "Normal memory active/not_saved ile legacy pending/confirm farklı test edilir.",
+      "phase": "F0–F2",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-010",
+      "criterion": "Normal source navigation ve plan check eski kullanımda çalışmaya devam eder.",
+      "phase": "F0–F2",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-011",
+      "criterion": "Effective yanıttaki metinsiz MODULE index startup failure üretmez.",
+      "phase": "F1/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "skills/copilot/ai-orchestration-memory/scripts/test_ai_orch_commands.py",
+          "observation": "module index decoder regression",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-012",
+      "criterion": "Metinsiz GLOBAL_STRICT veya PROJECT instruction fail-closed olur.",
+      "phase": "F1/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-013",
+      "criterion": "Module index görmek module metnini yüklenmiş saydırmaz.",
+      "phase": "F1/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "skills/copilot/ai-orchestration-memory/scripts/test_ai_orch_commands.py",
+          "observation": "module index remains unloaded warning",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-014",
+      "criterion": "İlgili module tam metni resolve çıktısına veya ayrı zorunlu yüklemeye girer.",
+      "phase": "F1/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-015",
+      "criterion": "Mandatory policy token bütçesi için kısaltılmaz veya düşürülmez.",
+      "phase": "F1/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-016",
+      "criterion": "Rule promotion sonrası effective sequence değişimi yüklemeyi yeniler.",
+      "phase": "F1/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-017",
+      "criterion": "Yeni session/compaction sonrası disk loaded=true bilgisi tam yüklemeyi engellemez.",
+      "phase": "F1/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-018",
+      "criterion": "Discovery metni mevcut rule üzerinde yetki kazanamaz.",
+      "phase": "F1/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/memoryai/MemoryServiceTest.java",
+          "observation": "generic DISCOVERY write is rejected",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-019",
+      "criterion": "Global rule işlemi mevcut ek onay scope ve tam hash sözleşmesini korur.",
+      "phase": "F1/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-020",
+      "criterion": "FOCUSED route veya HTTP 200, plan READY/test başarı diye yorumlanmaz.",
+      "phase": "F1/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-021",
+      "criterion": "Copilot yeni işlemleri yalnız typed ai_orch üzerinden çağırır; Claude/Codex native MCP yolları korunur.",
+      "phase": "F1/F3/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "INCONCLUSIVE",
+      "evidence": [],
+      "reason": "Contract and guard tests passed; real Claude Code/Codex sessions are not yet observed."
+    },
+    {
+      "id": "AT-022",
+      "criterion": "Bridge içindeki mevcut MCP/HTTP client çalışmaya devam eder.",
+      "phase": "F1/F3/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-023",
+      "criterion": "Copilot payload bridge-owned alanları reddeder; native scoped binding server tarafından doğrulanır; generic dispatcher yoktur.",
+      "phase": "F1/F3/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "INCONCLUSIVE",
+      "evidence": [],
+      "reason": "Bridge-owned fields and native scope binding are tested, but the full three-runtime path is not yet observed."
+    },
+    {
+      "id": "AT-024",
+      "criterion": "Copilot shell chain/pipe/redirection ve doğrudan bridge kaçışı reddedilir; bu terminal şekil politikası native araçlara uygulanmaz.",
+      "phase": "F1/F3/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "skills/copilot/ai-orchestration-memory/scripts/test_copilot_pre_tool_guard.py",
+          "observation": "single direct launcher and shell-control guard tests",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-025",
+      "criterion": "Geçersiz/oversized JSON, NaN/Infinity ve gerekli alan sınırları CLI yanında native server girişinde de reddedilir.",
+      "phase": "F1/F3/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "INCONCLUSIVE",
+      "evidence": [],
+      "reason": "CLI and server bounds have focused tests; the complete input matrix is not yet executed."
+    },
+    {
+      "id": "AT-026",
+      "criterion": "Türkçe character limiti byte limitiyle karıştırılmaz.",
+      "phase": "F1/F3/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "skills/copilot/ai-orchestration-memory/scripts/test_ai_orch_commands.py",
+          "observation": "character limits use characters rather than UTF-8 bytes",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-027",
+      "criterion": "Repo traversal, symlink escape ve yanlış --repo-root reddedilir.",
+      "phase": "F1/F3/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "INCONCLUSIVE",
+      "evidence": [],
+      "reason": "Repository-relative path checks exist; the complete symlink/traversal matrix is not yet executed."
+    },
+    {
+      "id": "AT-028",
+      "criterion": "Başka principal/projeye ait contextId/evidenceId/requestId okunamaz.",
+      "phase": "F1/F3/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "INCONCLUSIVE",
+      "evidence": [],
+      "reason": "Context and operation principal isolation is tested; the complete evidence/project matrix is not yet executed."
+    },
+    {
+      "id": "AT-029",
+      "criterion": "Local-trust scope eksikliği veya bearer mismatch CLI allowlist ile geçilemez.",
+      "phase": "F1/F3/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-030",
+      "criterion": "Source/reference içindeki prompt injection komut icrasına veya rule aktivasyonuna neden olmaz.",
+      "phase": "F1/F3/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-031",
+      "criterion": "Raw kaynak/credential secret normal log veya debug olmayan stdout içine sızmaz.",
+      "phase": "F1/F3/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-032",
+      "criterion": "Copilot hard delete ve admin approval sınırı yeni learn/status yolunda da korunur.",
+      "phase": "F1/F3/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "skills/copilot/ai-orchestration-memory/scripts/test_copilot_pre_tool_guard.py",
+          "observation": "hard delete/admin paths remain denied",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-033",
+      "criterion": "Exact UUID symbol doğru dosya/satır ve signature döndürür.",
+      "phase": "F3/F5/F7",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-034",
+      "criterion": "Tekil FQN/signature locator ek agent search gerektirmeden çözülür.",
+      "phase": "F3/F5/F7",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-035",
+      "criterion": "İki overload veya aynı basit sınıf adı belirsiz sonuç üretir; rastgele seçim yoktur.",
+      "phase": "F3/F5/F7",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-036",
+      "criterion": "Resolve ile open arasında kaynak değişirse changedSinceResolve doğru gelir.",
+      "phase": "F3/F5/F7",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/agentlearning/AgentLearningServiceTest.java",
+          "observation": "changedSinceResolve is asserted after a source change between resolve and open",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-037",
+      "criterion": "Silinen sembol missing kalır; benzer ad otomatik doğru hedef sayılmaz.",
+      "phase": "F3/F5/F7",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-038",
+      "criterion": "Satır kayması kimlik/hash uygunken bounded reparse ile düzelir.",
+      "phase": "F3/F5/F7",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-039",
+      "criterion": "Repo/branch/worktree değişimi eski route cache hit üretmez.",
+      "phase": "F3/F5/F7",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-040",
+      "criterion": "Body aynı ama ilgili config/helper değişmişse discovery güncel sayılmaz.",
+      "phase": "F3/F5/F7",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-041",
+      "criterion": "Sadece kaynak varlığı SUPPORTED veya test_verified yaratmaz.",
+      "phase": "F3/F5/F7",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-042",
+      "criterion": "Agent-reported IDE okuması server_observed olarak etiketlenmez.",
+      "phase": "F3/F5/F7",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/agentlearning/AgentLearningServiceTest.java",
+          "observation": "context.open observation provenance is asserted as server_observed",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-043",
+      "criterion": "Gerçek test olayı yoksa test çalıştı iddiası verified değildir.",
+      "phase": "F3/F5/F7",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-044",
+      "criterion": "Environment bilinmiyorsa koşullu sınırlılık ve UNKNOWN korunur.",
+      "phase": "F3/F5/F7",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-045",
+      "criterion": "Scoped absence yeni dosya veya kapsam membership değişiminde yeniden değerlendirilir.",
+      "phase": "F3/F5/F7",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-046",
+      "criterion": "Evidence sınırı aşılmış trace coverage partial olarak görünür.",
+      "phase": "F3/F5/F7",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-047",
+      "criterion": "Kanıtlı yeni davranış bulgusu DISCOVERY olarak kaydedilir.",
+      "phase": "F4",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/agentlearning/AgentLearningServiceTest.java",
+          "observation": "evidence-bound DISCOVERY create",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-048",
+      "criterion": "Yeni navigation/procedure bulgusu karar cümlesi olmadığı için reddedilmez.",
+      "phase": "F4",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-049",
+      "criterion": "Tek method içindeki değerli istisna kaynak sayısı az diye otomatik elenmez.",
+      "phase": "F4",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-050",
+      "criterion": "Getter açıklaması veya ham görev günlüğü kalıcı öğrenmeye dönüşmez.",
+      "phase": "F4",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-051",
+      "criterion": "Eşdeğer capsule veya discovery için yeniden kopya yerine EXISTS/covered sonucu döner.",
+      "phase": "F4",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/agentlearning/AgentLearningServiceTest.java",
+          "observation": "second handle converges to EXISTS and same memory ID",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-052",
+      "criterion": "Aynı konu ama farklı koşul ayrı bulgu olarak ele alınabilir.",
+      "phase": "F4",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-053",
+      "criterion": "Adaydaki önemli istisna 700 karaktere sığdırılırken kaybedilmez.",
+      "phase": "F4",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-054",
+      "criterion": "En fazla üç aday sınırı server/domain seviyesinde ve Copilot CLI ön validasyonunda uygulanır.",
+      "phase": "F4",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "skills/copilot/ai-orchestration-memory/scripts/test_ai_orch_commands.py",
+          "observation": "Copilot rejects a fourth learning candidate; server property cap is also exercised",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-055",
+      "criterion": "Geçersiz evidence bağlantısı not_saved üretir; model hayali kaynak ekleyemez.",
+      "phase": "F4",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/agentlearning/AgentLearningServiceTest.java",
+          "observation": "unknown evidence returns NOT_SAVED",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-056",
+      "criterion": "Model timeout/parse arızası yeni öğrenmede doğrulanmış ACTIVE kayıt yaratmaz.",
+      "phase": "F4",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-057",
+      "criterion": "Aynı requestId/aynı payload yeniden denemesi aynı makbuz/ID döndürür.",
+      "phase": "F4",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/agentlearning/AgentLearningServiceTest.java",
+          "observation": "same handle and canonical payload replays identical receipt",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-058",
+      "criterion": "Aynı requestId/farklı payload CONFLICT olur.",
+      "phase": "F4",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/agentlearning/AgentLearningServiceTest.java",
+          "observation": "bound handle and different payload returns CONFLICT",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-059",
+      "criterion": "İki eşzamanlı aynı öğrenme kaydı canonical duplicate kontrolüyle tekleştirilir.",
+      "phase": "F4",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-060",
+      "criterion": "Beklenen hash olmayan update mevcut bilgi üstüne sessiz yazamaz.",
+      "phase": "F4",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/agentlearning/AgentLearningServiceTest.java",
+          "observation": "external edit advances the learning revision, rejects the previously issued correction tuple without mutation, and a freshly resolved tuple updates the same memory ID",
+          "observedAt": "2026-09-17"
+        },
+        {
+          "kind": "automated_test",
+          "path": "skills/copilot/ai-orchestration-memory/scripts/test_ai_orch_commands.py",
+          "observation": "Copilot accepts only the complete target/revision/hash correction tuple and rejects a partial tuple before transport",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-061",
+      "criterion": "Evidence model çağrısı sırasında değişirse commit öncesi yakalanır.",
+      "phase": "F4",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/agentlearning/AgentLearningServiceTest.java",
+          "observation": "source changes after observation return STALE_EVIDENCE",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-062",
+      "criterion": "Her üç runtime başarılı makbuz sonrası rutin get/search/status/graph zinciri çalıştırmaz.",
+      "phase": "F4",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-063",
+      "criterion": "Kod değişikliği isteği karar/geçmiş kelimesi içermese de ilgili discovery adayını değerlendirir.",
+      "phase": "F5/F6",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/agentlearning/AgentLearningServiceTest.java",
+          "observation": "a change request without history vocabulary resolves discovery knowledge and its learned target",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-064",
+      "criterion": "T1 araştırmasıyla öğrenilen harita farklı T2 change görevinde doğru hedefe götürür.",
+      "phase": "F5/F6",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-065",
+      "criterion": "T2 task gold/patch içeriği T1 kaydına sızdırılmaz.",
+      "phase": "F5/F6",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-066",
+      "criterion": "Hazır öğrenme sonucu yeterliyse geniş repository yeniden keşfi yapılmaz.",
+      "phase": "F5/F6",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-067",
+      "criterion": "Kod değişikliği için gerekli güncel kaynak/test kontrolü atlanmaz.",
+      "phase": "F5/F6",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-068",
+      "criterion": "MISS durumunda bounded capsule/exact code fallback çalışır.",
+      "phase": "F5/F6",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/agentlearning/TaskContextFacadeTest.java",
+          "observation": "a discovery miss uses one bounded existing graph/capsule locator as fallback",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-069",
+      "criterion": "PARTIAL sonuç yalnız eksik hedef/alan için genişletilir.",
+      "phase": "F5/F6",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-070",
+      "criterion": "STALE bilgi güncel davranış diye sunulmaz; önceki navigasyon ipucu olarak sınırlanır.",
+      "phase": "F5/F6",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/agentlearning/AgentLearningServiceTest.java",
+          "observation": "a changed learned source returns STALE knowledge with CHANGED source status",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-071",
+      "criterion": "AMBIGUOUS sonuç küçük adaylarla belirsizliği gösterir; yanlış seçim zorlamaz.",
+      "phase": "F5/F6",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-072",
+      "criterion": "Qdrant veya graph arızası MISS olarak gizlenmez.",
+      "phase": "F5/F6",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/agentlearning/TaskContextFacadeTest.java",
+          "observation": "retrieval failure is projected as unavailable rather than a normal miss",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-073",
+      "criterion": "Mekanik görev veya verilen metin çevirisi için gereksiz discovery döngüsü oluşmaz.",
+      "phase": "F5/F6",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/context/LearningContextRoutingPolicyTest.java",
+          "observation": "explicit mechanical location requests abstain from discovery retrieval",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-074",
+      "criterion": "Graph kapalıyken SQL/locator yolu yeterli ise navigasyon tamamen durmaz.",
+      "phase": "F5/F6",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/agentlearning/TaskContextFacadeTest.java",
+          "observation": "SQL discovery knowledge and its locator remain usable when graph retrieval is unavailable",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-075",
+      "criterion": "Tokenizer varsa son CLI stdout/stderr ve native MCP model-görünür çıktı ayrı ölçülür.",
+      "phase": "F0/F1/F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-076",
+      "criterion": "Tokenizer yoksa proxy ve byte sayısı doğru etiketlenir; gerçek token diye sunulmaz.",
+      "phase": "F0/F1/F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "inspected_contract",
+          "path": "contracts/agent-learning/measurement-baseline.json",
+          "observation": "proxy and unknown labels are explicit",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused contract inspection passed in this workspace."
+    },
+    {
+      "id": "AT-077",
+      "criterion": "UUID/path/JSON key alanları bütçe dışında kalmaz.",
+      "phase": "F0/F1/F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-078",
+      "criterion": "Tam atomik memory hit ikinci get gerektirmeden döner.",
+      "phase": "F0/F1/F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-079",
+      "criterion": "Summary/excerpt/text aynı anlamı üç kez tekrarlamaz.",
+      "phase": "F0/F1/F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-080",
+      "criterion": "Token yetmeyince koşul yarım kesilmez; whole-item/complete bayrağı uygulanır.",
+      "phase": "F0/F1/F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-081",
+      "criterion": "Önemli uyarı, stale ve omitted alanları bütçe için gizlenmez.",
+      "phase": "F0/F1/F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-082",
+      "criterion": "Ortak server agent view CLI ve native MCP üzerinden debug/audit/vector metadata yığını göndermez.",
+      "phase": "F0/F1/F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-083",
+      "criterion": "Debug görünümü de bounded ve yetkili olur.",
+      "phase": "F0/F1/F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-084",
+      "criterion": "Birleşik komutta iç HTTP/RPC sayısı görünür tool-call sayısına eklenmez.",
+      "phase": "F0/F1/F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-085",
+      "criterion": "Provider cached/uncached usage ve backend model giderleri ayrı ölçülür.",
+      "phase": "F0/F1/F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-086",
+      "criterion": "Eksik telemetry alanı sıfır değil unknown olarak raporlanır.",
+      "phase": "F0/F1/F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "inspected_contract",
+          "path": "contracts/agent-learning/measurement-baseline.json",
+          "observation": "unobserved usage is unknown rather than zero",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused contract inspection passed in this workspace."
+    },
+    {
+      "id": "AT-087",
+      "criterion": "Gerçek runtime EmbeddingModel sınıfı ve kimliği raporlanır.",
+      "phase": "F8",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "INCONCLUSIVE",
+      "evidence": [],
+      "reason": "The health contract reports runtime class, configured identity, dimensions and fingerprint in tests, but the running server was not restarted so its real runtime bean remains NOT_RUN."
+    },
+    {
+      "id": "AT-088",
+      "criterion": "Collection adı model kimliği kabul edilmez.",
+      "phase": "F8",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/memoryai/MemoryEmbeddingContractTest.java",
+          "observation": "health output reports runtime identity and fingerprint separately from the collection name",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-089",
+      "criterion": "Aynı boyutta farklı embedding fingerprint mismatch üretir.",
+      "phase": "F8",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/memoryai/MemoryEmbeddingContractTest.java",
+          "observation": "same-dimension alternate runtime model produces EMBEDDING_MISMATCH",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-090",
+      "criterion": "Retrieval text değişince index schema sürümü değişir ve eski index sessiz karışmaz.",
+      "phase": "F8",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/memoryai/MemoryEmbeddingContractTest.java",
+          "observation": "retrieval text schema change changes the fingerprint and fails compatibility",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-091",
+      "criterion": "Exact sembol/hata kodu ile dense adaylar doğru fusion davranışı gösterir.",
+      "phase": "F8",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/memoryai/MemoryRetrievalServiceVectorSearchTest.java",
+          "observation": "exact symbol and error-code lexical lane rescues the canonical result through rank fusion",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-092",
+      "criterion": "Türkçe/İngilizce alan terimleri held-out testlerde ölçülür.",
+      "phase": "F8",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "INCONCLUSIVE",
+      "evidence": [],
+      "reason": "Turkish and English slices use frozen hand-authored candidate ranks; no configured embedding model or live retrieval system measured those texts."
+    },
+    {
+      "id": "AT-093",
+      "criterion": "Yüksek discovery cost alakasız sonucu relevance kapısından geçiremez.",
+      "phase": "F8",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/memoryai/MemoryRetrievalServiceTest.java",
+          "observation": "large discovery cost metadata cannot override the relevance gate",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-094",
+      "criterion": "Discovery/capsule/reference aynı olgusu cevapta gereksiz tekrar yapmaz.",
+      "phase": "F8",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-095",
+      "criterion": "Yetkisiz/expired/archived kayıt vektör payload stale olsa da SQL hydrate ile elenir.",
+      "phase": "F8",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/memoryai/QdrantMemoryVectorIndexTest.java",
+          "observation": "SQL hydration rejects foreign, archived and expired stale vector payloads",
+          "observedAt": "2026-09-17"
+        },
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/memoryai/JdbcMemoryRepositoryLexicalSearchTest.java",
+          "observation": "eligibility is applied before lexical LIMIT and indexable counts exclude archived/expired rows",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-096",
+      "criterion": "Shadow index geçişi ve geri dönüş veri kaybı olmadan çalışır.",
+      "phase": "F8",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "INCONCLUSIVE",
+      "evidence": [],
+      "reason": "Opt-in dual-read/write and rollback-to-active routing pass with isolated vector-store fixtures, but no production shadow collection, bulk reindex or live cutover was authorized or executed."
+    },
+    {
+      "id": "AT-097",
+      "criterion": "Markdown code fence içindeki başlık section sayılmaz.",
+      "phase": "F7",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/mcp/server/ReferenceMcpToolTest.java",
+          "observation": "fenced Markdown headings are excluded from the section index",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-098",
+      "criterion": "Tekrarlı aynı başlıklar hiyerarşi/occurrence ile ayrılır.",
+      "phase": "F7",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/mcp/server/ReferenceMcpToolTest.java",
+          "observation": "duplicate headings have hierarchy and occurrence-qualified keys",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-099",
+      "criterion": "Section link eski hash ile yeni dosyanın yanlış bölgesini açmaz.",
+      "phase": "F7",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/mcp/server/ReferenceMcpToolTest.java",
+          "observation": "a changed whole-file hash rejects the old section address",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-100",
+      "criterion": "Redaction sonrası UTF-8 offset ve token bound doğrudur.",
+      "phase": "F7",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "INCONCLUSIVE",
+      "evidence": [],
+      "reason": "Redaction and UTF-8 byte bounds are tested, but no runtime tokenizer measurement proves an exact token bound."
+    },
+    {
+      "id": "AT-101",
+      "criterion": "Yalnız ilgili bölüm yüklenir; bütün klasör toplanmaz.",
+      "phase": "F7",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/agentlearning/AgentLearningServiceTest.java",
+          "observation": "context.open returns only the issued reference section target",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-102",
+      "criterion": "Reference yetersiz/eksikse discovery tamamlanmış detay iddia etmez.",
+      "phase": "F7",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/agentlearning/AgentLearningServiceTest.java",
+          "observation": "reference drift returns empty changed detail rather than completed content",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-103",
+      "criterion": "Supporting document yazımı yarım kalınca saga makbuzu doğru aşamayı gösterir.",
+      "phase": "F7",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-104",
+      "criterion": "Concurrent reference edit expectedHash conflict üretir; yabancı içerik ezilmez.",
+      "phase": "F7",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/mcp/server/ReferenceMcpToolTest.java",
+          "observation": "concurrent expected-hash reference updates produce one success and one conflict without overwriting foreign content",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-105",
+      "criterion": "Reference link shared root erişim sözleşmesini ve proje bilgisini korur.",
+      "phase": "F7",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/mcp/server/MemoryRelationMcpToolTest.java",
+          "observation": "section links remain project-scoped while reference targets require local trust",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-106",
+      "criterion": "Uzun prosedür sırf var diye her memory cevabına inject edilmez.",
+      "phase": "F7",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/agentlearning/TaskContextFacadeTest.java",
+          "observation": "disabled reference mode performs no relation or reference expansion",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-107",
+      "criterion": "Metadata-only değişim yeniden embedding çağrısı oluşturmaz.",
+      "phase": "F9",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/memoryai/MemoryVectorProjectionCoordinatorTest.java",
+          "observation": "metadata-only change skips the second embedding-triggering vector upsert",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-108",
+      "criterion": "Text değişimi doğru fingerprint ile yeni embedding üretir.",
+      "phase": "F9",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/memoryai/MemoryVectorProjectionCoordinatorTest.java",
+          "observation": "text or embedding fingerprint change forces a projection refresh with the current fingerprint",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-109",
+      "criterion": "Senkron/outbox modları aynı olayı farklı sıralarla çift publish etmez.",
+      "phase": "F9",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/memoryai/MemoryVectorProjectionCoordinatorTest.java",
+          "observation": "SYNC and OUTBOX choose exactly one projection path for an event",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-110",
+      "criterion": "SQL commit sonrası worker crash retry ile aynı revisiona tamamlanır.",
+      "phase": "F9",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/memoryai/MemoryVectorProjectionWorkerTest.java",
+          "observation": "a failed claimed revision retries and completes idempotently",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-111",
+      "criterion": "Eski gecikmiş upsert arşivli veya daha yeni sürümlü kaydı diriltmez.",
+      "phase": "F9",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/memoryai/MemoryVectorProjectionWorkerTest.java",
+          "observation": "delayed work rehydrates archived SQL state and deletes instead of reviving the vector",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-112",
+      "criterion": "Index PENDING/DEGRADED iken makbuz READY demez.",
+      "phase": "F9",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/agentlearning/AgentLearningServiceTest.java",
+          "observation": "new memory receipt reports index/graph PENDING",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-113",
+      "criterion": "Queue dolması bounded ve görünür hata/backpressure üretir; sessiz veri kaybı yoktur.",
+      "phase": "F9",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/memoryai/MemoryVectorProjectionWorkerTest.java",
+          "observation": "bounded queue rejection is visible and preserves all previously accepted work",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-114",
+      "criterion": "Judge kendi metadata olayında tekrar tekrar model çağırmaz.",
+      "phase": "F9",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/memoryai/MemoryRelationJudgeWorkerTest.java",
+          "observation": "the relation judge ignores its completed metadata event and does not call the model twice",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-115",
+      "criterion": "Capability cache server restart/contract/credential değişiminde invalid olur.",
+      "phase": "F9",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-116",
+      "criterion": "Project cache aynı slug farklı repository veya worktreeye sızmaz.",
+      "phase": "F9",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-117",
+      "criterion": "Context epoch bilinmiyorsa instruction cache tam yüklemeyi atlamaz.",
+      "phase": "F9",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-118",
+      "criterion": "Timeout sonrası idempotent status çözümü yeni memory oluşturmadan sonuç verir.",
+      "phase": "F9",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/agentlearning/AgentLearningServiceTest.java",
+          "observation": "operation status recovers the completed receipt after a discarded return without creating another memory",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-119",
+      "criterion": "Fresh install her runtime için doğru instruction/skill/bağlantı kaynağını kurar; Copilot launcher ayrıca doğrulanır.",
+      "phase": "F6/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-120",
+      "criterion": "Upgrade eski kişisel talimatları ve foreign dosyaları korur.",
+      "phase": "F6/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-121",
+      "criterion": "Check/dry-run dosya veya server datası değiştirmez.",
+      "phase": "F6/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-122",
+      "criterion": "Uninstall yalnız sahipli dosyaları kaldırır; memory/rule/reference verisini silmez.",
+      "phase": "F6/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-123",
+      "criterion": "Copilot, Claude Code ve Codex gerçek sessionlarında startup, skill ve öğrenme davranışı ayrı gözlenir.",
+      "phase": "F6/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "INCONCLUSIVE",
+      "evidence": [
+        {
+          "kind": "inspected_contract",
+          "path": "output/verification-f12-real-runtime.md",
+          "observation": "real Copilot startup, skill load, T1-T4 learning behavior and provider usage were observed; Claude Code and Codex remain unrun",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Copilot is observed on the real terminal path; the two native runtimes are still NOT_RUN."
+    },
+    {
+      "id": "AT-124",
+      "criterion": "Hook dosyasının varlığı gerçek hook invocation yerine kanıt olarak kullanılmaz.",
+      "phase": "F6/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-125",
+      "criterion": "Adapter desteklenmeyen runtime server-observed/agent-reported coverage ile çalışır; tam trace iddia edilmez.",
+      "phase": "F6/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-126",
+      "criterion": "Schema hatası bir focused help/düzeltme ile çözülebilir; katalog-okuma döngüsü yaratmaz.",
+      "phase": "F6/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "INCONCLUSIVE",
+      "evidence": [
+        {
+          "kind": "inspected_contract",
+          "path": "output/verification-f12-real-runtime.md",
+          "observation": "real Copilot failures exposed missing schema guidance; exact request shapes were added and clean T1/T3 reruns completed without a learn-schema retry",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "The corrected Copilot flow is observed, but equivalent native-runtime failure recovery is not."
+    },
+    {
+      "id": "AT-127",
+      "criterion": "Yeni öğrenme provider menüsü açmaz; Copilot native MCPye geçmez, Claude/Codex terminale zorlanmaz.",
+      "phase": "F6/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "INCONCLUSIVE",
+      "evidence": [
+        {
+          "kind": "inspected_contract",
+          "path": "output/verification-f12-real-runtime.md",
+          "observation": "all real Copilot learning operations stayed on direct ai_orch commands without native MCP or a provider menu",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Copilot transport behavior is observed; Claude Code and Codex live transport behavior remains unrun."
+    },
+    {
+      "id": "AT-128",
+      "criterion": "Remote/container ortamında loopback yerelliği ve workspace root doğruluğu sınanır.",
+      "phase": "F6/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-129",
+      "criterion": "A–E kolları her runtime içinde eşit rules/model/baseline koşullarında karşılaştırılır; üçü tek toplama gizlenmez.",
+      "phase": "F11/F12",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "INCONCLUSIVE",
+      "evidence": [
+        {
+          "kind": "inspected_contract",
+          "path": "output/learning-runtime-f12/copilot-observed-summary.json",
+          "observation": "the real-run analyzer keeps all three runtime gates INCONCLUSIVE because only Copilot arm E has partial observations",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "One real Copilot E-arm story ran; A-D, repeats and both native runtimes remain missing."
+    },
+    {
+      "id": "AT-130",
+      "criterion": "İlk capture maliyeti ve başarısız denemeler toplam maliyetten çıkarılmaz.",
+      "phase": "F11/F12",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/python/test_learning_transfer_benchmark.py",
+          "observation": "T1 remains a measured stage and failed-attempt tokens/counts are included in task cost",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-131",
+      "criterion": "Aynı soru dışında yeni feature/bugfix transferi üç runtime ve 3×3 producer/consumer matrisinde ölçülür.",
+      "phase": "F11/F12",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "INCONCLUSIVE",
+      "evidence": [
+        {
+          "kind": "inspected_contract",
+          "path": "output/verification-f12-real-runtime.md",
+          "observation": "real Copilot T1 research transferred to a different fresh-session T2 feature change while preserving two canonical memory IDs",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "The Copilot-to-Copilot direction is observed; the other eight real directions are not."
+    },
+    {
+      "id": "AT-132",
+      "criterion": "İlgisiz görevlerde learning overhead ayrı raporlanır.",
+      "phase": "F11/F12",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "INCONCLUSIVE",
+      "evidence": [
+        {
+          "kind": "inspected_contract",
+          "path": "output/verification-f12-real-runtime.md",
+          "observation": "Copilot T4 unrelated-task usage is retained separately and resolve returned empty fallback knowledge and targets",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "One Copilot T4 observation exists; three-repeat and native-runtime overhead distributions do not."
+    },
+    {
+      "id": "AT-133",
+      "criterion": "P50 yanında P95 pahalı görev kuyruğu ve hata/retry sayısı gösterilir.",
+      "phase": "F11/F12",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/python/test_learning_transfer_benchmark.py",
+          "observation": "complete fixture runs report per-runtime P50/P95 plus failed-attempt counts",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-134",
+      "criterion": "Kalite düşüyorsa token/tool azalsa bile rollout gate geçmez.",
+      "phase": "F11/F12",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/python/test_learning_transfer_benchmark.py",
+          "observation": "a lower-cost candidate with a critical quality regression fails the rollout gate",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-135",
+      "criterion": "Deney küçükse veya telemetry eksikse sonuç INCONCLUSIVE kalır.",
+      "phase": "F11/F12",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/python/test_learning_transfer_benchmark.py",
+          "observation": "a missing cell or unknown required usage remains INCONCLUSIVE",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-136",
+      "criterion": "Feature flag kapatma mevcut learned veriyi silmeden güvenli davranışı geri getirir.",
+      "phase": "F11/F12",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-137",
+      "criterion": "DB yeni tipi yazılmışken eski binary rollback riskine karşı reader uyumluluğu doğrulanır.",
+      "phase": "F11/F12",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-138",
+      "criterion": "F0–F12 ve F10A–D durumları, üç runtime eksikleri ve çalıştırılmayan testler son raporda eksiksiz bulunur.",
+      "phase": "F11/F12",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-139",
+      "criterion": "ALL",
+      "phase": "DISCOVERY kayıtları runtime etiketiyle ayrı havuzlara bölünmez; erişim mevcut proje/principal ACLsine dayanır. | F2–F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/agentlearning/AgentLearningServiceTest.java",
+          "observation": "producer runtime changes still converge on one canonical memory",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-140",
+      "criterion": "ALL",
+      "phase": "producerRuntime yalnız provenance/ölçümdür; clientRuntime değiştirerek yetki veya feature kapısı aşılamaz. | F2–F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "inspected_contract",
+          "path": "src/main/java/com/mbworldwideapps/aiorchestration/modules/agentlearning/AgentLearningService.java",
+          "observation": "producerRuntime is stored after principal/project authorization",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused contract inspection passed in this workspace."
+    },
+    {
+      "id": "AT-141",
+      "criterion": "ALL",
+      "phase": "Native doğrudan çağrı Python validasyonu olmadan boyut, evidence, scope ve rule-authority sınırlarını uygular. | F2–F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "INCONCLUSIVE",
+      "evidence": [],
+      "reason": "Native service validation is exercised by Java tests; rule-semantic admission remains incomplete."
+    },
+    {
+      "id": "AT-142",
+      "criterion": "ALL",
+      "phase": "Aynı normalize input ve fixture CLI/native yollarda eşdeğer knowledge/targets/gaps/domain outcome üretir. | F2–F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "INCONCLUSIVE",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/mcp/server/AgentLearningMcpToolTest.java",
+          "observation": "native aliases are loaded from the shared runtime-parity fixture and match the four registered tools",
+          "observedAt": "2026-09-17"
+        },
+        {
+          "kind": "automated_test",
+          "path": "skills/copilot/ai-orchestration-memory/scripts/test_ai_orch_commands.py",
+          "observation": "Copilot command aliases are loaded from the same fixture and match the guarded bridge dispatch table",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "All three adapter surfaces are pinned to one fixture and service outcomes share canonical identity; a deployed CLI/native response-equivalence run remains unavailable."
+    },
+    {
+      "id": "AT-143",
+      "criterion": "ALL",
+      "phase": "workspaceBindingId contexti root/worktreeye pinler; başka istemcinin project root güncellemesi eski contexti taşıyamaz. | F2–F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "INCONCLUSIVE",
+      "evidence": [],
+      "reason": "Bindings persist root/fingerprint and are rechecked, but moving another client binding is not yet tested."
+    },
+    {
+      "id": "AT-144",
+      "criterion": "ALL",
+      "phase": "Kalıcı discovery paylaşılırken private context/evidence/learning handle başka runtimea yetkisiz aktarılmaz. | F2–F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-145",
+      "criterion": "ALL",
+      "phase": "Aynı bilgi iki runtime tarafından eşzamanlı kaydedilince duplicate kontrolü tek canonical memoryye yakınsar. | F2–F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "INCONCLUSIVE",
+      "evidence": [],
+      "reason": "Sequential cross-runtime canonical convergence passes; simultaneous concurrency is not yet executed."
+    },
+    {
+      "id": "AT-146",
+      "criterion": "ALL",
+      "phase": "Zıt iki keşif son yazan model doğru sayılmadan conflict ve koşul/evidence ayrımıyla ele alınır. | F2–F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-147",
+      "criterion": "ALL",
+      "phase": "Başka runtimeın stale işaretlediği veya güncellediği canonical revision bütün yetkili okuyucularda görünür. | F2–F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-148",
+      "criterion": "ALL",
+      "phase": "Model değişimi yeni memory havuzu yaratmaz; embedding fingerprint server tarafında aynı ve doğrulanmıştır. | F2–F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-149",
+      "criterion": "CLAUDE_CODE,CODEX prefetch+capture hooks; COPILOT typed terminal capture",
+      "phase": "Claude Code ve Codex runtime prefetch ile final-sidecar capture yürütür. Copilot bütün AI Orchestration işlemlerini terminalden yapar ve dayanıklı bulgu varsa görev sonunda tek ai_orch memory learn çağrısı kullanır; Copilot için hook varsayılmaz. | F1/F4/F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "INCONCLUSIVE",
+      "evidence": [],
+      "reason": "Codex/Claude repository hook fixtures and the Copilot typed-terminal fixture are covered locally. Real Claude Code/Codex/Copilot host invocations are NOT_RUN."
+    },
+    {
+      "id": "AT-150",
+      "criterion": "CLAUDE_CODE,CODEX",
+      "phase": "Küçük öğrenme isteği için JSON dosyası, ai_orch kurulumu veya shell UUID üretimi gerekmez. | F1/F4/F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-151",
+      "criterion": "ALL",
+      "phase": "Resolve cevabındaki server learningHandle ilk payloadı işlem başlamadan dayanıklı operation kaydına bağlar. | F1/F4/F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/agentlearning/AgentLearningServiceTest.java",
+          "observation": "resolve is asserted to persist ISSUED with a null payload hash before learn",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-152",
+      "criterion": "ALL",
+      "phase": "Native reconnect veya CLI restart sonrası aynı handle/same payload tek işlem makbuzunu döndürür. | F1/F4/F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "INCONCLUSIVE",
+      "evidence": [],
+      "reason": "Server replay and Copilot durable staging pass; native reconnect and real CLI restart are not observed."
+    },
+    {
+      "id": "AT-153",
+      "criterion": "ALL",
+      "phase": "Bound handle/different payload conflict olur; düzeltilmiş yeni aday next handle ile açık yeni attempt olur. | F1/F4/F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/agentlearning/AgentLearningServiceTest.java",
+          "observation": "conflict plus server-issued nextLearningHandle",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-154",
+      "criterion": "ALL",
+      "phase": "Kaybolan learn cevabı bilinen handle ile status sorgulanabilir; REQUEST_ID_UNKNOWN yeni write üretmez. | F1/F4/F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/agentlearning/AgentLearningServiceTest.java",
+          "observation": "status by request ID; unknown ID creates no memory",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-155",
+      "criterion": "CLAUDE_CODE,CODEX",
+      "phase": "Yeni agent görünümü native sonuçta da audit/full graph yığınını kaldırır; Python-only kısaltma yoktur. | F1/F4/F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-156",
+      "criterion": "CLAUDE_CODE,CODEX",
+      "phase": "content/structuredContent/ek kaynak metninin fiili model görünürlüğü ölçülür; protokol uyumu korunur. | F1/F4/F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-157",
+      "criterion": "ALL",
+      "phase": "Eski native memory get/search tüketicileri additive view parametresiyle bozulmadan çalışır. | F1/F4/F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/mcp/server/McpServerIT.java",
+          "observation": "legacy overloads and additive native view",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-158",
+      "criterion": "ALL",
+      "phase": "Copilot guard yeni native operation adlarını reddederken eşdeğer ai_orch komutunu izinli kapsamda çalıştırır. | F1/F4/F5",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "PASS",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "skills/copilot/ai-orchestration-memory/scripts/test_copilot_pre_tool_guard.py",
+          "observation": "new native names are denied and direct ai_orch operation status is allowed",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Focused automated evidence passed in this workspace."
+    },
+    {
+      "id": "AT-159",
+      "criterion": "COPILOT->COPILOT",
+      "phase": "Copilot T1 keşfi Copilot yeni session farklı T2 görevinde doğru adresi verir; gold sızıntısı yoktur. | F6/F11",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-160",
+      "criterion": "COPILOT->CLAUDE_CODE",
+      "phase": "Copilot T1 keşfi Claude Code native resolve ile farklı T2 görevinde aynı canonical memoryden kullanılır. | F6/F11",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-161",
+      "criterion": "COPILOT->CODEX",
+      "phase": "Copilot T1 keşfi Codex native resolve ile farklı T2 görevinde aynı canonical memoryden kullanılır. | F6/F11",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-162",
+      "criterion": "CLAUDE_CODE->COPILOT",
+      "phase": "Claude Code T1 keşfi Copilot terminal resolve ile farklı T2 görevine transfer olur. | F6/F11",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-163",
+      "criterion": "CLAUDE_CODE->CLAUDE_CODE",
+      "phase": "Claude Code T1 keşfi yeni Claude Code sessionında farklı T2 görevine transfer olur. | F6/F11",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-164",
+      "criterion": "CLAUDE_CODE->CODEX",
+      "phase": "Claude Code T1 keşfi Codexte transcript taşınmadan ilgili kaynak/test adreslerine götürür. | F6/F11",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-165",
+      "criterion": "CODEX->COPILOT",
+      "phase": "Codex T1 keşfi Copilot terminal yolunda doğru ilgili source/teste gider. | F6/F11",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-166",
+      "criterion": "CODEX->CLAUDE_CODE",
+      "phase": "Codex T1 keşfi Claude Code native yolunda doğru ilgili source/teste gider. | F6/F11",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-167",
+      "criterion": "CODEX->CODEX",
+      "phase": "Codex T1 keşfi yeni Codex sessionında farklı T2 işinde kullanılır; gereken doğrulama atlanmaz. | F6/F11",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-168",
+      "criterion": "CLAUDE_CODE",
+      "phase": "CLAUDE.md ve shared startup native kural yüklemesini korur; Copilot-only terminal yasağı taşınmaz. | F0/F6/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-169",
+      "criterion": "CODEX",
+      "phase": "AGENTS.md/etkili override ve CODEX_HOME korunur; native MCP yerine terminal zorunluluğu getirilmez. | F0/F6/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-170",
+      "criterion": "CLAUDE_CODE",
+      "phase": "learning skill gerçek sessionda ihtiyaç halinde yüklenir; var olmayan özel skill mevcut sayılmaz. | F0/F6/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-171",
+      "criterion": "CODEX",
+      "phase": "learning skill kurulu sürümün gerçek discovery yolunda görünür; ikinci katalog kopyası oluşmaz. | F0/F6/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-172",
+      "criterion": "ALL",
+      "phase": "Native ve Copilot installerları yabancı instruction/skill/MCP configini ezmez; check/dry-run mutasyon yapmaz. | F0/F6/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-173",
+      "criterion": "ALL",
+      "phase": "Uninstall yalnız sahipli dosyaları kaldırır; diğer runtime kurulumu ve ortak öğrenme verisi korunur. | F0/F6/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-174",
+      "criterion": "ALL",
+      "phase": "Yeni tool deploy edilmeden onu zorunlu öğreten skill etkinleşmez; schema mismatch tek açık hata olur. | F0/F6/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-175",
+      "criterion": "CLAUDE_CODE",
+      "phase": "PostToolUse adapter yalnız izinli gözlemleri capture eder; yokluğu portable native learni engellemez. | F0/F6/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-176",
+      "criterion": "CODEX",
+      "phase": "Telemetry adapter gerçek sürüm/APIye dayanır; Claude hook JSONu varsayılarak gözlem uydurulmaz. | F0/F6/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-177",
+      "criterion": "ALL",
+      "phase": "Bir runtimeın native dosya/test araçları toptan yeniden yönlendirilmez; gözlenmeyen source reading reported kalır. | F0/F6/F10",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-178",
+      "criterion": "ALL",
+      "phase": "Ayrı runtime/model/transport ve producer/consumer alanları ölçülür; eksik değer unknown kalır. | F0/F8/F9/F11",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-179",
+      "criterion": "ALL",
+      "phase": "MCP schema/discovery token maliyeti ve CLI dosya/terminal maliyeti görev toplamından çıkarılmaz. | F0/F8/F9/F11",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-180",
+      "criterion": "ALL",
+      "phase": "Her runtime için final çıktı gerçek tokenizer veya açık proxy ile ölçülür; tek model sayısı diğerine uygulanmaz. | F0/F8/F9/F11",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-181",
+      "criterion": "ALL",
+      "phase": "Subagent maliyeti ve yinelenen context yüklemesi parent görev toplamına atanır; gizli fan-out yoktur. | F0/F8/F9/F11",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-182",
+      "criterion": "ALL",
+      "phase": "A runtime rule loaded state B runtime bootstrapını atlatmaz; context reset/compaction epoch ayrı tutulur. | F0/F8/F9/F11",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-183",
+      "criterion": "ALL",
+      "phase": "Cache principal/ACL/proje/worktree/source/index sürümü değişiminde eski yetkisiz context vermez. | F0/F8/F9/F11",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-184",
+      "criterion": "ALL",
+      "phase": "Client runtime/model etiketi değişimi mevcut native yetkileri genişletmez ve Copilot sınırlarını delmez. | F0/F8/F9/F11",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-185",
+      "criterion": "ALL",
+      "phase": "Farklı makinelerde aynı proje canonical relative anchorı paylaşabilir; server source görünürlüğü UNKNOWN doğru kalır. | F0/F8/F9/F11",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-186",
+      "criterion": "ALL",
+      "phase": "Ephemeral evidence ID kopyası reddedilir; yeni runtime canonical kaynaktan kendi receiptini alabilir. | F0/F8/F9/F11",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-187",
+      "criterion": "ALL",
+      "phase": "T1 modelinin çıkardığı aynı claimi üç model tekrar edince bağımsız kanıt/confidence artışı sayılmaz. | F0/F8/F9/F11",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-188",
+      "criterion": "ALL",
+      "phase": "Üç runtime kalite/maliyet gatei ayrı raporlanır; yalnız Copilot sonucuyla bütün ürün DONE ilan edilmez. | F11/F12",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-189",
+      "criterion": "ALL",
+      "phase": "Her 3x3 hücre fixture ve gerçek runtime kanıtını ayırır; erişilemeyen hücre NOT_RUN olarak kalır. | F11/F12",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "INCONCLUSIVE",
+      "evidence": [
+        {
+          "kind": "automated_test",
+          "path": "src/test/java/com/mbworldwideapps/aiorchestration/modules/agentlearning/AgentLearningServiceTest.java",
+          "observation": "all nine fixture directions share canonical identity while keeping context, handle and receipt private",
+          "observedAt": "2026-09-17"
+        },
+        {
+          "kind": "automated_test",
+          "path": "src/test/python/test_runtime_parity.py",
+          "observation": "fixture and live evidence statuses are validated separately; eight unobserved live cells remain NOT_RUN",
+          "observedAt": "2026-09-17"
+        },
+        {
+          "kind": "inspected_contract",
+          "path": "output/cross-runtime-transfer-report.md",
+          "observation": "Copilot-to-Copilot is separately marked as real PASS while the other eight real directions remain NOT_RUN",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "The exact 3x3 fixture and one real Copilot direction pass; eight real-runtime cells remain NOT_RUN."
+    },
+    {
+      "id": "AT-190",
+      "criterion": "ALL",
+      "phase": "Per-runtime flag kapatma ortak memoryyi silmez; server schema/reader rollback uyumu bütün istemcilerde sınanır. | F11/F12",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    },
+    {
+      "id": "AT-191",
+      "criterion": "ALL",
+      "phase": "F10A/B/C/D durumu, runtime-parity ve cross-runtime-transfer raporu son teslimde bulunur. | F11/F12",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "INCONCLUSIVE",
+      "evidence": [
+        {
+          "kind": "inspected_contract",
+          "path": "output/runtime-parity-report.md",
+          "observation": "F10A/B/C/D and transport parity are present with their live gaps",
+          "observedAt": "2026-09-17"
+        },
+        {
+          "kind": "inspected_contract",
+          "path": "output/cross-runtime-transfer-report.md",
+          "observation": "nine fixture and real-runtime columns are reported separately",
+          "observedAt": "2026-09-17"
+        }
+      ],
+      "reason": "Required reports and real F10A evidence exist, but F10B/F10C and shared live acceptance are incomplete."
+    },
+    {
+      "id": "AT-192",
+      "criterion": "ALL",
+      "phase": "Claude araştırma -> Codex yeni görev -> Copilot dar stale yenileme zinciri gerekli güncel kaynak/test kontrolüyle gösterilir. | F11/F12",
+      "applicableRuntimes": [
+        "COPILOT",
+        "CLAUDE_CODE",
+        "CODEX"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Not implemented or not executed in the current verified slice."
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI Orchestration Memory"
+  short_description: "Use project memory safely without scans"
+  default_prompt: "Use $ai-orchestration-memory to resolve this project and retrieve only relevant durable memory without scanning."

@@ -1,0 +1,205 @@
+server:
+  address: 127.0.0.1
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:55432/ai_orchestration
+    username: ai_orch
+    password: ${AI_ORCH_DB_PASSWORD:ai_orch_local}
+  ai:
+    model:
+      embedding: ollama
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      chat:
+        model: ${AI_ORCH_CHAT_MODEL:qwen3:8b}
+      embedding:
+        model: bge-m3
+        options:
+          model: bge-m3
+          dimensions: 1024
+    vectorstore:
+      qdrant:
+        host: localhost
+        port: 6334
+        api-key:
+        collection-name: knowledge_chunks_bge_m3_1024
+        use-tls: false
+        initialize-schema: true
+
+ai-orchestration:
+  learning:
+    enabled: ${AI_ORCH_LEARNING_ENABLED:true}
+    capture-enabled: ${AI_ORCH_LEARNING_CAPTURE_ENABLED:true}
+    navigation-enabled: ${AI_ORCH_LEARNING_NAVIGATION_ENABLED:true}
+    # Admission rollout observation only; unrelated to memory.embedding.shadow-mode vector routing.
+    shadow-mode: ${AI_ORCH_LEARNING_SHADOW_MODE:true}
+    max-candidates-per-write: 3
+    max-evidence-per-candidate: 12
+    default-context-token-budget: 1200
+    max-context-token-budget: 4000
+    max-source-targets-per-open: 3
+    research-context-ttl-hours: 24
+    operation-retention-days: 7
+    operation-lease-seconds: 300
+    max-source-file-bytes: 1048576
+    cleanup-batch-size: 500
+    cleanup-interval-ms: 3600000
+  embedding-dimensions: 1024
+  chat-model: ${AI_ORCH_CHAT_MODEL:qwen3:8b}
+  graph:
+    context-retrieval:
+      enabled: ${AI_ORCH_GRAPH_CONTEXT_RETRIEVAL_ENABLED:true}
+      default-top-k: ${AI_ORCH_GRAPH_CONTEXT_DEFAULT_TOPK:5}
+      max-top-k: ${AI_ORCH_GRAPH_CONTEXT_MAX_TOPK:20}
+      default-max-depth: ${AI_ORCH_GRAPH_CONTEXT_DEFAULT_DEPTH:2}
+      max-depth: ${AI_ORCH_GRAPH_CONTEXT_MAX_DEPTH:3}
+      seed-limit: ${AI_ORCH_GRAPH_CONTEXT_SEED_LIMIT:8}
+      max-nodes: ${AI_ORCH_GRAPH_CONTEXT_MAX_NODES:80}
+      max-edges: ${AI_ORCH_GRAPH_CONTEXT_MAX_EDGES:160}
+      max-paths: ${AI_ORCH_GRAPH_CONTEXT_MAX_PATHS:12}
+      neighbors-per-node: ${AI_ORCH_GRAPH_CONTEXT_NEIGHBORS_PER_NODE:12}
+      frontier-per-hop: ${AI_ORCH_GRAPH_CONTEXT_FRONTIER_PER_HOP:32}
+      max-capsule-text-chars: ${AI_ORCH_GRAPH_CONTEXT_MAX_CAPSULE_TEXT_CHARS:800}
+      max-memory-summary-chars: ${AI_ORCH_GRAPH_CONTEXT_MAX_MEMORY_SUMMARY_CHARS:500}
+      token-budget: ${AI_ORCH_GRAPH_CONTEXT_TOKEN_BUDGET:4000}
+      include-similarity-backfill-by-default: ${AI_ORCH_GRAPH_CONTEXT_INCLUDE_SIMILARITY:false}
+      include-stale-by-default: ${AI_ORCH_GRAPH_CONTEXT_INCLUDE_STALE:false}
+  learning-context:
+    # Local Qwen gets one compact scanner capsule + exact structural/test evidence bundle.
+    # The final rendered block is bounded with the shared chars/4 token estimate;
+    # this is a pre-call heuristic budget, not an Ollama-tokenizer guarantee.
+    # No per-question semantic LLM call is made.
+    enabled: ${AI_ORCH_LEARNING_CONTEXT_ENABLED:true}
+    # Two semantic candidates recover critical method meaning; only the best path gets structural/test expansion.
+    default-top-k: ${AI_ORCH_LEARNING_CONTEXT_DEFAULT_TOPK:2}
+    max-top-k: ${AI_ORCH_LEARNING_CONTEXT_MAX_TOPK:2}
+    default-max-depth: ${AI_ORCH_LEARNING_CONTEXT_DEFAULT_DEPTH:1}
+    max-depth: ${AI_ORCH_LEARNING_CONTEXT_MAX_DEPTH:2}
+    default-token-budget: ${AI_ORCH_LEARNING_CONTEXT_TOKEN_BUDGET:600}
+    max-token-budget: ${AI_ORCH_LEARNING_CONTEXT_MAX_TOKEN_BUDGET:600}
+    max-rendered-item-chars: ${AI_ORCH_LEARNING_CONTEXT_MAX_RENDERED_ITEM_CHARS:1600}
+    # The selective router still abstains on irrelevant questions; this gate makes MemoryAI reachable when selected.
+    include-memory-fallback: ${AI_ORCH_LEARNING_CONTEXT_INCLUDE_MEMORY:true}
+    # Capsule summaries already carry scanner meaning; a second anchor query is opt-in.
+    include-semantic-anchors: ${AI_ORCH_LEARNING_CONTEXT_INCLUDE_SEMANTIC:false}
+  generation:
+    enabled: ${AI_ORCH_GENERATION_ENABLED:true}
+    provider: ${AI_ORCH_GENERATION_PROVIDER:local-qwen}
+    fallback-to-extractive: true
+    # qwen3:8b structured analyst responses regularly exceed the former 8s cutoff on local hardware.
+    timeout-ms: ${AI_ORCH_GENERATION_TIMEOUT_MS:20000}
+    max-tokens: ${AI_ORCH_GENERATION_MAX_TOKENS:512}
+    temperature: ${AI_ORCH_GENERATION_TEMPERATURE:0.0}
+    thinking-enabled: ${AI_ORCH_GENERATION_THINKING_ENABLED:false}
+    # Local-first intentionally routes all knowledge answers through the local generator.
+    canary:
+      enabled: ${AI_ORCH_GENERATION_CANARY_ENABLED:true}
+      allowed-user-ids: ${AI_ORCH_GENERATION_CANARY_USERS:}
+      percentage-rollout: ${AI_ORCH_GENERATION_CANARY_PERCENTAGE:100}
+  local-trust:
+    enabled: true
+    default-project-key: ${AI_ORCH_LOCAL_TRUST_PROJECT_KEY:AI_ORCHESTRATION}
+    default-client-id: ${AI_ORCH_LOCAL_TRUST_CLIENT_ID:local-client}
+    # Default-off: true lets loopback local agents write AUTO_ACTIVE memory after the gate's policy,
+    # confidence, and duplicate checks pass.
+    auto-active-write: ${AI_ORCH_LOCAL_TRUST_AUTO_ACTIVE_WRITE:false}
+    local-scopes:
+      - memory.read
+      - memory.write
+      - memory.delete
+      - memory.pending
+      - memory.human_confirmed_approve
+      - rules.read
+      - rules.write
+      - rules.confirm
+      - rules.global.confirm
+      - knowledge.read
+      - codebase.read
+      - context.graph.read
+      - context.semantic.read
+      - knowledge.ingest
+      - scanner.scan
+      - transcript.write
+      - provider.local-qwen
+      - provider.claude
+      - provider.codex
+  memory:
+    episodic-collection-name: memory_episodic_bge_m3_1024
+    embedding:
+      provider: ollama
+      model-identity: bge-m3
+      model-revision: ${AI_ORCH_MEMORY_EMBEDDING_MODEL_REVISION:unverified}
+      normalization: ollama-bge-m3-default
+      # summary + text: the summary names the situation a memory applies to, which is what a task request matches.
+      retrieval-text-schema-version: ${AI_ORCH_MEMORY_RETRIEVAL_TEXT_SCHEMA:discovery-v2}
+      shadow-provider: ${AI_ORCH_MEMORY_SHADOW_PROVIDER:ollama}
+      shadow-model-identity: ${AI_ORCH_MEMORY_SHADOW_MODEL:bge-m3}
+      shadow-model-revision: ${AI_ORCH_MEMORY_SHADOW_MODEL_REVISION:unverified}
+      shadow-normalization: ${AI_ORCH_MEMORY_SHADOW_NORMALIZATION:ollama-bge-m3-default}
+    # Selective injection is on locally; routing and the similarity floor prevent unconditional prompt stuffing.
+    injection-enabled: ${AI_ORCH_MEMORY_INJECTION_ENABLED:true}
+    backfill-on-startup: ${AI_ORCH_MEMORY_BACKFILL_ON_STARTUP:false}
+    ranking:
+      oversample-factor: ${AI_ORCH_MEMORY_OVERSAMPLE_FACTOR:2}
+      # bge-m3 cosine, calibrated with bench/cards_probe.py (related vs unrelated task requests, EN and TR).
+      min-injection-similarity: ${AI_ORCH_MEMORY_MIN_INJECTION_SIMILARITY:0.45}
+      min-search-similarity: ${AI_ORCH_MEMORY_MIN_SEARCH_SIMILARITY:0.40}
+    write-gate:
+      # heuristic = no LLM call; duplicates are rejected by embedding similarity. Set sessionProvider to let
+      # a local/agent model judge proposals instead.
+      provider: ${AI_ORCH_WRITE_GATE_PROVIDER:heuristic}
+      session-fallback-provider: qwen
+      trusted-client-ids: []
+  scanner:
+    baseline-collection-name: ${AI_ORCH_CODEBASE_COLLECTION:code_baseline_bge_m3_1024}
+    allowed-roots:
+      - .
+      # Legacy path hints; project resolution and scanning do not enforce this list.
+      - ${AI_ORCH_SCANNER_PROJELER_ROOT:${user.home}/Projeler}
+      - ${AI_ORCH_SCANNER_PROJECTS_ROOT:${user.home}/Projects}
+      - ${AI_ORCH_SCANNER_ANDROID_PROJECTS_ROOT:${user.home}/AndroidStudioProjects}
+    vector-index:
+      enabled: ${AI_ORCH_SCANNER_VECTOR_INDEX_ENABLED:true}
+    semantic:
+      enabled: ${AI_ORCH_SCANNER_SEMANTIC_ENABLED:true}
+      # Default is extractive: structural capsules with no LLM call (no local model required).
+      # Set local-qwen to use a local Ollama model; Claude/Codex only via providerOverride on a scan
+      # request; external payloads are redacted before egress by ScannerPayloadRedactor.
+      provider: ${AI_ORCH_SCANNER_SEMANTIC_PROVIDER:extractive}
+      model: ${AI_ORCH_SCANNER_SEMANTIC_MODEL:qwen3:8b}
+      allow-external: ${AI_ORCH_SCANNER_SEMANTIC_ALLOW_EXTERNAL:true}
+      allowed-providers: ${AI_ORCH_SCANNER_SEMANTIC_ALLOWED_PROVIDERS:local-qwen,claude,codex}
+      timeout-ms: ${AI_ORCH_SCANNER_SEMANTIC_TIMEOUT_MS:90000}
+      max-flow-capsules-per-run: ${AI_ORCH_SCANNER_MAX_FLOW_CAPSULES:6}
+    resolved-edges:
+      # Çağrı hedefleri çözümlenmezse CALLS kenarları name-only kalır ve kod grafiğinde
+      # dosya sınırını geçen hiçbir bağ olmaz (görselleştirme boş çıkar).
+      enabled: ${AI_ORCH_SCANNER_RESOLVED_EDGES_ENABLED:true}
+      max-files-per-run: ${AI_ORCH_SCANNER_RESOLVED_EDGES_MAX_FILES:1000}
+      max-classpath-jars: ${AI_ORCH_SCANNER_RESOLVED_EDGES_MAX_JARS:200}
+  software:
+    codegen:
+      external-cli:
+        enabled: ${AI_ORCH_EXTERNAL_CLI_ENABLED:true}
+        claude-cli-path: ${AI_ORCH_CLAUDE_CLI_PATH:claude}
+        claude-cli-model: ${AI_ORCH_CLAUDE_CLI_MODEL:}
+        claude-cli-timeout-ms: ${AI_ORCH_CLAUDE_CLI_TIMEOUT_MS:600000}
+        codex-cli-path: ${AI_ORCH_CODEX_CLI_PATH:codex}
+        codex-cli-model: ${AI_ORCH_CODEX_CLI_MODEL:}
+        codex-cli-timeout-ms: ${AI_ORCH_CODEX_CLI_TIMEOUT_MS:600000}
+        codex-cli-args-extra: ${AI_ORCH_CODEX_CLI_ARGS_EXTRA:}
+        fallback-to-local-qwen: ${AI_ORCH_EXTERNAL_CLI_FALLBACK_QWEN:true}
+  policy:
+    admin-token-required: false
+  ollama:
+    preflight-enabled: true
+  architecture:
+    enabled: true
+    provider: codex
+  reranker:
+    enabled: true
+    provider: ${AI_ORCH_RERANKER_PROVIDER:onnx}
+    timeout-ms: ${AI_ORCH_RERANKER_TIMEOUT_MS:2000}
+    onnx:
+      allow-missing-model-fallback: false

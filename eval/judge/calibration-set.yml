@@ -1,0 +1,270 @@
+- id: JC-01
+  category: literal-strict
+  answer: "Credit risk approval threshold 720 olarak uygulanir [chunk-1]"
+  expectedConcepts: ["credit risk threshold", "approval", "720"]
+  requiredLiterals: ["720"]
+  forbiddenTerms: ["850"]
+  sourceChunkIds: ["chunk-1"]
+  expectedPass: true
+  reason: "Exact numeric threshold with citation."
+- id: JC-02
+  category: literal-strict
+  answer: "TRY tutarlar MoneyTL value object ile modellenir [chunk-2]"
+  expectedConcepts: ["TRY tutarlar", "MoneyTL", "value object"]
+  requiredLiterals: ["MoneyTL"]
+  forbiddenTerms: ["Float"]
+  sourceChunkIds: ["chunk-2"]
+  expectedPass: true
+  reason: "Exact type name present."
+- id: JC-03
+  category: literal-strict
+  answer: "Servis ismi acme-svc-domain-service formatinda olur [chunk-3]"
+  expectedConcepts: ["servis ismi", "format", "acme-svc"]
+  requiredLiterals: ["acme-svc"]
+  forbiddenTerms: ["app-"]
+  sourceChunkIds: ["chunk-3"]
+  expectedPass: true
+  reason: "Exact prefix present."
+- id: JC-04
+  category: literal-strict
+  answer: "Repository siniflari AcmeBaseRepository kullanir [chunk-4]"
+  expectedConcepts: ["repository siniflari", "AcmeBaseRepository", "kullanir"]
+  requiredLiterals: ["AcmeBaseRepository"]
+  forbiddenTerms: ["JpaRepository"]
+  sourceChunkIds: ["chunk-4"]
+  expectedPass: true
+  reason: "Exact base class present."
+- id: JC-05
+  category: literal-strict
+  answer: "Maker-checker para hareketlerinde zorunludur [chunk-5]"
+  expectedConcepts: ["maker-checker", "para hareketleri", "zorunlu"]
+  requiredLiterals: ["maker-checker"]
+  forbiddenTerms: ["atlanabilir"]
+  sourceChunkIds: ["chunk-5"]
+  expectedPass: true
+  reason: "Exact workflow present."
+- id: JC-06
+  category: literal-strict
+  answer: "Credit risk threshold 850 olarak uygulanabilir [chunk-1]"
+  expectedConcepts: ["credit risk threshold", "approval", "720"]
+  requiredLiterals: ["720"]
+  forbiddenTerms: ["850"]
+  sourceChunkIds: ["chunk-1"]
+  expectedPass: false
+  reason: "Wrong numeric threshold."
+- id: JC-07
+  category: literal-strict
+  answer: "TRY tutarlari Float ile modelleyebiliriz [chunk-2]"
+  expectedConcepts: ["TRY tutarlar", "MoneyTL", "value object"]
+  requiredLiterals: ["MoneyTL"]
+  forbiddenTerms: ["Float"]
+  sourceChunkIds: ["chunk-2"]
+  expectedPass: false
+  reason: "Forbidden type."
+- id: JC-08
+  category: literal-strict
+  answer: "Servis ismi app-customer formatinda olabilir [chunk-3]"
+  expectedConcepts: ["servis ismi", "format", "acme-svc"]
+  requiredLiterals: ["acme-svc"]
+  forbiddenTerms: ["app-"]
+  sourceChunkIds: ["chunk-3"]
+  expectedPass: false
+  reason: "Forbidden prefix."
+- id: JC-09
+  category: literal-strict
+  answer: "Repository siniflari JpaRepository kullanir [chunk-4]"
+  expectedConcepts: ["repository siniflari", "AcmeBaseRepository", "kullanir"]
+  requiredLiterals: ["AcmeBaseRepository"]
+  forbiddenTerms: ["JpaRepository"]
+  sourceChunkIds: ["chunk-4"]
+  expectedPass: false
+  reason: "Wrong base class."
+- id: JC-10
+  category: literal-strict
+  answer: "Maker-checker acil durumda atlanabilir [chunk-5]"
+  expectedConcepts: ["maker-checker", "para hareketleri", "zorunlu"]
+  requiredLiterals: ["maker-checker", "zorunlu"]
+  forbiddenTerms: ["atlanabilir"]
+  sourceChunkIds: ["chunk-5"]
+  expectedPass: false
+  reason: "Forbidden bypass claim."
+- id: JC-11
+  category: semantic-correctness
+  answer: "Lira miktarlari icin para degeri MoneyTL ile tutulur [chunk-2]"
+  expectedConcepts: ["lira miktarlari", "MoneyTL", "para degeri"]
+  requiredLiterals: ["MoneyTL"]
+  forbiddenTerms: ["double"]
+  sourceChunkIds: ["chunk-2"]
+  expectedPass: true
+  reason: "Paraphrase of TRY amount rule."
+- id: JC-12
+  category: semantic-correctness
+  answer: "Yeni servislerde kurum prefix'i acme-svc olarak korunur [chunk-3]"
+  expectedConcepts: ["servislerde", "kurum prefix", "acme-svc"]
+  requiredLiterals: ["acme-svc"]
+  forbiddenTerms: ["app-"]
+  sourceChunkIds: ["chunk-3"]
+  expectedPass: true
+  reason: "Semantic service naming."
+- id: JC-13
+  category: semantic-correctness
+  answer: "Kayit cekme katmaninda AcmeBaseRepository standardi kullanilir [chunk-4]"
+  expectedConcepts: ["kayit cekme", "AcmeBaseRepository", "standardi"]
+  requiredLiterals: ["AcmeBaseRepository"]
+  forbiddenTerms: ["JpaRepository"]
+  sourceChunkIds: ["chunk-4"]
+  expectedPass: true
+  reason: "Paraphrase of repository rule."
+- id: JC-14
+  category: semantic-correctness
+  answer: "Loglama icin acme-logger paketi tercih edilir [chunk-6]"
+  expectedConcepts: ["loglama", "acme-logger", "paketi"]
+  requiredLiterals: ["acme-logger"]
+  forbiddenTerms: ["structlog"]
+  sourceChunkIds: ["chunk-6"]
+  expectedPass: true
+  reason: "Logger package paraphrase."
+- id: JC-15
+  category: semantic-correctness
+  answer: "Schema degisiklikleri Flyway migration ile ilerler [chunk-7]"
+  expectedConcepts: ["schema degisiklikleri", "Flyway", "migration"]
+  requiredLiterals: ["Flyway"]
+  forbiddenTerms: ["schema.sql"]
+  sourceChunkIds: ["chunk-7"]
+  expectedPass: true
+  reason: "Flyway rule paraphrase."
+- id: JC-16
+  category: semantic-correctness
+  answer: "PoC hava durumu entegrasyonu weather-demo adapter ile sinirli tutulur [chunk-8]"
+  expectedConcepts: ["hava durumu", "weather-demo", "adapter"]
+  requiredLiterals: ["weather-demo"]
+  forbiddenTerms: ["serbest domain"]
+  sourceChunkIds: ["chunk-8"]
+  expectedPass: true
+  reason: "Weather adapter paraphrase."
+- id: JC-17
+  category: semantic-correctness
+  answer: "TCKN degerleri loglara yazilmamalidir [chunk-9]"
+  expectedConcepts: ["TCKN", "loglara", "yazilmamalidir"]
+  requiredLiterals: ["TCKN"]
+  forbiddenTerms: ["logla"]
+  sourceChunkIds: ["chunk-9"]
+  expectedPass: true
+  reason: "PII logging rule."
+- id: JC-18
+  category: semantic-correctness
+  answer: "Cache rollout oncesi rollback checklist tamamlanir [chunk-10]"
+  expectedConcepts: ["cache rollout", "rollback checklist", "tamamlanir"]
+  requiredLiterals: ["rollback checklist"]
+  forbiddenTerms: ["dogrudan release"]
+  sourceChunkIds: ["chunk-10"]
+  expectedPass: true
+  reason: "Rollout memory."
+- id: JC-19
+  category: semantic-correctness
+  answer: "Dokuman onayi olmadan Auto-Doc KnowledgeAI'a alinamaz [chunk-11]"
+  expectedConcepts: ["dokuman onayi", "Auto-Doc", "KnowledgeAI"]
+  requiredLiterals: ["Auto-Doc", "KnowledgeAI"]
+  forbiddenTerms: ["otomatik ingest"]
+  sourceChunkIds: ["chunk-11"]
+  expectedPass: true
+  reason: "Auto-doc approval rule."
+- id: JC-20
+  category: semantic-correctness
+  answer: "MCP connector aktif olmadan once sandbox smoke testlerinden gecmelidir [chunk-12]"
+  expectedConcepts: ["MCP connector", "sandbox smoke", "gecmelidir"]
+  requiredLiterals: ["MCP", "sandbox"]
+  forbiddenTerms: ["dogrudan install"]
+  sourceChunkIds: ["chunk-12"]
+  expectedPass: true
+  reason: "MCP governance rule."
+- id: JC-21
+  category: hallucination-guard
+  answer: "Hayir, kaynakta credit risk threshold 720 olarak gecer [chunk-1]"
+  expectedConcepts: ["credit risk threshold", "720", "kaynakta"]
+  requiredLiterals: ["720"]
+  forbiddenTerms: ["850"]
+  sourceChunkIds: ["chunk-1"]
+  expectedPass: true
+  reason: "Rejects false premise."
+- id: JC-22
+  category: hallucination-guard
+  answer: "Hayir, servis prefix'i app- degil acme-svc olmalidir [chunk-3]"
+  expectedConcepts: ["servis prefix", "acme-svc", "degil"]
+  requiredLiterals: ["acme-svc"]
+  forbiddenTerms: ["app- kullanilir"]
+  sourceChunkIds: ["chunk-3"]
+  expectedPass: true
+  reason: "Corrects app prefix premise."
+- id: JC-23
+  category: hallucination-guard
+  answer: "Hayir, Float yerine MoneyTL kullanilir [chunk-2]"
+  expectedConcepts: ["Float yerine", "MoneyTL", "kullanilir"]
+  requiredLiterals: ["MoneyTL"]
+  forbiddenTerms: ["Float kullanilir"]
+  sourceChunkIds: ["chunk-2"]
+  expectedPass: true
+  reason: "Corrects Float premise."
+- id: JC-24
+  category: hallucination-guard
+  answer: "Hayir, maker-checker akisi zorunludur ve atlanamaz [chunk-5]"
+  expectedConcepts: ["maker-checker", "zorunlu", "atlanamaz"]
+  requiredLiterals: ["maker-checker", "zorunlu"]
+  forbiddenTerms: ["atlanabilir"]
+  sourceChunkIds: ["chunk-5"]
+  expectedPass: true
+  reason: "Rejects bypass premise."
+- id: JC-25
+  category: hallucination-guard
+  answer: "Hayir, loglama icin structlog degil acme-logger kullanilir [chunk-6]"
+  expectedConcepts: ["loglama", "acme-logger", "degil"]
+  requiredLiterals: ["acme-logger"]
+  forbiddenTerms: ["structlog kullanilir"]
+  sourceChunkIds: ["chunk-6"]
+  expectedPass: true
+  reason: "Rejects structlog premise."
+- id: JC-26
+  category: borderline
+  answer: "Credit risk threshold 720 olarak uygulanir"
+  expectedConcepts: ["credit risk threshold", "720", "approval"]
+  requiredLiterals: ["720"]
+  forbiddenTerms: ["850"]
+  sourceChunkIds: ["chunk-1"]
+  expectedPass: false
+  reason: "Missing citation."
+- id: JC-27
+  category: borderline
+  answer: "MoneyTL kullanilir [chunk-2]"
+  expectedConcepts: ["TRY tutarlar", "MoneyTL", "value object"]
+  requiredLiterals: ["MoneyTL"]
+  forbiddenTerms: ["Float"]
+  sourceChunkIds: ["chunk-2"]
+  expectedPass: false
+  reason: "Partial semantic answer below threshold."
+- id: JC-28
+  category: borderline
+  answer: "Kaynaklarda yok [chunk-3]"
+  expectedConcepts: ["servis ismi", "acme-svc", "format"]
+  requiredLiterals: ["acme-svc"]
+  forbiddenTerms: ["app-"]
+  sourceChunkIds: ["chunk-3"]
+  expectedPass: false
+  reason: "Incorrect refusal."
+- id: JC-29
+  category: borderline
+  answer: "Flyway migration kullanilir [chunk-7]"
+  expectedConcepts: ["schema degisiklikleri", "Flyway", "migration"]
+  requiredLiterals: ["Flyway"]
+  forbiddenTerms: ["schema.sql"]
+  sourceChunkIds: ["chunk-7"]
+  expectedPass: true
+  reason: "Short but sufficient."
+- id: JC-30
+  category: borderline
+  answer: "MCP connector icin sandbox gereklidir [chunk-12]"
+  expectedConcepts: ["MCP connector", "sandbox", "gereklidir"]
+  requiredLiterals: ["MCP", "sandbox"]
+  forbiddenTerms: ["dogrudan install"]
+  sourceChunkIds: ["chunk-12"]
+  expectedPass: true
+  reason: "Short but sufficient."

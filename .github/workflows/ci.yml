@@ -1,0 +1,52 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21", cache: maven }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Java tests (unit + IT, Testcontainers)
+        run: ./mvnw -B -q test
+      - name: Python tests
+        run: pip install -q pytest && python -m pytest -q src/test/python skills
+
+  install-smoke:
+    # The one-command install on a clean Ubuntu machine, then the product's first minutes (no LLM).
+    # CI has no systemd user session, so the server runs as a plain background process (--foreground-service);
+    # the launchd/systemd units are exercised in the release acceptance run instead.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21", cache: maven }
+      - name: Install Ollama and the embedding model
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          (ollama serve >/tmp/ollama.log 2>&1 &)
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:11434/api/tags >/dev/null && break; sleep 1; done
+      - name: ./install.sh
+        run: ./install.sh --no-agents --foreground-service
+      - name: ai_orch doctor
+        run: ~/.local/bin/ai_orch doctor
+      - name: Smoke (project add → learn → recall in a new session → panel)
+        run: python3 scripts/smoke_install.py
+      - name: Re-run is safe (idempotent)
+        run: ./install.sh --no-agents --foreground-service && ~/.local/bin/ai_orch doctor
+      - name: Uninstall keeps the data
+        run: |
+          ./install.sh --uninstall
+          test "$(docker exec ai-orch-local-postgres psql -U ai_orch -d ai_orchestration -qAtc 'select count(*) from memory_items')" -ge 1
+      - name: Server log on failure
+        if: failure()
+        run: tail -200 ~/.local/state/ai-orch/server.log || true

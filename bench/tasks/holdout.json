@@ -1,0 +1,74 @@
+{
+  "suite": "holdout",
+  "note": "Held-out families: authored after the final-suite tuning and before any run with the frozen product; never used to tune levers. Different subsystems than dev.json and final.json (read-only JSON API, CSV export). Prompts state WHAT is required unambiguously (paths, fields, formats, ordering, status codes); project gotchas are left for the agent to discover. Reference solutions: bench/reference/<taskId>.patch; details in bench/holdout-notes.md.",
+  "repo": "spring-petclinic",
+  "hiddenTarget": "src/test/java/org/springframework/samples/petclinic",
+  "qualityCommand": [
+    "./mvnw",
+    "-q",
+    "-DskipTests",
+    "validate"
+  ],
+  "families": [
+    {
+      "id": "H1",
+      "title": "Read-only JSON API",
+      "tasks": [
+        {
+          "id": "h1t1",
+          "prompt": "Add a read-only JSON endpoint for owners: `GET /api/owners/{ownerId}` must return status `200` with a JSON object (content type `application/json`) with the fields `id` (number), `firstName`, `lastName`, `address`, `city`, `telephone` (strings) and `pets`: an array with one object per pet of the owner (an empty array when the owner has no pets), each with the fields `id` (number), `name` (string), `birthDate` (string in the format `yyyy-MM-dd`) and `type` (the name of the pet type as a plain string, e.g. `\"dog\"`). For an unknown owner id it must return status `404`. The existing HTML pages must keep working unchanged. Make sure the project's build and tests still pass.",
+          "hidden": [
+            "BenchH1T1Test.java"
+          ],
+          "tests": "!MySqlIntegrationTests,!PostgresIntegrationTests"
+        },
+        {
+          "id": "h1t2",
+          "prompt": "Add a read-only JSON endpoint for veterinarians: `GET /api/vets` must return status `200` with a JSON array (content type `application/json`) containing one object per veterinarian, each with the fields `id` (number), `firstName`, `lastName` (strings) and `specialties`: an array of the names of the vet's specialties as plain strings, sorted alphabetically, and an empty array when the vet has no specialty. The existing HTML page `/vets.html` and the existing `/vets` resource must keep working unchanged. Make sure the project's build and tests still pass.",
+          "hidden": [
+            "BenchH1T2Test.java"
+          ],
+          "tests": "!MySqlIntegrationTests,!PostgresIntegrationTests"
+        },
+        {
+          "id": "h1t3",
+          "prompt": "Add a read-only JSON endpoint for the visits of a pet: `GET /api/owners/{ownerId}/pets/{petId}/visits` must return status `200` with a JSON array (content type `application/json`) of that pet's visits sorted by date ascending, each an object with the fields `id` (number), `date` (string in the format `yyyy-MM-dd`) and `description` (string); a pet without visits gives an empty array. It must return status `404` when the owner does not exist, when the pet does not exist, or when the pet does not belong to that owner. Reading visits must not change any data. The existing HTML pages must keep working unchanged. Make sure the project's build and tests still pass.",
+          "hidden": [
+            "BenchH1T3Test.java"
+          ],
+          "tests": "!MySqlIntegrationTests,!PostgresIntegrationTests"
+        }
+      ]
+    },
+    {
+      "id": "H2",
+      "title": "CSV export",
+      "tasks": [
+        {
+          "id": "h2t1",
+          "prompt": "Add a CSV export of all owners: `GET /owners.csv` must return status `200` with content type `text/csv`. The first line is exactly the header `id,firstName,lastName,city,telephone`, followed by one line per owner (all owners, no paging) ordered by owner id ascending. Every line ends with a line break (`\\r\\n` or `\\n`). A value that contains a comma, a double quote or a line break must be enclosed in double quotes, with every double quote inside it doubled (RFC 4180); other values may be written as they are. The existing HTML pages (including `GET /owners`) must keep working unchanged. Make sure the project's build and tests still pass.",
+          "hidden": [
+            "BenchH2T1Test.java"
+          ],
+          "tests": "!MySqlIntegrationTests,!PostgresIntegrationTests"
+        },
+        {
+          "id": "h2t2",
+          "prompt": "Add a CSV export of all veterinarians: `GET /vets.csv` must return status `200` with content type `text/csv`. The first line is exactly the header `id,firstName,lastName,specialties`, followed by one line per veterinarian (all vets, no paging) ordered by vet id ascending. `specialties` is the vet's specialty names sorted alphabetically and joined with `;` (e.g. `dentistry;surgery`), and an empty value when the vet has no specialty. Every line ends with a line break (`\\r\\n` or `\\n`). A value that contains a comma, a double quote or a line break must be enclosed in double quotes, with every double quote inside it doubled (RFC 4180); other values may be written as they are. The existing HTML page `/vets.html` and the existing `/vets` resource must keep working unchanged. Make sure the project's build and tests still pass.",
+          "hidden": [
+            "BenchH2T2Test.java"
+          ],
+          "tests": "!MySqlIntegrationTests,!PostgresIntegrationTests"
+        },
+        {
+          "id": "h2t3",
+          "prompt": "Add a CSV export of an owner's visits: `GET /owners/{ownerId}/visits.csv` must return status `200` with content type `text/csv`. The first line is exactly the header `pet,date,description`, followed by one line per visit of any of the owner's pets, where `pet` is the pet's name, `date` is the visit date in the format `yyyy-MM-dd` and `description` is the visit description. The lines are sorted by date ascending, then by pet name ascending. An owner whose pets have no visits gets only the header line. For an unknown owner id it must return status `404`. Every line ends with a line break (`\\r\\n` or `\\n`). A value that contains a comma, a double quote or a line break must be enclosed in double quotes, with every double quote inside it doubled (RFC 4180); other values may be written as they are. The existing HTML pages (including `/owners/{ownerId}`) must keep working unchanged. Make sure the project's build and tests still pass.",
+          "hidden": [
+            "BenchH2T3Test.java"
+          ],
+          "tests": "!MySqlIntegrationTests,!PostgresIntegrationTests"
+        }
+      ]
+    }
+  ]
+}

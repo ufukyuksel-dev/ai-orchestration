@@ -1,0 +1,142 @@
+# Plan V2 Approval View
+
+2 project / 2 target / 1 intents / 1 step / 1 coordination / 1 validation / 1 risk / 2 citations / 0 rule checks shown
+
+- planHash: `2e2c53e4f6acf2c5848aeba889cd1ba2ba8ef858ae3299fa3dadff520649abaf`
+- rendererVersion: `plan-v2/renderer-v1`
+
+## Canonical Plan
+
+- citations:
+  - item:
+    - citationId: "citation-baseline"
+    - referenceId: "symbol:ContractController"
+    - type: "BASELINE"
+  - item:
+    - citationId: "citation-human"
+    - referenceId: "turn:contract-move"
+    - type: "HUMAN"
+- confidence: 0.89
+- coordination:
+  - item:
+    - applyBefore:
+      - item:
+        - fromTargetId: "t-api"
+        - toTargetId: "t-gateway"
+    - compatibilityStrategy: "EXPAND\_CONTRACT"
+    - consumerTargetIds:
+      - "t-gateway"
+    - contractKind: "API"
+    - coordinationId: "c-contract"
+    - deployBefore:
+      - item:
+        - fromTargetId: "t-gateway"
+        - toTargetId: "t-api"
+    - manualDeployment: false
+    - producerTargetIds:
+      - "t-api"
+    - rollback: "Restore the v1 route and gateway client"
+    - rollout: "Expand the API, update the gateway, then contract later"
+    - validationIds:
+      - "v-contract"
+- goal: "Move a producer contract and update its consumer safely"
+- intents:
+  - item:
+    - dependencies:
+      - "com.acme.api.v2.ContractController"
+    - description: "Move the producer contract and preserve gateway compatibility"
+    - intentId: "i-contract"
+    - kind: "API\_CONTRACT\_CHANGE"
+    - targetIds:
+      - "t-api"
+      - "t-gateway"
+- planId: "66666666-6666-6666-6666-666666666666"
+- projects:
+  - item:
+    - baseline:
+      - dirtyStateHash: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      - headCommit: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      - repositoryFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      - scannerEvidenceStatus: "STALE"
+      - scannerRevision: "scan-api-7"
+    - projectKey: "API"
+    - projectRef: "api"
+  - item:
+    - baseline:
+      - dirtyStateHash: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      - headCommit: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      - repositoryFingerprint: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      - scannerEvidenceStatus: "PRESENT"
+      - scannerRevision: "scan-gateway-4"
+    - projectKey: "GATEWAY"
+    - projectRef: "gateway"
+- revision: 7
+- risks:
+  - item:
+    - description: "Producer and consumer rollout can drift"
+    - mitigation: "Use expand-contract and explicit deployment ordering"
+    - riskId: "r-rollout"
+    - severity: "HIGH"
+- schemaVersion: 2
+- steps:
+  - item:
+    - description: "Apply the compatible producer and consumer changes"
+    - intentIds:
+      - "i-contract"
+    - stepId: "s-contract"
+    - targetIds:
+      - "t-api"
+      - "t-gateway"
+- targets:
+  - item:
+    - annotationHints:
+      - "org.springframework.web.bind.annotation.RestController"
+    - artifactKind: "CODE"
+    - confidence: 0.93
+    - evidence:
+      - "existing v1 controller"
+      - "planned v2 package"
+    - generated: false
+    - intentIds:
+      - "i-contract"
+    - language: "JAVA"
+    - operation: "MOVE"
+    - previousPath: "src/main/java/com/acme/api/v1/ContractController.java"
+    - projectRef: "api"
+    - proposedSymbol: "com.acme.api.v2.ContractController"
+    - repoRelativePath: "src/main/java/com/acme/api/v2/ContractController.java"
+    - roleHints:
+      - "web.http-controller"
+    - sourceSet: "MAIN"
+    - targetId: "t-api"
+  - item:
+    - annotationHints: []
+    - artifactKind: "CODE"
+    - confidence: 0.88
+    - evidence:
+      - "consumer dependency edge"
+    - generated: false
+    - intentIds:
+      - "i-contract"
+    - language: "JAVA"
+    - operation: "MODIFY"
+    - previousPath: null
+    - projectRef: "gateway"
+    - proposedSymbol: "com.acme.gateway.ContractClient"
+    - repoRelativePath: "src/main/java/com/acme/gateway/ContractClient.java"
+    - roleHints:
+      - "integration.http-client"
+    - sourceSet: "MAIN"
+    - targetId: "t-gateway"
+- validationPlan:
+  - item:
+    - description: "Verify both sides against the same contract fixture"
+    - kind: "CONTRACT\_TEST"
+    - targetIds:
+      - "t-api"
+      - "t-gateway"
+    - validationId: "v-contract"
+
+## Rule Checks
+
+- ruleChecks: []

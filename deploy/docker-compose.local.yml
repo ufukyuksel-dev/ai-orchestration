@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgres:16.4-alpine
+    container_name: ai-orch-${AI_ORCH_INSTANCE:-local}-postgres
+    environment:
+      POSTGRES_DB: ai_orchestration
+      POSTGRES_USER: ai_orch
+      POSTGRES_PASSWORD: ${AI_ORCH_DB_PASSWORD:-ai_orch_local}
+    ports:
+      - "127.0.0.1:${AI_ORCH_PG_PORT:-55432}:5432"
+    volumes:
+      - ai_orch_local_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai_orch -d ai_orchestration"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  qdrant:
+    image: qdrant/qdrant:v1.14.1
+    container_name: ai-orch-${AI_ORCH_INSTANCE:-local}-qdrant
+    ports:
+      - "127.0.0.1:${AI_ORCH_QDRANT_HTTP_PORT:-6333}:6333"
+      - "127.0.0.1:${AI_ORCH_QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - ai_orch_local_qdrant:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/6333'"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+
+volumes:
+  ai_orch_local_postgres:
+  ai_orch_local_qdrant:

@@ -1,0 +1,8 @@
+# gitleaks: default rules, plus two known false positives.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "SHA-256 checksums of the optional reranker tokenizer are not secrets"
+regexTarget = "line"
+regexes = ['''tokenizer(-sha256)?:\s*"?[0-9a-f]{64}"?''']

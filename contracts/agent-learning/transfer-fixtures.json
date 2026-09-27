@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "fixtureSet": "agent-learning-transfer-v1",
+  "rights": "repository-authored synthetic fixture; no production, personal, or model-generated private content",
+  "runtimes": ["COPILOT", "CLAUDE_CODE", "CODEX"],
+  "scenario": {
+    "scenarioId": "CARD-FALLBACK-TRANSFER-001",
+    "canonicalMemoryIdPolicy": "server_issued_per_fixture_run_and_equal_within_direction",
+    "t1": {
+      "prompt": "Investigate where a card without a primary route selects its fallback and which focused test covers that behavior.",
+      "observableSources": ["fixture/src/CardResolver.java", "fixture/test/CardResolverTest.java"],
+      "discovery": "CardResolver.resolve selects fallback only when primary is absent; CardResolverTest covers that boundary.",
+      "targets": ["fixture/src/CardResolver.java", "fixture/test/CardResolverTest.java"]
+    },
+    "t2": {
+      "prompt": "Add a metric when fallback selection occurs without changing primary-route behavior.",
+      "requiredCurrentChecks": ["fixture/src/CardResolver.java", "fixture/test/CardResolverTest.java"]
+    },
+    "gold": {
+      "keptOutsideProducerContext": true,
+      "expectedPatchBehavior": "emit exactly one fallback metric after fallback selection",
+      "expectedFocusedTest": "primary selection emits no fallback metric"
+    }
+  },
+  "matrix": [
+    {"producer": "COPILOT", "consumer": "COPILOT"},
+    {"producer": "COPILOT", "consumer": "CLAUDE_CODE"},
+    {"producer": "COPILOT", "consumer": "CODEX"},
+    {"producer": "CLAUDE_CODE", "consumer": "COPILOT"},
+    {"producer": "CLAUDE_CODE", "consumer": "CLAUDE_CODE"},
+    {"producer": "CLAUDE_CODE", "consumer": "CODEX"},
+    {"producer": "CODEX", "consumer": "COPILOT"},
+    {"producer": "CODEX", "consumer": "CLAUDE_CODE"},
+    {"producer": "CODEX", "consumer": "CODEX"}
+  ]
+}

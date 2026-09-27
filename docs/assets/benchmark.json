@@ -1,0 +1,87 @@
+{
+  "placeholder": false,
+  "repoUrl": "github.com/ufukyuksel-dev/ai-orchestration",
+  "caption": "Spring Petclinic (holdout suite), 2 task families \u00d7 3 related tasks, 2 repetitions, cumulative learning chain \u00b7 models: default, sonnet \u00b7 2026-09-27 \u00b7 development measurement: fixes were found on these tasks",
+  "recallExample": {
+    "learnTokens": 588286,
+    "learnTurns": 21,
+    "recallTokens": 87796,
+    "recallTurns": 3
+  },
+  "bars": [
+    {
+      "label": "Claude Code \u00b7 follow-up tasks",
+      "a": 1.12,
+      "b": 0.9,
+      "unit": "M tokens/task"
+    },
+    {
+      "label": "Codex \u00b7 follow-up tasks",
+      "a": 0.57,
+      "b": 0.36,
+      "unit": "M tokens/task"
+    }
+  ],
+  "summary": {
+    "claude": {
+      "A": {
+        "tasks": 12,
+        "success": 12,
+        "relatedMean": 1.120786375,
+        "relatedPerSuccess": 1.120786375,
+        "firstMean": 1.39261475,
+        "allMean": 1.2113958333333332,
+        "allPerSuccess": 1.2113958333333332,
+        "relatedUsdPerSuccess": 0.506087725,
+        "allUsdPerSuccess": 0.5318838666666666,
+        "relatedTurns": 27.875
+      },
+      "B": {
+        "tasks": 12,
+        "success": 12,
+        "relatedMean": 0.900644375,
+        "relatedPerSuccess": 0.900644375,
+        "firstMean": 1.5572925,
+        "allMean": 1.1195270833333333,
+        "allPerSuccess": 1.1195270833333333,
+        "relatedUsdPerSuccess": 0.422755325,
+        "allUsdPerSuccess": 0.48853615000000006,
+        "relatedTurns": 24.125
+      },
+      "relatedDeltaPct": -19.64174484187497,
+      "firstDeltaPct": 11.825075815116858,
+      "allDeltaPct": -7.583710251603689,
+      "usdDeltaPct": -8.14984611929069
+    },
+    "codex": {
+      "A": {
+        "tasks": 12,
+        "success": 12,
+        "relatedMean": 0.5663905,
+        "relatedPerSuccess": 0.5663905,
+        "firstMean": 0.574019,
+        "allMean": 0.5689333333333334,
+        "allPerSuccess": 0.5689333333333334,
+        "relatedUsdPerSuccess": null,
+        "allUsdPerSuccess": null,
+        "relatedTurns": null
+      },
+      "B": {
+        "tasks": 12,
+        "success": 12,
+        "relatedMean": 0.358398375,
+        "relatedPerSuccess": 0.358398375,
+        "firstMean": 0.59924675,
+        "allMean": 0.4386811666666667,
+        "allPerSuccess": 0.4386811666666667,
+        "relatedUsdPerSuccess": null,
+        "allUsdPerSuccess": null,
+        "relatedTurns": null
+      },
+      "relatedDeltaPct": -36.72238941154557,
+      "firstDeltaPct": 4.394932920338892,
+      "allDeltaPct": -22.894100070307015,
+      "usdDeltaPct": null
+    }
+  }
+}

@@ -1,0 +1,9 @@
+- id: SM-FIXTURE-01
+  category: flow
+  query: find Foo
+  projectKey: PROJECT
+  expectedFiles: ["src/Foo.java"]
+  expectedSymbols: ["Foo"]
+  expectedCapsules: ["PROJECT|251ee08b-92b1-3903-8cc6-8822e1a43f37|symbol_summary"]
+  expectedTerms: ["foo"]
+  verificationNote: "synthetic fixture for runner wiring"
