@@ -3,11 +3,9 @@ package com.mbworldwideapps.aiorchestration.modules.scanner;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -606,7 +604,8 @@ class JdbcCodeBaselineRepositoryTest {
         ProjectWorkspaceResolver resolver = workspaceResolver();
         ProjectWorkspace original = resolver.resolve("REPLACEABLE");
 
-        deleteTree(repositoryRoot);
+        // move the original aside rather than deleting it: Linux would hand its freed inode to the new directory
+        Files.move(repositoryRoot, repositoryRoot.resolveSibling("replaceable-old"));
         Files.createDirectories(repositoryRoot);
         try (Git ignored = Git.init().setDirectory(repositoryRoot.toFile()).call()) {
             // same path, different physical repository identity
@@ -863,14 +862,6 @@ class JdbcCodeBaselineRepositoryTest {
 
     private ProjectWorkspaceResolver workspaceResolver() {
         return new JdbcProjectWorkspaceResolver(jdbcTemplate);
-    }
-
-    private static void deleteTree(Path root) throws IOException {
-        try (var paths = Files.walk(root)) {
-            for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) {
-                Files.deleteIfExists(path);
-            }
-        }
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.mbworldwideapps.aiorchestration.modules.rules;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Map;
 import java.util.UUID;
 
@@ -29,6 +30,10 @@ public record RuleVersion(
 
     public RuleVersion {
         detectorConfig = RuleImmutableValues.immutableMap(detectorConfig);
+        // PostgreSQL keeps microseconds; Linux clocks give nanoseconds. Truncating here makes a version read back
+        // from the database equal to the one that was just written.
+        approvedAt = approvedAt == null ? null : approvedAt.truncatedTo(ChronoUnit.MICROS);
+        createdAt = createdAt == null ? null : createdAt.truncatedTo(ChronoUnit.MICROS);
         if ((detectorType == null) != (detectorContractHash == null)) {
             throw new IllegalArgumentException("detector type and contract hash must be present together");
         }
