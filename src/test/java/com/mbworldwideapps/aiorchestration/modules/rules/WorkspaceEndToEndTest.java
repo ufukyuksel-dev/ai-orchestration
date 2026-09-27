@@ -42,6 +42,9 @@ import java.util.concurrent.TimeUnit;
         })
 class WorkspaceEndToEndTest {
     @Container static PostgreSQLContainer<?> db = new PostgreSQLContainer<>("postgres:17-alpine");
+    // the application connects to Qdrant at startup (job and personal memory, the vector store): a disposable one
+    @Container static org.testcontainers.containers.GenericContainer<?> qdrant =
+            new org.testcontainers.containers.GenericContainer<>("qdrant/qdrant:v1.13.4").withExposedPorts(6334);
     @TempDir static Path referenceRoot;
 
     @DynamicPropertySource
@@ -50,6 +53,8 @@ class WorkspaceEndToEndTest {
         r.add("spring.datasource.url", db::getJdbcUrl);
         r.add("spring.datasource.username", db::getUsername);
         r.add("spring.datasource.password", db::getPassword);
+        r.add("spring.ai.vectorstore.qdrant.host", qdrant::getHost);
+        r.add("spring.ai.vectorstore.qdrant.port", () -> qdrant.getMappedPort(6334));
     }
 
     @LocalServerPort int port;
@@ -63,9 +68,6 @@ class WorkspaceEndToEndTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired PlatformTransactionManager transactions;
     @MockitoBean MemoryVectorIndex vectors;
-    // job and personal memory talk to Qdrant when they start; these tests use neither
-    @MockitoBean com.mbworldwideapps.aiorchestration.modules.mcp.server.JobMemoryMcpTool jobMemory;
-    @MockitoBean com.mbworldwideapps.aiorchestration.modules.mcp.server.PersonalMemoryMcpTool personalMemory;
 
     @Test
     void memoryBackedRevisionUsesFreshPendingOriginAndRejectsTamperedApproval() throws Exception {
