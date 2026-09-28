@@ -16,8 +16,8 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
 
 /**
- * One small tool that reaches the occasional tools (saved jobs, personal memory, references, and session.bootstrap
- * for the user's answer to "load the rules?") for clients on the "minimal" tool profile: their schemas are not sent
+ * One small tool that reaches the occasional tools (saved jobs, personal memory, references, adding a rule the user
+ * asked for, and session.bootstrap for the user's answer to "load the rules?") for clients on the "minimal" tool profile: their schemas are not sent
  * with every turn, yet the agent can still use them when needed. Each call runs the real tool method, so its scope
  * checks and audit stay exactly the same.
  */
@@ -26,7 +26,8 @@ import org.springframework.stereotype.Component;
 public class ExtrasMcpTool {
 
     static final List<String> OPS = List.of("session.bootstrap", "last_job.get", "last_job.save", "job_memory.save", "job_memory.search",
-            "job_memory.get", "personal_memory.save", "personal_memory.search", "reference.read");
+            "job_memory.get", "personal_memory.save", "personal_memory.search", "reference.read",
+            "rules.draft", "rules.preview", "rules.promote");
 
     private final ApplicationContext context;
     private final ObjectMapper json;
@@ -39,7 +40,7 @@ public class ExtrasMcpTool {
         this.json = json;
     }
 
-    @McpTool(name = "extras", description = "Saved jobs, personal memory and references, only when the user asks for them; session.bootstrap only for the user's answer to loading the rules. op: session.bootstrap | last_job.get | last_job.save | job_memory.save | job_memory.search | job_memory.get | personal_memory.save | personal_memory.search | reference.read; args: that tool's arguments (see skills/contracts: last-job.md, saved-jobs.md, personal-memory.md, references.md).")
+    @McpTool(name = "extras", description = "Saved jobs, personal memory, references and adding a rule, only when the user asks for them; session.bootstrap only for the user's answer to loading the rules. op: session.bootstrap | last_job.get | last_job.save | job_memory.save | job_memory.search | job_memory.get | personal_memory.save | personal_memory.search | reference.read | rules.draft | rules.preview | rules.promote; args: that tool's arguments (see skills/contracts: last-job.md, saved-jobs.md, personal-memory.md, references.md, rule-authoring.md).")
     public Object extras(
             @McpToolParam(description = "The operation, e.g. job_memory.search") String op,
             @McpToolParam(description = "The operation's arguments as an object", required = false) Map<String, Object> args) {

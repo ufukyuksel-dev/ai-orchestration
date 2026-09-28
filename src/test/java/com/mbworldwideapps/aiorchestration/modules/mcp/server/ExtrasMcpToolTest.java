@@ -27,6 +27,11 @@ class ExtrasMcpToolTest {
             return rootPath + "|" + loadRules + "|" + remember;
         }
 
+        @McpTool(name = "rules.draft", description = "test")
+        public String draft(String projectKey, String candidateJson) {
+            return projectKey + "|" + candidateJson;
+        }
+
         @McpTool(name = "memory.write", description = "not reachable through extras")
         public String write(String text) {
             return text;
@@ -48,6 +53,8 @@ class ExtrasMcpToolTest {
         // the answer to "load the rules?" goes through the normal bootstrap: preference saved, all rules returned
         assertThat(tool().extras("session.bootstrap", Map.of("rootPath", "/repo", "loadRules", true, "remember", true)))
                 .isEqualTo("/repo|true|true");
+        // a rule the user asked for can be drafted without the rule tools in every turn's schema list
+        assertThat(tool().extras("rules.draft", Map.of("projectKey", "p", "candidateJson", "{}"))).isEqualTo("p|{}");
     }
 
     @Test

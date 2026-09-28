@@ -266,6 +266,39 @@ class InstallerTest(unittest.TestCase):
         target.symlink_to(self.root / 'unrelated')
         self.run_cli(code=2)
 
+    def test_moved_checkout_relinks_owned_links_and_forgets_deleted_instruction_file(self):
+        old_repo = self.root / 'old-checkout'
+        shutil.copytree(self.repo, old_repo)
+        subprocess.run([sys.executable, str(SCRIPT), '--home', str(self.home), '--repo', str(old_repo)], check=True,
+                       capture_output=True)
+        (self.home / '.claude/CLAUDE.md').unlink()
+        shutil.rmtree(old_repo)
+        self.run_cli('--check', code=1)
+        self.run_cli()
+        self.run_cli('--check')
+        for runtime, home in [('codex', '.codex'), ('claude', '.claude')]:
+            self.assertEqual((self.home / home / 'skills/example').resolve(), self.repo / 'skills' / runtime / 'example')
+        self.assertIn(str(self.repo), (self.home / '.ai-orchestration-install.json').read_text())
+        self.assertNotIn(str(old_repo), (self.home / '.ai-orchestration-install.json').read_text())
+        self.assertTrue((self.home / '.claude/CLAUDE.md').is_file())
+        self.run_cli('--uninstall')
+        self.assertFalse((self.home / '.codex/skills/example').exists())
+
+    def test_unowned_link_into_another_checkout_is_relinked_but_other_skill_links_are_not(self):
+        old_repo = self.root / 'old-checkout'
+        shutil.copytree(self.repo, old_repo)
+        link = self.home / '.codex/skills/example'
+        link.parent.mkdir(parents=True)
+        link.symlink_to(old_repo / 'skills/codex/example')
+        self.run_cli()
+        self.assertEqual(link.resolve(), self.repo / 'skills/codex/example')
+        link.unlink()
+        other = self.root / 'my-skills/skills/codex/example'
+        other.mkdir(parents=True)
+        link.symlink_to(other)
+        self.run_cli(code=2)
+        self.assertEqual(link.resolve(), other)
+
     def test_apply_failure_restores_completed_links(self):
         import importlib.util
         from unittest.mock import patch

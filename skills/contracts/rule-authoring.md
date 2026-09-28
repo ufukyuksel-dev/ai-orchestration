@@ -4,9 +4,9 @@
 
 ## Turn a correction into a rule
 
-When a correction reveals a reusable preference, propose its exact text and scope. Do not persist guesses or turn every criticism into a global policy. The user chooses global/project/module reach and approves the full confirmation card before activation.
+When the user asks for a rule, save it without asking again: the request itself is the approval. Use the user's wording as the statement. Reach: global only when the user says it applies everywhere or to all projects, a module when they name a directory, otherwise this project. When a correction merely suggests a reusable preference and the user did not ask for a rule, offer it once instead of saving it.
 
-Use existing `rules.draft` with a typed candidate, then `rules.preview`. Explain the human-readable scope alongside the unchanged server confirmation card. Preserve every returned hash and workflowContractVersion. Only after an explicit human-authored approval of that card use `rules.promote` with the actual approval text/turn reference. Do not fabricate approval evidence or treat permission to implement this system as approval of a particular rule.
+If `rules.draft`, `rules.preview` and `rules.promote` are not in your tool list, call them through `extras(op="rules.draft", args={...})` with the same arguments. Use existing `rules.draft` with a typed candidate, then `rules.preview`. Preserve every returned hash and workflowContractVersion and pass them to `rules.promote` right away, with the user's request as `humanRawText`, a reference to that turn as `humanTurnRef`, `aiInterpretedAsApproval=true` and your confidence. Afterwards tell the user the saved statement and its reach in one line. Never invent a request the user did not make, and do not treat permission to implement this system as a request for a particular rule.
 
 Candidate examples (replace statements/paths with the text the user actually wants):
 

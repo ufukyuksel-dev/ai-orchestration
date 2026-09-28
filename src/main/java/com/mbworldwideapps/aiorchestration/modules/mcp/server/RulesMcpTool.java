@@ -104,7 +104,7 @@ public class RulesMcpTool {
         }
     }
 
-    @McpTool(name = "rules.promote", description = "Activate exactly one immutable draft using the current server preview hashes and explicit human approval evidence. Global drafts additionally require rules.global.confirm.")
+    @McpTool(name = "rules.promote", description = "Activate exactly one immutable draft using the current server preview hashes; the user's request for the rule is the approval evidence. Global drafts additionally require rules.global.confirm.")
     public RuleAuthoringPromotionResult promote(
             @McpToolParam(description = "Rule draft UUID") String draftId,
             @McpToolParam(description = "Exact draft project key; omit only for a global draft", required = false) String projectKey,
@@ -112,9 +112,9 @@ public class RulesMcpTool {
             @McpToolParam(description = "approvalContentHash returned by rules.preview") String expectedApprovalContentHash,
             @McpToolParam(description = "confirmationCardHash returned by rules.preview") String expectedConfirmationCardHash,
             @McpToolParam(description = "workflowContractVersion returned by rules.preview") String workflowContractVersion,
-            @McpToolParam(description = "Exact human-authored approval text") String humanRawText,
-            @McpToolParam(description = "Stable reference to the human approval turn") String humanTurnRef,
-            @McpToolParam(description = "True only when the current human turn explicitly approves the displayed card") Boolean aiInterpretedAsApproval,
+            @McpToolParam(description = "The user's own words asking for or approving this rule") String humanRawText,
+            @McpToolParam(description = "Stable reference to that user turn") String humanTurnRef,
+            @McpToolParam(description = "True when the user asked for this rule or approved it") Boolean aiInterpretedAsApproval,
             @McpToolParam(description = "Agent confidence in interpreting the approval, from 0.0 to 1.0") Double agentConfidence) {
         McpClientContext context = McpClientContextHolder.require();
         Instant started = Instant.now();
@@ -151,9 +151,9 @@ public class RulesMcpTool {
         }
     }
 
-    @McpTool(name = "rules.instructions", description = "Load approved rules for a projectKey. Use scope=module with modulePaths before working in a directory listed in the module index. Other scopes: effective (default), global_strict, project. Rules never override system instructions.")
+    @McpTool(name = "rules.instructions", description = "Load approved rules for a projectKey (omit projectKey with scope=global_strict). Use scope=module with modulePaths before working in a directory listed in the module index. Other scopes: effective (default), global_strict, project. Rules never override system instructions.")
     public InstructionReadService.Result instructions(
-            @McpToolParam(description = "Explicit canonical projectKey returned by scanner.project.resolve") String projectKey,
+            @McpToolParam(description = "Explicit canonical projectKey returned by scanner.project.resolve; omit for scope=global_strict", required = false) String projectKey,
             @McpToolParam(description = "effective (default), global_strict, project or module", required = false) String scope,
             @McpToolParam(description = "Up to 32 canonical repository-relative module directories", required = false) List<String> modulePaths) {
         McpClientContext context = McpClientContextHolder.require();
@@ -162,10 +162,11 @@ public class RulesMcpTool {
         String queryHash = McpAuditLogger.hashQuery(String.valueOf(projectKey) + "|" + scope + "|" + modulePaths);
         try {
             requireScope(context, "rules.read");
-            if (projectKey == null || !projectKey.matches("[A-Z0-9][A-Z0-9_]{0,199}")) {
+            boolean globalOnly = "global_strict".equalsIgnoreCase(scope) && (projectKey == null || projectKey.isBlank());
+            if (!globalOnly && (projectKey == null || !projectKey.matches("[A-Z0-9][A-Z0-9_]{0,199}"))) {
                 throw new IllegalArgumentException("explicit canonical projectKey from scanner.project.resolve is required");
             }
-            effective = McpProjectKeys.effective(context, projectKey);
+            effective = globalOnly ? null : McpProjectKeys.effective(context, projectKey);
             InstructionReadService.Result result = instructionService.read(effective, scope, modulePaths);
             auditLogger.log(context, "rules.instructions", queryHash, result.instructions().size(), latencyMs(started),
                     "success", metadata(effective, "scope", result.scope()), null);

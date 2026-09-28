@@ -18,7 +18,7 @@ public record McpToolSurfaceProperties(String profile, List<String> lean, List<S
             "session.bootstrap", "memory.search", "memory.learn", "memory.get",
             "codebase.symbol.get", "codebase.baseline.search",
             "last_job.get", "last_job.save", "job_memory.save", "job_memory.search", "job_memory.get",
-            "personal_memory.save", "personal_memory.search", "reference.read", "rules.instructions");
+            "personal_memory.save", "personal_memory.search", "reference.read", "rules.instructions", "extras");
 
     /**
      * For clients whose startup context comes from a hook (Claude Code): the session start needs no tool, so only

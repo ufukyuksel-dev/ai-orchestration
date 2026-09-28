@@ -143,11 +143,16 @@ wait_healthy() {
 # ------------------------------------------------------------------ agents
 MCP_URL="$BASE/mcp"
 
+claude_always_loads() {
+  python3 -c 'import json,os,sys; s=json.load(open(os.path.expanduser("~/.claude.json"))).get("mcpServers",{}).get("ai-orchestration",{}); sys.exit(0 if s.get("alwaysLoad") is True else 1)' 2>/dev/null
+}
+
 register_claude() {
   have claude || { warn "Claude Code not found (skipped)"; return; }
   local current; current="$(claude mcp get ai-orchestration 2>/dev/null || true)"
   if [ -n "$current" ]; then
-    if printf '%s' "$current" | grep -q "$MCP_URL" && printf '%s' "$current" | grep -q "X-AI-Orch-Tools: minimal"; then
+    if printf '%s' "$current" | grep -q "$MCP_URL" && printf '%s' "$current" | grep -q "X-AI-Orch-Tools: minimal" \
+        && claude_always_loads; then
       ok "Claude Code already registered"
     elif printf '%s' "$current" | grep -Eq 'https?://(127\.0\.0\.1|localhost)'; then
       claude mcp remove --scope user ai-orchestration >/dev/null 2>&1 || claude mcp remove ai-orchestration >/dev/null 2>&1 || true
@@ -159,9 +164,9 @@ register_claude() {
   fi
   if [ -z "$current" ]; then
     # minimal tool profile: the session start comes from the prompt hook below, so only memory.learn,
-    # rules.instructions and extras travel with every turn
-    claude mcp add --scope user --transport http ai-orchestration "$MCP_URL" \
-      --header "X-AI-Orch-Client: claude-code" --header "X-AI-Orch-Tools: minimal" >/dev/null
+    # rules.instructions and extras travel with every turn. alwaysLoad keeps these three out of Claude Code's
+    # deferred tool search (other MCP servers stay deferred), so the agent sees them without searching first.
+    claude mcp add-json --scope user ai-orchestration "{\"type\":\"http\",\"url\":\"$MCP_URL\",\"alwaysLoad\":true,\"headers\":{\"X-AI-Orch-Client\":\"claude-code\",\"X-AI-Orch-Tools\":\"minimal\"}}" >/dev/null
     ok "Claude Code registered ($MCP_URL)"
   fi
   if python3 "$REPO/scripts/claude_hook_config.py" set "$HOME/.claude/settings.json" \

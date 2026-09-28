@@ -57,13 +57,14 @@ public class InstructionReadService {
                 ORDER BY 1""", String.class, projectKey);
     }
 
+    /** projectKey may be null only for scope global_strict: global rules belong to no project. */
     public Result read(String projectKey, String requestedScope, List<String> modulePaths) {
-        if (projectKey == null || !projectKey.matches("[A-Z0-9][A-Z0-9_]{0,199}")) {
-            throw new IllegalArgumentException("explicit canonical projectKey from scanner.project.resolve is required");
-        }
         String scope = requestedScope == null ? "effective" : requestedScope.toLowerCase(Locale.ROOT);
         if (!Set.of("effective", "global_strict", "project", "module").contains(scope)) {
             throw new IllegalArgumentException("scope must be effective, global_strict, project or module");
+        }
+        if (projectKey == null ? !scope.equals("global_strict") : !projectKey.matches("[A-Z0-9][A-Z0-9_]{0,199}")) {
+            throw new IllegalArgumentException("explicit canonical projectKey from scanner.project.resolve is required");
         }
         if (modulePaths != null && modulePaths.size() > 32) {
             throw new IllegalArgumentException("at most 32 modulePaths are allowed");
@@ -145,7 +146,7 @@ public class InstructionReadService {
                 LEFT JOIN rules_project_effective_seq project_seq ON project_seq.project_key = request.project_key
                 WHERE global_seq.singleton = true
                 """, (rs, rowNum) -> {
-                    if (!rs.getBoolean("known_project")) {
+                    if (projectKey != null && !rs.getBoolean("known_project")) {
                         throw new IllegalArgumentException("unknown projectKey; resolve the repository first");
                     }
                     try {

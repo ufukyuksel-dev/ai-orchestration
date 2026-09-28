@@ -51,6 +51,19 @@ def same_tree(a, b):
                                         and aa[k].read_bytes() == bb[k].read_bytes() for k in aa)
 
 
+def relocated_link(target, runtime, repo, previous):
+    """True if target links to this skill in another checkout of this project (the checkout moved)."""
+    old = Path(os.readlink(target))
+    if not old.is_absolute():
+        old = target.parent / old
+    if len(old.parts) < 5 or old.parts[-3:] != ('skills', runtime, target.name):
+        return False
+    old_repo = old.parents[2]
+    if old_repo == repo:
+        return False
+    return (previous is not None and previous['source'] == str(old)) or (old_repo / 'skills/session-instructions.md').is_file()
+
+
 def managed_span(text):
     if not text.count(BEGIN) and not text.count(END):
         return None
@@ -172,7 +185,7 @@ def plan(args):
         paths = sorted((repo / 'skills' / runtime).glob('*/SKILL.md'))
         if not paths:
             raise Conflict(f'no {runtime} skills in {repo}')
-        sources += [(p.parent, dest / p.parent.name) for p in paths]
+        sources += [(p.parent, dest / p.parent.name, runtime) for p in paths]
         backups.update({str(dest / p.parent.name): home / '.ai-orchestration-backups' / f'{runtime}-skills' / p.parent.name for p in paths})
     if not (repo / 'skills/session-instructions.md').is_file():
         raise Conflict('canonical startup workflow is missing')
@@ -181,10 +194,10 @@ def plan(args):
     if text_file(override).strip():
         codex_instruction = override
     targets = [(codex_instruction, 'codex'), (home / '.claude/CLAUDE.md', 'claude')]
-    validate_record(record, {str(t) for _, t in sources},
+    validate_record(record, {str(t) for _, t, _ in sources},
                     {str(codex_home / n) for n in ['AGENTS.md', 'AGENTS.override.md']} | {str(home / '.claude/CLAUDE.md')}, backups)
     # Do not follow redirected configuration directories while mutating them.
-    for target in [t for _, t in sources] + [t for t, _ in targets] + list(backups.values()):
+    for target in [t for _, t, _ in sources] + [t for t, _ in targets] + list(backups.values()):
         for parent in target.parents:
             if parent.is_symlink():
                 raise Conflict(f'configuration parent is a symlink: {parent}')
@@ -192,7 +205,7 @@ def plan(args):
                 raise Conflict(f'configuration parent is not a directory: {parent}')
     actions, new = [], {'version': 2, 'links': [], 'instructions': []}
     old_links = {r['target']: r for r in record['links']}
-    for source, target in sources:
+    for source, target, runtime in sources:
         previous = old_links.get(str(target))
         if args.uninstall:
             if previous:
@@ -206,7 +219,11 @@ def plan(args):
         backup = previous.get('backup') if previous else None
         if previous and backup and (not Path(backup).is_dir() or Path(backup).is_symlink()):
             raise Conflict(f'owned backup is missing: {backup}')
-        if target.is_symlink():
+        if target.is_symlink() and target.resolve() != source and relocated_link(target, runtime, repo, previous):
+            # The checkout moved: point the link at this checkout and take ownership of it.
+            print(f'INFO: relinking {target} from {os.readlink(target)} to this checkout')
+            actions.append(('relink', target, source))
+        elif target.is_symlink():
             if target.resolve() != source:
                 raise Conflict(f'foreign or relocated symlink: {target}')
             if previous and previous['source'] != str(source):
@@ -243,6 +260,12 @@ def plan(args):
         current = text_file(target)
         span = managed_span(current)
         previous = old_instructions.get(str(target))
+        if previous and not exists(target):
+            # The whole file was deleted since install: nothing left to own or restore.
+            print(f'INFO: {target} no longer exists; forgetting its old ownership record')
+            previous = None
+            if args.uninstall:
+                continue
         if span and (not previous or current[span[0]:span[1]] != previous['block']):
             raise Conflict(f'unowned or edited managed block: {target}')
         if previous and not span:
@@ -378,6 +401,11 @@ def main():
                         target.rename(backup)
                     applied.append(('unlink', target, backup))
                     target.symlink_to(source, target_is_directory=True)
+                elif kind == 'relink':
+                    old = os.readlink(target)
+                    target.unlink()
+                    applied.append(('restore-link', target, old))
+                    target.symlink_to(data, target_is_directory=True)
                 elif kind == 'unlink':
                     source = target.resolve()
                     target.unlink()
@@ -406,6 +434,10 @@ def main():
                         target.unlink()
                     if old:
                         old.rename(target)
+                elif kind == 'restore-link':
+                    if target.is_symlink():
+                        target.unlink()
+                    target.symlink_to(old, target_is_directory=True)
                 elif kind == 'relink':
                     source, backup = old
                     if backup and target.is_dir():

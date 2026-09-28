@@ -67,6 +67,10 @@ class InstructionReadServiceTest {
         });
         assertThat(result.globalEffectiveSeq()).isEqualTo(1);
         assertThat(result.projectEffectiveSeq()).isZero();
+        // global rules belong to no project, so reading only them needs no projectKey
+        add("PROJECT_A", "project only", List.of());
+        assertThat(reader.read(null, "global_strict", null).instructions()).singleElement()
+                .satisfies(r -> assertThat(r.scope()).isEqualTo("GLOBAL_STRICT"));
     }
 
     @Test

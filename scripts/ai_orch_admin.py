@@ -130,6 +130,12 @@ def _claude():
     out = subprocess.run(["claude", "mcp", "get", "ai-orchestration"], capture_output=True, text=True, timeout=30)
     if out.returncode != 0 or MCP_URL not in out.stdout:
         return False, "not registered", "./install.sh (re-run registers it)"
+    try:
+        server = json.loads((Path.home() / ".claude.json").read_text()).get("mcpServers", {}).get("ai-orchestration", {})
+    except (OSError, ValueError):
+        server = {}
+    if server.get("alwaysLoad") is not True:
+        return False, "registered without alwaysLoad (its tools are deferred)", "./install.sh (re-run registers it)"
     settings = Path.home() / ".claude" / "settings.json"
     text = settings.read_text() if settings.exists() else ""
     hooked = "ai_orch_prompt_context.py" in text and "ai_orch_learn_reminder.py" in text
@@ -156,7 +162,10 @@ def _instructions():
         return True, "no Claude/Codex (skipped)", None
     out = subprocess.run([sys.executable, str(ROOT / "scripts/install_agent_instructions.py"), "--check"],
                          capture_output=True, text=True, timeout=60)
-    return out.returncode == 0, "session block up to date" if out.returncode == 0 else "drift", "./install.sh"
+    if out.returncode == 0:
+        return True, "session block up to date", "./install.sh"
+    conflict = [l for l in out.stderr.splitlines() if l.startswith("CONFLICT:")]
+    return False, conflict[-1][:160] if conflict else "drift", "./install.sh"
 
 
 def doctor(_: argparse.Namespace) -> int:
