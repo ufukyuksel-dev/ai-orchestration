@@ -118,6 +118,169 @@ class ScannerServiceTest {
     }
 
     @Test
+    void scansAndroidKotlinAndResolvesCallsAcrossKotlinAndJava() throws Exception {
+        Path root = tempDir.resolve("android-app");
+        Path login = root.resolve("app/src/main/java/com/example/login");
+        Files.createDirectories(login);
+        Files.createDirectories(root.resolve("app/build/generated"));
+        Files.writeString(root.resolve("app/build/generated/Hilt_LoginViewModel.kt"), "class Hilt_LoginViewModel");
+        Files.writeString(login.resolve("AuthRepository.java"), """
+                package com.example.login;
+
+                public class AuthRepository {
+                  public String signIn(String user) { return user; }
+                }
+                """);
+        Files.writeString(login.resolve("LoginViewModel.kt"), """
+                package com.example.login
+
+                @HiltViewModel
+                class LoginViewModel @Inject constructor(
+                    private val repository: AuthRepository,
+                ) : ViewModel() {
+                    fun login(user: String) {
+                        repository.signIn(user)
+                    }
+                }
+                """);
+        Files.writeString(login.resolve("LoginScreen.kt"), """
+                package com.example.login
+
+                @Composable
+                fun LoginScreen(viewModel: LoginViewModel = hiltViewModel()) {
+                    LoginForm { viewModel.login("a") }
+                }
+
+                @Composable
+                private fun LoginForm(onSubmit: () -> Unit) {}
+                """);
+        FakeCodeBaselineRepository baseline = new FakeCodeBaselineRepository();
+        ScannerProperties.Semantic extractive = new ScannerProperties.Semantic(true, "extractive", "none", false,
+                List.of("local-qwen"), 8000L, 200, 12, 6000, 512, "scanner-semantic-v1", 24,
+                SemanticSelectionMode.ALL);
+        ScannerService scannerService = service(new FakeMemoryRepository(), new FakeScannerStateRepository(),
+                baseline, null, extractive, List.of(tempDir.toString()), null, enabledResolvedEdges());
+
+        ScanCodebaseResponse response = scannerService.scan(new ScanCodebaseRequest(root.toString(), "ANDROID",
+                false));
+
+        assertThat(response.filesDiscovered()).isEqualTo(3); // build/ output is not scanned
+        assertThat(response.filesRejected()).isZero();
+        assertThat(baseline.files.values()).extracting(CodeFileRecord::language)
+                .containsExactlyInAnyOrder("java", "kotlin", "kotlin");
+        CodeSymbolRecord viewModel = symbol(baseline, "com.example.login.LoginViewModel");
+        assertThat(viewModel.role()).isEqualTo("viewmodel");
+        CodeSymbolRecord vmLogin = symbol(baseline, "com.example.login.LoginViewModel#login");
+        CodeSymbolRecord screen = symbol(baseline, "com.example.login#LoginScreen");
+        CodeSymbolRecord form = symbol(baseline, "com.example.login#LoginForm");
+        CodeSymbolRecord signIn = symbol(baseline, "com.example.login.AuthRepository#signIn");
+        CodeSymbolRecord repository = symbol(baseline, "com.example.login.AuthRepository");
+
+        assertThat(baseline.edges.values())
+                .anyMatch(edge -> edge.sourceSymbolId().equals(viewModel.id()) && edge.edgeType().equals("DECLARES")
+                        && vmLogin.id().equals(edge.targetSymbolId()))
+                .anyMatch(edge -> edge.sourceSymbolId().equals(vmLogin.id()) && edge.edgeType().equals("CALLS")
+                        && edge.targetRef().equals("signIn") && edge.targetSymbolId() == null)
+                .anyMatch(edge -> resolved(edge, vmLogin, "CALLS", signIn))
+                .anyMatch(edge -> resolved(edge, viewModel, "INJECTS", repository))
+                .anyMatch(edge -> resolved(edge, screen, "CALLS", vmLogin))
+                .anyMatch(edge -> resolved(edge, screen, "CALLS", form));
+        assertThat(baseline.capsules.values())
+                .anyMatch(capsule -> vmLogin.id().equals(capsule.symbolId()))
+                .anyMatch(capsule -> viewModel.id().equals(capsule.symbolId()));
+    }
+
+    @Test
+    void scansIosSwiftAndResolvesCallsIntoExtensionsAndInjectedServices() throws Exception {
+        Path root = tempDir.resolve("ios-app");
+        Path sources = root.resolve("App/Login");
+        Files.createDirectories(sources);
+        Files.createDirectories(root.resolve("Pods/Alamofire"));
+        Files.writeString(root.resolve("Pods/Alamofire/Session.swift"), "open class Session {}");
+        Files.writeString(sources.resolve("AuthService.swift"), """
+                final class AuthService {
+                    func signIn(user: String) async throws -> String { user }
+                }
+                """);
+        Files.writeString(sources.resolve("LoginViewModel.swift"), """
+                final class LoginViewModel: ObservableObject {
+                    private let service: AuthService
+
+                    init(service: AuthService) {
+                        self.service = service
+                    }
+
+                    func login(user: String) async {
+                        do {
+                            _ = try await service.signIn(user: user)
+                        } catch {
+                            report(error)
+                        }
+                    }
+                }
+                """);
+        Files.writeString(sources.resolve("LoginViewModel+Errors.swift"), """
+                extension LoginViewModel {
+                    func report(_ error: Error) {}
+                }
+                """);
+        Files.writeString(sources.resolve("LoginView.swift"), """
+                struct LoginView: View {
+                    @StateObject var viewModel: LoginViewModel
+
+                    var body: some View {
+                        Button("Sign in") {
+                            Task { await viewModel.login(user: "a") }
+                        }
+                    }
+                }
+                """);
+        FakeCodeBaselineRepository baseline = new FakeCodeBaselineRepository();
+        ScannerService scannerService = service(new FakeMemoryRepository(), new FakeScannerStateRepository(),
+                baseline, null, disabledSemantic(), List.of(tempDir.toString()), null, enabledResolvedEdges());
+
+        ScanCodebaseResponse response = scannerService.scan(new ScanCodebaseRequest(root.toString(), "IOS",
+                false));
+
+        assertThat(response.filesDiscovered()).isEqualTo(4); // Pods/ is third-party code
+        assertThat(baseline.files.values()).allMatch(file -> "swift".equals(file.language()));
+        CodeSymbolRecord viewModel = symbol(baseline, "LoginViewModel");
+        CodeSymbolRecord login = symbol(baseline, "LoginViewModel#login");
+        CodeSymbolRecord report = symbol(baseline, "LoginViewModel#report");
+        CodeSymbolRecord signIn = symbol(baseline, "AuthService#signIn");
+        CodeSymbolRecord body = symbol(baseline, "LoginView#body");
+        CodeSymbolRecord extension = baseline.symbols.values().stream()
+                .filter(symbol -> symbol.symbolKind().equals("extension"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(viewModel.symbolKind()).isEqualTo("class");
+        assertThat(symbol(baseline, "LoginView").symbolKind()).isEqualTo("struct");
+
+        assertThat(baseline.edges.values())
+                .anyMatch(edge -> edge.sourceSymbolId().equals(extension.id()) && edge.edgeType().equals("DECLARES")
+                        && report.id().equals(edge.targetSymbolId()))
+                .anyMatch(edge -> resolved(edge, login, "CALLS", signIn))
+                .anyMatch(edge -> resolved(edge, login, "CALLS", report))
+                .anyMatch(edge -> resolved(edge, body, "CALLS", login))
+                .anyMatch(edge -> resolved(edge, viewModel, "INJECTS", symbol(baseline, "AuthService")))
+                .anyMatch(edge -> resolved(edge, symbol(baseline, "LoginView"), "INJECTS", viewModel));
+    }
+
+    private static CodeSymbolRecord symbol(FakeCodeBaselineRepository baseline, String fqn) {
+        List<CodeSymbolRecord> matches = baseline.symbols.values().stream()
+                .filter(symbol -> fqn.equals(symbol.fqn()) && !symbol.symbolKind().equals("extension"))
+                .toList();
+        assertThat(matches).as(fqn).hasSize(1);
+        return matches.getFirst();
+    }
+
+    private static boolean resolved(CodeEdgeRecord edge, CodeSymbolRecord source, String edgeType,
+            CodeSymbolRecord target) {
+        return edge.sourceSymbolId().equals(source.id()) && edge.edgeType().equals(edgeType)
+                && target.id().equals(edge.targetSymbolId()) && edge.resolution().equals("name_match");
+    }
+
+    @Test
     void rechecksMemoryCodeLinksAfterSuccessfulScan() throws Exception {
         Path sourceRoot = createSampleProject(false);
         FakeCodeLinkScheduler projectionScheduler = new FakeCodeLinkScheduler(false);
@@ -1721,7 +1884,8 @@ class ScannerServiceTest {
         MemoryService memoryService = MemoryServiceTestFixture.create(memoryRepository, properties(), event -> {
         });
         ScannerService scanner = new ScannerService(
-                new ScannerProperties("AI_ORCHESTRATION", List.of(".java", ".py", "pom.xml"), List.of("target"),
+                new ScannerProperties("AI_ORCHESTRATION", List.of(".java", ".py", ".kt", ".swift", "pom.xml"),
+                        List.of("target", "build", "Pods"),
                         512_000L, 0.6, allowedRoots, semantic, resolvedEdges),
                 stateRepository,
                 memoryService,

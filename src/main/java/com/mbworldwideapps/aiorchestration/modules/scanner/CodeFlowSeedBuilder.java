@@ -100,16 +100,24 @@ public class CodeFlowSeedBuilder {
         String role = lower(symbol.role());
         String name = lower(symbol.name());
         String fqn = lower(symbol.fqn());
+        if ("extension".equals(symbol.symbolKind())) {
+            return null; // a Swift extension adds to a type; the type itself is the entry
+        }
         boolean method = "method".equals(symbol.symbolKind());
-        boolean controller = role.equals("controller") || name.endsWith("controller") || has(annotations,
+        // By name only for types: UIKit methods like `pushViewController` are not controllers.
+        boolean member = method || "function".equals(symbol.symbolKind()) || "property".equals(symbol.symbolKind());
+        boolean controller = role.equals("controller") || !member && name.endsWith("controller") || has(annotations,
                 "RestController") || has(annotations, "Controller");
         boolean endpointMapped = !endpoint.isBlank() || annotations.stream().anyMatch(HTTP_MAPPING_ANNOTATIONS::contains);
         if (endpointMapped || controller) {
             double score = 95.0 + (method ? 6.0 : 0.0) + Math.min(10.0, callRefs.size() * 0.5);
             return new SeedClassification(ENDPOINT_FLOW, endpointMapped ? "http_endpoint" : "controller", score);
         }
+        if (role.equals("screen")) { // Android activity/fragment/Compose screen: the mobile entry point
+            return new SeedClassification(ENDPOINT_FLOW, "ui_screen", 90.0 + Math.min(10.0, callRefs.size() * 0.5));
+        }
         if (annotations.stream().anyMatch(INTEGRATION_ANNOTATIONS::contains) || name.endsWith("client")
-                || name.endsWith("repository") || role.equals("repository")) {
+                || name.endsWith("repository") || role.equals("repository") || role.equals("client")) {
             double score = 82.0 + (has(annotations, "FeignClient") ? 8.0 : 0.0)
                     + (has(annotations, "KafkaListener") ? 5.0 : 0.0);
             return new SeedClassification(INTEGRATION_FLOW, integrationTrigger(annotations, role, name), score);
@@ -120,6 +128,10 @@ public class CodeFlowSeedBuilder {
         }
         if (annotations.stream().anyMatch(SCHEDULE_ANNOTATIONS::contains)) {
             return new SeedClassification(DOMAIN_FLOW, "background_trigger", 76.0);
+        }
+        if (role.equals("viewmodel")) {
+            return new SeedClassification(DOMAIN_FLOW, "viewmodel",
+                    70.0 + Math.min(20.0, callRefs.size() + injectedTypes.size() * 2.0));
         }
         if (role.equals("service") && (callRefs.size() >= 4 || injectedTypes.size() >= 2)) {
             return new SeedClassification(DOMAIN_FLOW, "service_fanout",

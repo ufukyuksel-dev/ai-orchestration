@@ -277,7 +277,7 @@ public class ScannerService implements ScannerAgentExecutor {
                             "file_fact_replacement");
                     upsertCodeFile(scanRunId, projectKey, relativePath, contentHash, language(file));
                     boolean semanticForFile = semantic.enabled()
-                            && file.getFileName().toString().endsWith(".java")
+                            && hasSemanticCapsules(file)
                             && semanticBudget.canScanFile(semanticFiles);
                     scanSupportedFile(root, file, content, contentHash, projectKey, scanRunId, semantic,
                             semanticForFile, semanticBudget);
@@ -438,6 +438,12 @@ public class ScannerService implements ScannerAgentExecutor {
             scanPythonFile(root, file, content, contentHash, projectKey, scanRunId);
             return;
         }
+        Optional<KotlinSwiftParser.Language> mobileLanguage = KotlinSwiftParser.Language.of(fileName);
+        if (mobileLanguage.isPresent()) {
+            scanKotlinSwiftFile(root, file, content, contentHash, projectKey, scanRunId, mobileLanguage.get(),
+                    semantic, semanticForFile, semanticBudget);
+            return;
+        }
         if (!fileName.endsWith(".java")) {
             return;
         }
@@ -472,7 +478,7 @@ public class ScannerService implements ScannerAgentExecutor {
                         index + 1, pythonBlockEnd(lines, index, indent), contentHash, scanRunId,
                         Map.of("language", "python", "moduleName", moduleName)));
                 if (!classes.isEmpty()) {
-                    upsertPythonDeclaresEdge(projectKey, scanRunId, relativePath,
+                    upsertDeclaresEdge(projectKey, scanRunId, relativePath,
                             classes.getLast().symbolId(), symbolId);
                 }
                 classes.add(new PythonClassScope(fqn, indent, symbolId));
@@ -494,12 +500,12 @@ public class ScannerService implements ScannerAgentExecutor {
                     index + 1, pythonBlockEnd(lines, index, indent), contentHash, scanRunId,
                     Map.of("language", "python", "moduleName", moduleName)));
             if (owner != null) {
-                upsertPythonDeclaresEdge(projectKey, scanRunId, relativePath, owner.symbolId(), symbolId);
+                upsertDeclaresEdge(projectKey, scanRunId, relativePath, owner.symbolId(), symbolId);
             }
         }
     }
 
-    private void upsertPythonDeclaresEdge(String projectKey, UUID scanRunId, String relativePath,
+    private void upsertDeclaresEdge(String projectKey, UUID scanRunId, String relativePath,
             UUID ownerSymbolId, UUID declaredSymbolId) {
         codeBaselineRepository.upsertEdge(new CodeEdgeRecord(
                 edgeId(projectKey, ownerSymbolId, "DECLARES", declaredSymbolId.toString()),
@@ -575,6 +581,155 @@ public class ScannerService implements ScannerAgentExecutor {
     }
 
     private record PythonClassScope(String fqn, int indent, UUID symbolId) { }
+
+    private static boolean hasSemanticCapsules(Path file) {
+        String fileName = file.getFileName().toString();
+        return fileName.endsWith(".java") || KotlinSwiftParser.Language.of(fileName).isPresent();
+    }
+
+    /** Kotlin/Swift: the same graph facts and capsules as a Java type, from the structural parser. */
+    private void scanKotlinSwiftFile(Path root, Path file, String content, String contentHash,
+            String projectKey, UUID scanRunId, KotlinSwiftParser.Language language, SemanticRun semantic,
+            boolean semanticForFile, SemanticScanBudget semanticBudget) {
+        String relativePath = root.relativize(file).toString();
+        UUID fileId = fileId(projectKey, relativePath);
+        KotlinSwiftParser.ParsedFile parsed = KotlinSwiftParser.parse(language, content);
+        String[] lines = content.split("\\R", -1);
+        // Symbols first, edges after: a Swift extension may precede its type in the file, and an edge needs
+        // both ends stored.
+        Map<String, UUID> typeIds = new LinkedHashMap<>();
+        List<CodeSymbolRecord> symbols = new ArrayList<>();
+        for (KotlinSwiftParser.Declaration declaration : parsed.declarations()) {
+            UUID symbolId = mobileSymbolId(projectKey, relativePath, declaration);
+            if (declaration.isType()) {
+                typeIds.putIfAbsent(declaration.fqn(), symbolId);
+            }
+            Map<String, Object> metadata = new LinkedHashMap<>();
+            metadata.put("language", language.id);
+            metadata.put("annotations", declaration.annotations());
+            if (declaration.isType()) {
+                metadata.put("packageName", parsed.packageName());
+                metadata.put("supertypes", declaration.supertypes());
+            } else {
+                metadata.put("returnType", declaration.returnType());
+                if (!declaration.receiverType().isBlank()) {
+                    metadata.put("receiverType", declaration.receiverType());
+                }
+                if (!declaration.httpCall().isBlank()) {
+                    metadata.put("httpCall", declaration.httpCall());
+                }
+            }
+            CodeSymbolRecord symbol = new CodeSymbolRecord(symbolId, projectKey, fileId, declaration.kind(),
+                    declaration.name(), declaration.fqn(), declaration.signature(), declaration.role(),
+                    declaration.startLine(), declaration.endLine(), contentHash, scanRunId, metadata);
+            codeBaselineRepository.upsertSymbol(symbol);
+            symbols.add(symbol);
+        }
+        Map<String, Integer> methodBudgets = new LinkedHashMap<>();
+        for (int index = 0; index < symbols.size(); index++) {
+            KotlinSwiftParser.Declaration declaration = parsed.declarations().get(index);
+            CodeSymbolRecord symbol = symbols.get(index);
+            UUID symbolId = symbol.id();
+            UUID ownerId = typeIds.get(declaration.ownerFqn());
+            if (ownerId != null && !ownerId.equals(symbolId)) {
+                upsertDeclaresEdge(projectKey, scanRunId, relativePath, ownerId, symbolId);
+            }
+            for (String annotation : declaration.annotations()) {
+                upsertEdge(scanRunId, projectKey, symbolId, "ANNOTATED_WITH", annotation, 0.95,
+                        Map.of("filePath", relativePath, "line", declaration.startLine()));
+            }
+            String snippet = snippet(String.join("\n", java.util.Arrays.asList(lines).subList(
+                    Math.min(lines.length, declaration.startLine() - 1),
+                    Math.min(lines.length, declaration.endLine()))));
+            if (declaration.isType()) {
+                List<String> injectedTypes = mobileInjectedTypes(declaration);
+                for (String injectedType : injectedTypes) {
+                    upsertEdge(scanRunId, projectKey, symbolId, "INJECTS", injectedType, 0.65,
+                            Map.of("filePath", relativePath));
+                }
+                if (reserveSemanticTarget(semanticForFile, semanticBudget)) {
+                    List<String> memberNames = parsed.declarations().stream()
+                            .filter(member -> declaration.fqn().equals(member.ownerFqn()))
+                            .map(KotlinSwiftParser.Declaration::name)
+                            .distinct()
+                            .limit(8)
+                            .toList();
+                    maybeWriteSemanticCapsule(true, semantic, new SemanticTarget(symbolId, fileId, projectKey,
+                            "class", declaration.name(), declaration.fqn(), relativePath, declaration.startLine(),
+                            declaration.endLine(), mobileTypeFacts(symbol, language, memberNames, declaration,
+                                    injectedTypes), snippet), semanticBudget);
+                }
+                continue;
+            }
+            // Name-only like Java D1: method-style calls; constructors and composables resolve in the D2 pass.
+            List<String> calls = declaration.calls().stream()
+                    .map(KotlinSwiftParser.Call::name)
+                    .filter(name -> Character.isLowerCase(name.charAt(0)))
+                    .distinct()
+                    .limit(40)
+                    .toList();
+            for (String call : calls) {
+                upsertEdge(scanRunId, projectKey, symbolId, "CALLS", call, 0.45,
+                        Map.of("filePath", relativePath, "resolution", "name-only"));
+            }
+            if (semanticForFile) {
+                SemanticTarget target = new SemanticTarget(symbolId, fileId, projectKey, "method", declaration.name(),
+                        declaration.fqn(), relativePath, declaration.startLine(), declaration.endLine(),
+                        mobileFunctionFacts(symbol, declaration, calls), snippet);
+                int methodBudget = methodBudgets.getOrDefault(declaration.ownerFqn(), 0);
+                if (!methodHighValue(declaration.name(), declaration.annotations(), calls)) {
+                    semanticBudget.recordSkippedLowValue();
+                    writeExtractiveDefaultCapsule(semantic, target, semanticBudget);
+                } else if (methodBudget < properties.semantic().maxMethodsPerFile()
+                        && reserveSemanticTarget(semanticForFile, semanticBudget)) {
+                    maybeWriteSemanticCapsule(true, semantic, target, semanticBudget);
+                    methodBudgets.put(declaration.ownerFqn(), methodBudget + 1);
+                }
+            }
+        }
+    }
+
+    private static UUID mobileSymbolId(String projectKey, String relativePath,
+            KotlinSwiftParser.Declaration declaration) {
+        return symbolId(projectKey, relativePath, declaration.kind(), declaration.fqn(), declaration.signature());
+    }
+
+    private static List<String> mobileInjectedTypes(KotlinSwiftParser.Declaration declaration) {
+        return declaration.dependencies().stream()
+                .filter(KotlinSwiftParser.Dependency::injected)
+                .map(KotlinSwiftParser.Dependency::type)
+                .filter(KotlinSwiftParser::projectTypeCandidate)
+                .distinct()
+                .toList();
+    }
+
+    private static String mobileTypeFacts(CodeSymbolRecord symbol, KotlinSwiftParser.Language language,
+            List<String> memberNames, KotlinSwiftParser.Declaration declaration, List<String> injectedTypes) {
+        return """
+                role=%s
+                fqn=%s
+                language=%s
+                annotations=%s
+                members=%s
+                supertypes=%s
+                injectedTypes=%s
+                """.formatted(symbol.role(), symbol.fqn(), language.id, declaration.annotations(), memberNames,
+                declaration.supertypes(), injectedTypes).trim();
+    }
+
+    private static String mobileFunctionFacts(CodeSymbolRecord symbol, KotlinSwiftParser.Declaration declaration,
+            List<String> calls) {
+        String facts = """
+                fqn=%s
+                signature=%s
+                returnType=%s
+                annotations=%s
+                calls=%s
+                sideEffectHints=%s
+                """.formatted(symbol.fqn(), symbol.signature(), declaration.returnType(), declaration.annotations(),
+                calls, sideEffectHints(calls)).trim();
+        return declaration.httpCall().isBlank() ? facts : facts + "\nhttpCall=" + declaration.httpCall();
+    }
 
     private void scanJavaFile(Path root, Path file, String content, String contentHash,
             String projectKey, UUID scanRunId, SemanticRun semantic, boolean semanticForFile,
@@ -711,14 +866,17 @@ public class ScannerService implements ScannerAgentExecutor {
     // symbolsUsed / maxSemanticSymbols. ALL keeps every candidate; SYMBOL_FIRST keeps only high-value
     // methods and records each low-value skip.
     private boolean methodHighValue(MethodDeclaration method, List<String> calls) {
+        return methodHighValue(method.getNameAsString(), annotationNames(method), calls);
+    }
+
+    private boolean methodHighValue(String name, List<String> annotations, List<String> calls) {
         if (properties.semantic().selectionMode() == SemanticSelectionMode.ALL) {
             return true;
         }
         // exposesEndpoint=false on purpose: endpoint methods are annotated (@GetMapping/@PostMapping/…),
-        // and annotationNames(...) already contains those, so annotation presence is the production
+        // and the annotation names already contain those, so annotation presence is the production
         // endpoint signal — a separate boolean would be redundant here.
-        return ScanTimeSymbolImportance.isHighValueMethod(method.getNameAsString(), annotationNames(method),
-                false, calls);
+        return ScanTimeSymbolImportance.isHighValueMethod(name, annotations, false, calls);
     }
 
     private void maybeWriteSemanticCapsule(boolean enabled, SemanticRun semantic, SemanticTarget target,
@@ -1110,10 +1268,15 @@ public class ScannerService implements ScannerAgentExecutor {
     }
 
     private int resolveEdges(Path root, List<Path> files, String projectKey, UUID scanRunId) {
-        ScannerProperties.ResolvedEdges resolvedEdges = properties.resolvedEdges();
-        if (!resolvedEdges.enabled()) {
+        if (!properties.resolvedEdges().enabled()) {
             return 0;
         }
+        return resolveJavaEdges(root, files, projectKey, scanRunId)
+                + resolveKotlinSwiftEdges(root, files, projectKey, scanRunId);
+    }
+
+    private int resolveJavaEdges(Path root, List<Path> files, String projectKey, UUID scanRunId) {
+        ScannerProperties.ResolvedEdges resolvedEdges = properties.resolvedEdges();
         List<Path> javaFiles = files.stream()
                 .filter(file -> file.getFileName().toString().endsWith(".java"))
                 .limit(resolvedEdges.maxFilesPerRun())
@@ -1150,6 +1313,142 @@ public class ScannerService implements ScannerAgentExecutor {
             }
         }
         return resolved;
+    }
+
+    /**
+     * Kotlin/Swift have no type solver here, so call sites are linked by name: the receiver's declared type
+     * (parameter, local or property), the enclosing type for bare calls, or a unique project function/type.
+     * Unknown or ambiguous targets stay name-only D1 edges.
+     */
+    private int resolveKotlinSwiftEdges(Path root, List<Path> files, String projectKey, UUID scanRunId) {
+        List<Path> sources = files.stream()
+                .filter(file -> KotlinSwiftParser.Language.of(file.getFileName().toString()).isPresent())
+                .limit(properties.resolvedEdges().maxFilesPerRun())
+                .toList();
+        NameLookup lookup = new NameLookup(projectKey);
+        int resolved = 0;
+        for (Path file : sources) {
+            String relativePath = root.relativize(file).toString();
+            try {
+                KotlinSwiftParser.Language language = KotlinSwiftParser.Language.of(file.getFileName().toString())
+                        .orElseThrow();
+                String content = ScannerSourceDecoder.decode(Files.readAllBytes(file)).content();
+                KotlinSwiftParser.ParsedFile parsed = KotlinSwiftParser.parse(language, content);
+                Map<String, Map<String, String>> fieldTypes = new LinkedHashMap<>();
+                for (KotlinSwiftParser.Declaration declaration : parsed.declarations()) {
+                    if (declaration.isType()) {
+                        Map<String, String> fields = fieldTypes.computeIfAbsent(declaration.fqn(),
+                                key -> new LinkedHashMap<>());
+                        declaration.dependencies().forEach(dependency -> fields.putIfAbsent(dependency.name(),
+                                dependency.type()));
+                    }
+                }
+                for (KotlinSwiftParser.Declaration declaration : parsed.declarations()) {
+                    UUID sourceId = mobileSymbolId(projectKey, relativePath, declaration);
+                    if (codeBaselineRepository.findSymbolById(sourceId).isEmpty()) {
+                        continue;
+                    }
+                    if (declaration.isType()) {
+                        for (String injectedType : mobileInjectedTypes(declaration)) {
+                            Optional<CodeSymbolRecord> target = lookup.type(injectedType);
+                            if (target.isPresent()) {
+                                upsertResolvedEdge(scanRunId, projectKey, sourceId, target.get(), "INJECTS", 0.8,
+                                        "name_match", Map.of("filePath", relativePath, "declaredType", injectedType));
+                                resolved++;
+                            }
+                        }
+                        continue;
+                    }
+                    Map<String, String> fields = fieldTypes.getOrDefault(declaration.ownerFqn(), Map.of());
+                    for (KotlinSwiftParser.Call call : declaration.calls()) {
+                        Optional<CodeSymbolRecord> target = lookup.call(call, declaration, fields);
+                        if (target.isPresent()) {
+                            upsertResolvedEdge(scanRunId, projectKey, sourceId, target.get(), "CALLS", 0.8,
+                                    "name_match", Map.of("filePath", relativePath, "call", call.name(),
+                                            "resolvedFqn", target.get().fqn()));
+                            resolved++;
+                        }
+                    }
+                }
+            } catch (IOException | RuntimeException e) {
+                writeDiagnostic(scanRunId, projectKey, relativePath, null, "WARN", "resolved_edges_file_failed",
+                        e.getMessage(), Map.of("exception", e.getClass().getSimpleName()));
+            }
+        }
+        return resolved;
+    }
+
+    /** Project-symbol lookups by name for Kotlin/Swift call sites, cached for one resolve pass. */
+    private final class NameLookup {
+        private static final Set<String> TYPE_KINDS = Set.of("class", "interface", "object", "enum", "struct");
+        private static final Set<String> MEMBER_KINDS = Set.of("method", "property");
+
+        private final String projectKey;
+        private final Map<String, List<CodeSymbolRecord>> byRef = new java.util.HashMap<>();
+
+        NameLookup(String projectKey) {
+            this.projectKey = projectKey;
+        }
+
+        Optional<CodeSymbolRecord> call(KotlinSwiftParser.Call call, KotlinSwiftParser.Declaration caller,
+                Map<String, String> fields) {
+            String name = call.name();
+            String receiver = call.receiver();
+            if (receiver == null || receiver.equals("this") || receiver.equals("self")) {
+                if (receiver == null && Character.isUpperCase(name.charAt(0))) {
+                    // A composable function, else a constructor / SwiftUI view initializer.
+                    return function(name, "").or(() -> type(name));
+                }
+                Optional<CodeSymbolRecord> member = caller.ownerFqn().isBlank()
+                        ? Optional.empty()
+                        : member(caller.ownerFqn(), name);
+                return member.isPresent() || receiver != null ? member : function(name, "");
+            }
+            if (receiver.isEmpty() || receiver.equals("super")) {
+                return Optional.empty();
+            }
+            String typeName = caller.localTypes().getOrDefault(receiver, fields.get(receiver));
+            if (typeName == null && Character.isUpperCase(receiver.charAt(0))) {
+                typeName = receiver; // static or companion call: `Foo.create()`
+            }
+            if (typeName == null) {
+                return Optional.empty();
+            }
+            String receiverType = typeName;
+            return type(typeName).flatMap(type -> member(type.fqn(), name)
+                    .or(() -> member(type.fqn() + ".Companion", name))
+                    .or(() -> function(name, receiverType)));
+        }
+
+        /** The one project type with this simple name; none when absent or ambiguous. */
+        Optional<CodeSymbolRecord> type(String simpleName) {
+            List<CodeSymbolRecord> matches = ref(simpleName).stream()
+                    .filter(symbol -> TYPE_KINDS.contains(symbol.symbolKind()) && simpleName.equals(symbol.name()))
+                    .toList();
+            return matches.stream().map(CodeSymbolRecord::fqn).distinct().count() == 1
+                    ? Optional.of(matches.getFirst())
+                    : Optional.empty();
+        }
+
+        private Optional<CodeSymbolRecord> member(String ownerFqn, String name) {
+            return ref(ownerFqn + "#" + name).stream()
+                    .filter(symbol -> MEMBER_KINDS.contains(symbol.symbolKind()))
+                    .findFirst();
+        }
+
+        /** A unique top-level function (with this extension receiver type, "" for none). */
+        private Optional<CodeSymbolRecord> function(String name, String receiverType) {
+            List<CodeSymbolRecord> matches = ref(name).stream()
+                    .filter(symbol -> "function".equals(symbol.symbolKind()) && name.equals(symbol.name()))
+                    .filter(symbol -> receiverType.equals(String.valueOf(
+                            symbol.metadata().getOrDefault("receiverType", ""))))
+                    .toList();
+            return matches.size() == 1 ? Optional.of(matches.getFirst()) : Optional.empty();
+        }
+
+        private List<CodeSymbolRecord> ref(String ref) {
+            return byRef.computeIfAbsent(ref, key -> codeBaselineRepository.findSymbolsByRef(projectKey, key, 20));
+        }
     }
 
     private int resolveEdgesAfterPrimaryScan(Path root, List<Path> files, String projectKey, UUID scanRunId) {
@@ -1376,6 +1675,12 @@ public class ScannerService implements ScannerAgentExecutor {
 
     private void upsertResolvedEdge(UUID scanRunId, String projectKey, UUID sourceSymbolId,
             CodeSymbolRecord target, String edgeType, double confidence, Map<String, Object> evidence) {
+        upsertResolvedEdge(scanRunId, projectKey, sourceSymbolId, target, edgeType, confidence, "resolved", evidence);
+    }
+
+    private void upsertResolvedEdge(UUID scanRunId, String projectKey, UUID sourceSymbolId,
+            CodeSymbolRecord target, String edgeType, double confidence, String resolution,
+            Map<String, Object> evidence) {
         String targetRef = target.id().toString();
         codeBaselineRepository.upsertEdge(new CodeEdgeRecord(
                 edgeId(projectKey, sourceSymbolId, edgeType, targetRef),
@@ -1384,7 +1689,7 @@ public class ScannerService implements ScannerAgentExecutor {
                 target.id(),
                 targetRef,
                 edgeType,
-                "resolved",
+                resolution,
                 confidence,
                 scanRunId,
                 evidence));
@@ -2391,6 +2696,10 @@ public class ScannerService implements ScannerAgentExecutor {
         }
         if (name.endsWith(".py")) {
             return "python";
+        }
+        Optional<KotlinSwiftParser.Language> mobileLanguage = KotlinSwiftParser.Language.of(name);
+        if (mobileLanguage.isPresent()) {
+            return mobileLanguage.get().id;
         }
         if (name.equals("pom.xml")) {
             return "maven";

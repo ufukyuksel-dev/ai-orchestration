@@ -71,6 +71,28 @@ class CodeFlowSeedBuilderTest {
     }
 
     @Test
+    void seedsMobileScreensViewModelsAndHttpClientsButNotPlainViews() {
+        CodeBaselineRepository repository = mock(CodeBaselineRepository.class);
+        CodeSymbolRecord screen = type("LoginActivity", "LoginActivity", "class", "screen");
+        CodeSymbolRecord viewModel = type("LoginViewModel", "LoginViewModel", "class", "viewmodel");
+        CodeSymbolRecord apiCall = method("AuthApi#login", "login", "client");
+        CodeSymbolRecord view = type("AvatarView", "AvatarView", "struct", "view");
+        CodeSymbolRecord uikitMethod = method("HomeViewController#pushViewController", "pushViewController", "method");
+        CodeSymbolRecord extension = type("HomeViewController", "HomeViewController", "extension", "extension");
+        when(repository.findSymbolsForRun(eq(PROJECT), eq(RUN_ID), anyInt()))
+                .thenReturn(List.of(view, uikitMethod, extension, apiCall, viewModel, screen));
+        when(repository.findEdgesFrom(eq(PROJECT), eq(viewModel.id()), anySet(), anyInt()))
+                .thenReturn(List.of(edge(viewModel, "INJECTS", "AuthRepository")));
+        when(repository.findEdgesFrom(eq(PROJECT), eq(apiCall.id()), anySet(), anyInt()))
+                .thenReturn(List.of(edge(apiCall, "ANNOTATED_WITH", "POST")));
+
+        List<CodeFlowSeed> seeds = new CodeFlowSeedBuilder(repository).build(PROJECT, RUN_ID, 10);
+
+        assertThat(seeds).extracting(CodeFlowSeed::triggerKind)
+                .containsExactly("ui_screen", "external_client", "viewmodel");
+    }
+
+    @Test
     void returnsEmptyForMissingProjectOrRunAndHonorsLimit() {
         CodeBaselineRepository repository = mock(CodeBaselineRepository.class);
         CodeSymbolRecord first = type("FirstClient", "FirstClient", "interface", "interface");

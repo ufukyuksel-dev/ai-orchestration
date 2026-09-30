@@ -23,7 +23,7 @@ import org.springframework.stereotype.Service;
 public class CodeTreeService {
 
     static final Set<String> CLASS_KINDS = Set.of("class", "interface", "enum", "record", "annotation", "object",
-            "struct", "trait", "type");
+            "struct", "trait", "type", "extension");
     private static final int PAGE = 500;
     private static final int MAX_EDGES = 200;
 

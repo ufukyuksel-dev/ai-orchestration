@@ -278,6 +278,8 @@ ai-orchestration:
     supported-extensions:
       - .java
       - .py
+      - .kt
+      - .swift
       - pom.xml
       - package.json
     excluded-directories:
@@ -288,6 +290,13 @@ ai-orchestration:
       - logs
       - models
       - artifacts
+      # Android/Gradle and iOS build outputs and dependency checkouts (generated code, third-party pods).
+      - build
+      - .gradle
+      - Pods
+      - DerivedData
+      - .build
+      - Carthage
     max-file-bytes: 512000
     default-confidence: 0.6
     baseline-collection-name: code_baseline_bge_m3_1024

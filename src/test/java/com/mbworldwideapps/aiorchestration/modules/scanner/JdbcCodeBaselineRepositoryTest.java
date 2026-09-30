@@ -12,6 +12,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mbworldwideapps.aiorchestration.modules.llmgateway.ProviderOverrideSanitizer;
 import com.mbworldwideapps.aiorchestration.modules.scanner.GraphProjectionKeys;
 import org.eclipse.jgit.api.Git;
 import org.flywaydb.core.Flyway;
@@ -58,6 +59,41 @@ class JdbcCodeBaselineRepositoryTest {
                 .migrate();
         jdbcTemplate = new JdbcTemplate(dataSource);
         repository = new JdbcCodeBaselineRepository(jdbcTemplate, new ObjectMapper());
+    }
+
+    @Test
+    void swiftScanStoresEdgesToATypeDeclaredLaterInTheFile() throws Exception {
+        Path root = tempDir.resolve("ios-app");
+        Files.createDirectories(root);
+        Files.writeString(root.resolve("LoginViewModel.swift"), """
+                extension LoginViewModel {
+                    func report() { load() }
+                }
+
+                final class LoginViewModel {
+                    func load() {}
+                }
+                """);
+        ScannerService scanner = new ScannerService(
+                new ScannerProperties("P", List.of(".swift"), List.of(), 512_000L, 0.6, List.of("."), null,
+                        new ScannerProperties.ResolvedEdges(true, 100, 1)),
+                new JdbcScannerFileStateRepository(jdbcTemplate, new ObjectMapper()), null, null, null, repository,
+                null, new ProviderOverrideSanitizer(), null, null, null, null);
+
+        ScanCodebaseResponse response = scanner.scan(new ScanCodebaseRequest(root.toString(), "IOS", false));
+
+        assertThat(response.filesRejected()).isZero();
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM code_edges e
+                JOIN code_symbols source ON source.id = e.source_symbol_id
+                JOIN code_symbols target ON target.id = e.target_symbol_id
+                WHERE e.project_key = 'IOS' AND e.edge_type = 'DECLARES'
+                  AND source.fqn = 'LoginViewModel' AND target.fqn = 'LoginViewModel#report'""", Integer.class))
+                .isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM code_edges e JOIN code_symbols target ON target.id = e.target_symbol_id
+                WHERE e.project_key = 'IOS' AND e.edge_type = 'CALLS' AND e.resolution = 'name_match'
+                  AND target.fqn = 'LoginViewModel#load'""", Integer.class)).isEqualTo(1);
     }
 
     @Test

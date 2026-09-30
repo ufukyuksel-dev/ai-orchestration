@@ -49,14 +49,15 @@ public record ScannerProperties(
             projectKey = "AI_ORCHESTRATION";
         }
         if (supportedExtensions == null || supportedExtensions.isEmpty()) {
-            supportedExtensions = List.of(".java", ".py", "pom.xml", "package.json");
+            supportedExtensions = List.of(".java", ".py", ".kt", ".swift", "pom.xml", "package.json");
         }
         supportedExtensions = supportedExtensions.stream()
                 .filter(value -> value != null && !value.isBlank())
                 .map(value -> value.trim().toLowerCase(Locale.ROOT))
                 .toList();
         if (excludedDirectories == null || excludedDirectories.isEmpty()) {
-            excludedDirectories = List.of(".git", "target", "node_modules", "output", "logs", "models", "artifacts");
+            excludedDirectories = List.of(".git", "target", "node_modules", "output", "logs", "models", "artifacts",
+                    "build", ".gradle", "Pods", "DerivedData", ".build", "Carthage");
         }
         excludedDirectories = excludedDirectories.stream()
                 .filter(value -> value != null && !value.isBlank())
