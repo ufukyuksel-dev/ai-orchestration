@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 public final class AgentLearningModels {
@@ -240,7 +241,35 @@ public final class AgentLearningModels {
 
     /** Authoritative default learn result. Persistence identifiers are debug-only. */
     public record CompactLearnReceipt(String status, int created, int updated, int reused,
-            int rejected, int conflicts, int referencesCreated, int referencesReused) {
+            int rejected, int conflicts, int referencesCreated, int referencesReused,
+            @JsonInclude(JsonInclude.Include.NON_EMPTY) List<LearnItem> items) {
+        public CompactLearnReceipt {
+            items = items == null ? List.of() : List.copyOf(items);
+        }
+
+        public CompactLearnReceipt(String status, int created, int updated, int reused,
+                int rejected, int conflicts, int referencesCreated, int referencesReused) {
+            this(status, created, updated, reused, rejected, conflicts, referencesCreated, referencesReused,
+                    List.of());
+        }
+
+        /** The same counts without the per-candidate items (when a caller reports them elsewhere). */
+        public CompactLearnReceipt withoutItems() {
+            return new CompactLearnReceipt(status, created, updated, reused, rejected, conflicts,
+                    referencesCreated, referencesReused);
+        }
+    }
+
+    /**
+     * Outcome of one input candidate, in input order: created, reused, updated, rejected or conflict.
+     * {@code unresolvedLocators} names symbol locators kept only as a file link (no scanned symbol matched).
+     */
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    public record LearnItem(int index, String summary, String outcome, String reason,
+            List<String> unresolvedLocators) {
+        public LearnItem {
+            unresolvedLocators = unresolvedLocators == null ? List.of() : List.copyOf(unresolvedLocators);
+        }
     }
 
     public record Candidate(String kind, String summary, String content, List<String> appliesWhen,

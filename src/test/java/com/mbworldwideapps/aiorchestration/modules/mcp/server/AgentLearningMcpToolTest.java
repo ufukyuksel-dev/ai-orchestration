@@ -42,6 +42,16 @@ import org.springaicommunity.mcp.annotation.McpTool;
 class AgentLearningMcpToolTest {
 
     @Test
+    void producerRuntimeRecognisesEachClientAndNeverLabelsAnUnknownOneAsCodex() {
+        assertThat(AgentLearningMcpTool.runtime("copilot-cli-memory-skill")).isEqualTo("copilot");
+        assertThat(AgentLearningMcpTool.runtime("Copilot")).isEqualTo("copilot");
+        assertThat(AgentLearningMcpTool.runtime("claude-code")).isEqualTo("claude_code");
+        assertThat(AgentLearningMcpTool.runtime("codex")).isEqualTo("codex");
+        assertThat(AgentLearningMcpTool.runtime("runtime-hook")).isEqualTo("unknown");
+        assertThat(AgentLearningMcpTool.runtime(null)).isEqualTo("unknown");
+    }
+
+    @Test
     void nativeLearnSchemaKeepsSemanticOptionalFieldsOptional() throws Exception {
         var method = AgentLearningMcpTool.class.getMethod("learnV2", LearningBatch.class);
         var schema = new ObjectMapper().readTree(

@@ -535,11 +535,13 @@ public class AgentLearningMcpTool {
         return normalized.length() <= 160 ? normalized : normalized.substring(0, 157) + "...";
     }
 
-    private static String runtime(String clientId) {
+    /** Producer provenance from the client id; an unrecognised client is recorded as unknown, never as codex. */
+    static String runtime(String clientId) {
         String normalized = clientId == null ? "" : clientId.toLowerCase(java.util.Locale.ROOT);
         if (normalized.contains("copilot")) return "copilot";
         if (normalized.contains("claude")) return "claude_code";
-        return "codex";
+        if (normalized.contains("codex")) return "codex";
+        return "unknown";
     }
 
     CompactResolveResponse fitSerializedBudget(CompactResolveResponse response, int maxTokens) {
