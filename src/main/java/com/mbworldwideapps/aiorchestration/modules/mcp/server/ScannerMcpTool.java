@@ -167,6 +167,27 @@ public class ScannerMcpTool {
         }
     }
 
+    /**
+     * A scan without an explicit key uses the key already bound to this checkout (the one
+     * scanner.project.resolve, session.bootstrap and memory.learn use), so its memories are
+     * re-observed against the new baseline instead of a parallel path-derived project.
+     */
+    private String scanProjectKey(McpClientContext context, String projectKey, String rootPath) {
+        String derived = McpProjectKeys.forScan(context, projectKey, rootPath);
+        if ((projectKey != null && !projectKey.isBlank()) || !McpProjectKeys.isLocalTrust(context)
+                || projectWorkspaceResolver == null || rootPath == null || rootPath.isBlank()) {
+            return derived;
+        }
+        try {
+            Path root = Path.of(rootPath.trim());
+            if (!root.isAbsolute()) return derived;
+            ProjectWorkspace workspace = projectWorkspaceResolver.resolveByPath(root);
+            return sameDirectory(root, workspace.repositoryRoot()) ? workspace.projectKey() : derived;
+        } catch (ProjectWorkspaceResolutionException | IllegalArgumentException exception) {
+            return derived;
+        }
+    }
+
     private static boolean sameDirectory(Path first, Path second) {
         try {
             return java.nio.file.Files.isSameFile(first, second);
@@ -202,7 +223,7 @@ public class ScannerMcpTool {
         String effectiveProjectKey = context.projectKey();
         try {
             sanitizedOverride = providerOverrideSanitizer.sanitize(providerOverride, context).orElse(null);
-            effectiveProjectKey = McpProjectKeys.forScan(context, projectKey, rootPath);
+            effectiveProjectKey = scanProjectKey(context, projectKey, rootPath);
             ScanCodebaseResponse response = scannerService.scan(new ScanCodebaseRequest(
                     rootPath,
                     effectiveProjectKey,
@@ -272,7 +293,7 @@ public class ScannerMcpTool {
         String effectiveProjectKey = context.projectKey();
         try {
             sanitizedOverride = providerOverrideSanitizer.sanitize(providerOverride, context).orElse(null);
-            effectiveProjectKey = McpProjectKeys.forScan(context, projectKey, rootPath);
+            effectiveProjectKey = scanProjectKey(context, projectKey, rootPath);
             ScannerScanStartResponse response = scannerAsyncService.start(new ScanCodebaseRequest(
                     rootPath, effectiveProjectKey, force, sanitizedOverride, semanticModel, forceReindex, null,
                     includePaths, excludePaths, maxSemanticFiles, maxSemanticSymbols, maxSemanticFlows,

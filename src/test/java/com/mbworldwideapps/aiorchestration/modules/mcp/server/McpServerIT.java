@@ -533,6 +533,28 @@ class McpServerIT {
     }
 
     @Test
+    void localScannerScanReusesTheKeyAlreadyBoundToTheCheckout() throws Exception {
+        Path boundRoot = Files.createDirectories(tempDir.resolve("mobil-worldmobile-be")).toRealPath();
+        McpClientContextHolder.set(new McpClientContext("AI_ORCHESTRATION", "claude-code", "local",
+                List.of("scanner.scan")));
+        ScannerService scannerService = mock(ScannerService.class);
+        when(scannerService.scan(any())).thenAnswer(invocation -> {
+            ScanCodebaseRequest request = invocation.getArgument(0);
+            return new ScanCodebaseResponse(request.rootPath(), request.projectKey(), 1, 1, 0, 0, 0, 0.0, 10L,
+                    List.of());
+        });
+        ProjectWorkspaceResolver resolver = unboundWorkspaceResolver();
+        when(resolver.resolveByPath(any(Path.class)))
+                .thenReturn(new ProjectWorkspace("MOBIL_WORLDMOBILE_BE", boundRoot, "a".repeat(64)));
+        ScannerMcpTool tool = new ScannerMcpTool(scannerService, auditLogger, new ProviderOverrideSanitizer(),
+                resolver);
+
+        ScanCodebaseResponse response = tool.scan(boundRoot.toString(), false, null, null, false);
+
+        assertThat(response.projectKey()).isEqualTo("MOBIL_WORLDMOBILE_BE");
+    }
+
+    @Test
     void localScannerProjectResolveRegistersDerivedProjectKeyWithoutScan() throws Exception {
         Path freshRoot = Files.createDirectories(tempDir.resolve("fresh-project")).toRealPath();
         McpClientContextHolder.set(new McpClientContext("AI_ORCHESTRATION", "codex", "local",
