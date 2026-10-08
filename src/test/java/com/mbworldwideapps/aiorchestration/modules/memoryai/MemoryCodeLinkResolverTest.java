@@ -229,7 +229,7 @@ class MemoryCodeLinkResolverTest {
     }
 
     @Test
-    void methodRefWithMismatchedParameterListStaysUnresolvedEvenWithSingleCandidate() {
+    void methodRefWhoseParameterListChangedBindsToTheOnlyMethodWithThatName() {
         CodeBaselineRepository repository = mock(CodeBaselineRepository.class);
         CodeBaselineVectorIndex vectorIndex = mock(CodeBaselineVectorIndex.class);
         CodeSymbolRecord onlyIntOverload = new CodeSymbolRecord(UUID.randomUUID(), "AI_ORCHESTRATION", UUID.randomUUID(),
@@ -237,6 +237,30 @@ class MemoryCodeLinkResolverTest {
                 UUID.randomUUID(), Map.of());
         when(repository.findSymbolsByRef(eq("AI_ORCHESTRATION"), eq("com.acme.PaymentService#pay"), anyInt()))
                 .thenReturn(List.of(onlyIntOverload));
+        Map<String, Object> metadata = MemoryCodeLocatorMetadata.replace(Map.of(), List.of(new MemoryCodeLocator(
+                MemoryCodeLocatorKind.SYMBOL, "com.acme.PaymentService#pay(String)", null, null)),
+                MemoryScope.PROJECT, "AI_ORCHESTRATION");
+
+        MemoryCodeLinkResolveResult result = new MemoryCodeLinkResolver(properties(false), repository, vectorIndex)
+                .resolve(item(MemoryType.DECISION, "mcp-external:test", metadata));
+
+        assertThat(result.missingTypedTargets()).isZero();
+        assertThat(result.links()).singleElement()
+                .satisfies(link -> assertThat(link.symbolId()).isEqualTo(onlyIntOverload.id()));
+    }
+
+    @Test
+    void methodRefWithMismatchedParameterListStaysUnresolvedWhenOverloaded() {
+        CodeBaselineRepository repository = mock(CodeBaselineRepository.class);
+        CodeBaselineVectorIndex vectorIndex = mock(CodeBaselineVectorIndex.class);
+        CodeSymbolRecord intOverload = new CodeSymbolRecord(UUID.randomUUID(), "AI_ORCHESTRATION", UUID.randomUUID(),
+                "method", "pay", "com.acme.PaymentService#pay", "pay(int)", "service", 10, 20, "hash",
+                UUID.randomUUID(), Map.of());
+        CodeSymbolRecord longOverload = new CodeSymbolRecord(UUID.randomUUID(), "AI_ORCHESTRATION", UUID.randomUUID(),
+                "method", "pay", "com.acme.PaymentService#pay", "pay(long)", "service", 30, 40, "hash2",
+                UUID.randomUUID(), Map.of());
+        when(repository.findSymbolsByRef(eq("AI_ORCHESTRATION"), eq("com.acme.PaymentService#pay"), anyInt()))
+                .thenReturn(List.of(intOverload, longOverload));
         Map<String, Object> metadata = MemoryCodeLocatorMetadata.replace(Map.of(), List.of(new MemoryCodeLocator(
                 MemoryCodeLocatorKind.SYMBOL, "com.acme.PaymentService#pay(String)", null, null)),
                 MemoryScope.PROJECT, "AI_ORCHESTRATION");

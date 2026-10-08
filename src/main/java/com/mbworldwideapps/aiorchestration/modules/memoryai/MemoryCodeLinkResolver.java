@@ -452,7 +452,8 @@ public class MemoryCodeLinkResolver {
     /**
      * Agents commonly write method locators as {@code pkg.Class#method(ArgType)}, while the scanner stores
      * {@code fqn=pkg.Class#method} and {@code signature=method(ArgType)} separately. Split such refs and match
-     * both parts so a valid method locator is not reported as a missing target.
+     * both parts so a valid method locator is not reported as a missing target. A signature that no longer
+     * matches still binds to the method when it is the only one with that fqn.
      */
     private Optional<CodeSymbolRecord> resolveMethodRefWithParameters(String projectKey, String symbolRef) {
         String value = trim(symbolRef);
@@ -470,7 +471,10 @@ public class MemoryCodeLinkResolver {
         List<CodeSymbolRecord> bySignature = candidates.stream()
                 .filter(symbol -> signature.equals(normalizeSignature(symbol.signature())))
                 .toList();
-        return bySignature.size() == 1 ? Optional.of(bySignature.getFirst()) : Optional.empty();
+        if (bySignature.size() == 1) return Optional.of(bySignature.getFirst());
+        // The parameter list changed but the method is still there (not overloaded): it is the same
+        // target with new content, not a missing one.
+        return bySignature.isEmpty() && candidates.size() == 1 ? Optional.of(candidates.getFirst()) : Optional.empty();
     }
 
     private static String normalizeSignature(String signature) {
