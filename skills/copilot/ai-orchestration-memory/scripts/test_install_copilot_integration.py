@@ -46,26 +46,28 @@ class InstallerTestCase(unittest.TestCase):
 
 class InstallAndCheckTest(InstallerTestCase):
     def test_full_install_creates_every_owned_artifact(self) -> None:
-        (hook, memory_launcher, ai_orch_launcher), _ = self.install()
-        guard, memory_bridge, ai_orch = installer.integration_paths()
+        (mcp_config, memory_launcher, ai_orch_launcher), _ = self.install()
+        memory_bridge, ai_orch = installer.integration_paths()
 
-        self.assertEqual(json.loads(hook.read_text()), installer.expected_hook(guard))
-        self.assertEqual(hook.stat().st_mode & 0o777, 0o600)
+        self.assertFalse((self.copilot_home / "hooks" / installer.HOOK_FILENAME).exists())
         self.assertEqual(memory_launcher.resolve(), memory_bridge)
         self.assertEqual(ai_orch_launcher.resolve(), ai_orch)
+        server = json.loads(mcp_config.read_text())["mcpServers"]["ai-orchestration"]
+        self.assertEqual(server["url"], installer.DEFAULT_MCP_URL)
+        self.assertEqual(server["headers"], {"X-AI-Orch-Client": "copilot"})
+        self.assertEqual(mcp_config.stat().st_mode & 0o777, 0o600)
 
         text = self.bootstrap.read_text(encoding="utf-8")
         self.assertIn(installer.BEGIN, text)
         self.assertIn("ai_orch rule instructions --scope effective", text)
-        self.assertIn("Copilot terminal protocol still applies", text)
-        self.assertIn("Do not spend a tool call reading or printing", text)
-        self.assertIn("only for a directory explicitly listed", text)
         self.assertIn("`ask_user`", text)
         self.assertIn("global ve proje kurallarını yükleyeyim mi?", text)
         self.assertIn("Hayır, bu oturumda atla", text)
-        self.assertIn("`memory search`, `memory learn`, `reference list`, `reference read`", text)
-        self.assertIn("`capabilities` and `doctor` are diagnostics only", text)
-        self.assertNotIn("plan check", text)
+        self.assertIn("Never hard-delete memory without the user's confirmation", text)
+        self.assertIn("unresolvedLocators", text)
+        for restriction in ("only supported interface", "Never run a scan", "approval gate",
+                            "natively", "retired commands"):
+            self.assertNotIn(restriction, text)
 
         skills_dir = self.copilot_home.resolve() / "skills"
         for source in installer.skill_sources():
@@ -78,19 +80,16 @@ class InstallAndCheckTest(InstallerTestCase):
         manifest = json.loads(self.manifest.read_text())
         self.assertEqual(manifest["version"], installer.MANIFEST_VERSION)
         self.assertEqual(len(manifest["links"]), len(installer.skill_sources()))
+        names = {source.name for source in installer.skill_sources()}
         self.assertEqual(
-            {source.name for source in installer.skill_sources()},
-            {
-                "ai-orchestration-learning",
-                "ai-orchestration-memory",
-                "ai-orchestration-references",
-                "ai-orchestration-rules",
-            },
+            names,
+            {path.parent.name for path in (installer.repository_root() / "skills" / "copilot").glob("*/SKILL.md")},
         )
+        self.assertIn("ai-orchestration-jobs", names)
 
     def test_reinstall_removes_only_retired_owned_skill_links(self) -> None:
         self.install()
-        retired_source = installer.repository_root() / "skills" / "copilot" / "ai-orchestration-jobs"
+        retired_source = installer.repository_root() / "skills" / "copilot" / "ai-orchestration-plan-check"
         retired_link = self.copilot_home.resolve() / "skills" / retired_source.name
         retired_link.symlink_to(retired_source)
         manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
@@ -112,18 +111,30 @@ class InstallAndCheckTest(InstallerTestCase):
         self.install()
         before = {
             path: path.read_bytes()
-            for path in (self.bootstrap, self.manifest)
+            for path in (self.bootstrap, self.manifest, self.copilot_home.resolve() / "mcp-config.json")
         }
         self.install()
         for path, content in before.items():
             self.assertEqual(path.read_bytes(), content, path)
         self.install(check=True)
 
-    def test_never_writes_an_mcp_registration(self) -> None:
-        self.install()
-        produced = {path.name for path in self.base.rglob("*") if path.is_file()}
-        self.assertNotIn("mcp.json", produced)
-        self.assertNotIn("mcp-config.json", produced)
+    def test_mcp_registration_keeps_other_servers_and_refuses_a_foreign_one(self) -> None:
+        config = self.copilot_home / "mcp-config.json"
+        self.copilot_home.mkdir(parents=True)
+        config.write_text(json.dumps({"mcpServers": {"github": {"type": "http", "url": "https://x"}}}))
+        self.install(mcp_url="http://127.0.0.1:19999/mcp")
+        servers = json.loads(config.read_text())["mcpServers"]
+        self.assertEqual(servers["github"], {"type": "http", "url": "https://x"})
+        self.assertEqual(servers["ai-orchestration"]["url"], "http://127.0.0.1:19999/mcp")
+
+        servers["ai-orchestration"] = {"type": "http", "url": "https://remote.example/mcp"}
+        config.write_text(json.dumps({"mcpServers": servers}))
+        with self.assertRaises(installer.InstallError):
+            self.install()
+        self.assertEqual(
+            json.loads(config.read_text())["mcpServers"]["ai-orchestration"]["url"],
+            "https://remote.example/mcp",
+        )
 
     def test_check_detects_bootstrap_drift_and_a_missing_skill_link(self) -> None:
         self.install()
@@ -179,9 +190,7 @@ class ForeignArtifactTest(InstallerTestCase):
         (skills_dir / name).mkdir()
         with self.assertRaises(installer.InstallError):
             self.install()
-        self.assertFalse(
-            (self.copilot_home / "hooks" / installer.HOOK_FILENAME).exists()
-        )
+        self.assertFalse((self.copilot_home / "mcp-config.json").exists())
 
     def test_a_redirected_configuration_directory_is_refused(self) -> None:
         real = self.base / "elsewhere"
@@ -208,7 +217,7 @@ class DryRunAndUninstallTest(InstallerTestCase):
         self.assertFalse(self.copilot_home.exists())
         self.assertFalse(self.bin_dir.exists())
         joined = "\n".join(plan.actions)
-        self.assertIn("write hook", joined)
+        self.assertIn("register MCP server", joined)
         self.assertIn("link skill", joined)
         self.assertIn("write manifest", joined)
         self.assertTrue(plan.diffs)
@@ -223,7 +232,10 @@ class DryRunAndUninstallTest(InstallerTestCase):
         foreign_link.mkdir()
 
         _, plan = self.install(uninstall=True)
-        self.assertFalse((self.copilot_home.resolve() / "hooks" / installer.HOOK_FILENAME).exists())
+        self.assertNotIn(
+            "ai-orchestration",
+            json.loads((self.copilot_home / "mcp-config.json").read_text())["mcpServers"],
+        )
         self.assertFalse((self.bin_dir.resolve() / installer.AI_ORCH_LAUNCHER_NAME).exists())
         self.assertFalse(self.manifest.exists())
         self.assertTrue(foreign_link.exists())

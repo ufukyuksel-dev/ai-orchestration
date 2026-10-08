@@ -130,6 +130,8 @@ def _claude():
     out = subprocess.run(["claude", "mcp", "get", "ai-orchestration"], capture_output=True, text=True, timeout=30)
     if out.returncode != 0 or MCP_URL not in out.stdout:
         return False, "not registered", "./install.sh (re-run registers it)"
+    if "X-AI-Orch-Tools" in out.stdout:
+        return False, "registered with a reduced tool profile", "./install.sh (re-run registers it)"
     try:
         server = json.loads((Path.home() / ".claude.json").read_text()).get("mcpServers", {}).get("ai-orchestration", {})
     except (OSError, ValueError):
@@ -154,6 +156,20 @@ def _codex():
     return ok, "registered" if ok else "not registered", "./install.sh (re-run registers it)"
 
 
+def _copilot():
+    if _agents_skipped():
+        return True, "skipped (installed with --no-agents)", None
+    home = Path(os.environ.get("COPILOT_HOME", Path.home() / ".copilot"))
+    if not shutil.which("copilot") and not home.is_dir():
+        return True, "not installed (skipped)", None
+    out = subprocess.run([sys.executable, str(ROOT / "skills/copilot/ai-orchestration-memory/scripts/install_user_integration.py"),
+                          "--check", "--mcp-url", MCP_URL], capture_output=True, text=True, timeout=60)
+    if out.returncode == 0:
+        return True, "registered, skills and instructions up to date", None
+    error = [l for l in out.stdout.splitlines() if l.startswith("installation error:")]
+    return False, error[-1][:160] if error else "drift", "./install.sh"
+
+
 def _instructions():
     if _agents_skipped():
         return True, "skipped (installed with --no-agents)", None
@@ -172,7 +188,8 @@ def doctor(_: argparse.Namespace) -> int:
     print("AI Orchestration doctor")
     checks = [("server", _server), ("vector store (Qdrant)", _qdrant), ("embedding model (Ollama bge-m3)", _embedding),
               ("MCP endpoint", _mcp), ("panel", _panel), ("Claude Code registration", _claude),
-              ("Codex registration", _codex), ("agent session instructions", _instructions)]
+              ("Codex registration", _codex), ("Copilot registration", _copilot),
+              ("agent session instructions", _instructions)]
     results = [_check(name, fn) for name, fn in checks]
     print(f"{'all good' if all(results) else 'fix the ✗ lines above'} · panel: {BASE}/")
     return 0 if all(results) else 1

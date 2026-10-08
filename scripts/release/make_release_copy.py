@@ -56,7 +56,6 @@ SCRUB = [
 # Deliberately fake secrets in redaction tests: (file, text on the line). Nothing else may match.
 ALLOWED_FIXTURES = {
     ("skills/copilot/ai-orchestration-memory/scripts/test_memory_bridge.py", "do-not-reflect-this-token"),
-    ("skills/copilot/ai-orchestration-memory/scripts/test_copilot_pre_tool_guard.py", "ghp_secret_should_not_appear"),
     ("src/test/java/com/mbworldwideapps/aiorchestration/modules/scanner/ScannerServiceTest.java",
      "superSecretToken123456789"),
 }

@@ -6,9 +6,8 @@ description: Use before editing, refactoring, renaming, or deleting code. Reuses
 # Changing code safely
 
 Understand blast radius before editing — don't grep-and-hope, and don't repeat
-discovery already supplied by a focused learning context. Every AI Orchestration
-call is one direct `ai_orch` terminal command; there is no native MCP path for
-Copilot and no fallback to one.
+discovery already supplied by a focused learning context. Use the `ai_orch`
+terminal command or the native `ai-orchestration` MCP tools.
 
 ## Focused fast path
 
@@ -81,13 +80,12 @@ Use the steps below only when the focused fast-path conditions are not met.
 
 6. **Edit** following project conventions: constructor injection, typed
    `@ConfigurationProperties`, scope check plus audit for every MCP tool,
-   redaction before any egress, human-approval gates intact.
+   redaction before any egress, hard-delete confirmation intact.
 
 7. **Verify:** run the mirrored tests for every impacted area
    (`src/test/java/.../<package>`); add or adjust tests for the change.
 
-If the baseline is stale or missing, do **not** run any `scanner.scan*`
-operation and do not ask for a scan as a precondition. Say that the baseline
-evidence is stale, then establish the blast radius with bounded local `rg`,
-targeted file reads and the mirrored tests. Never change a shared symbol without
+If the code map is missing or out of date, refresh it with `ai_orch scan start`
+(follow it with `ai_orch scan status`), or establish the blast radius with
+bounded local `rg`, targeted file reads and the mirrored tests. Never change a shared symbol without
 checking impact.

@@ -14,7 +14,7 @@ Localize with the code baseline before reading the repo broadly.
 3. Inspect top suspects: `codebase.symbol.get(ref, projectKey=...)`, then `codebase.symbol.neighbors(ref, depth=1, projectKey=...)` for callers/callees/injections.
 4. `memory.search(area, projectKey=...)` for known decisions/issues on that area; check recent scanner `code_diagnostics`.
 5. If the symptom maps to multiple plausible meanings or the top suspects are weak/conflicting after two focused passes, ask the user one concise clarification question with 2-3 likely interpretations. Do not keep recursively searching or guess business meaning.
-6. Do not automatically start a scan at session/task startup or because a baseline is stale/missing. Run `scanner.scan` or `scanner.scan.start` only when the user explicitly requests a scan in the current conversation. Otherwise use bounded local searches, targeted source reads, and relevant tests; state any stale-evidence limitation without stopping to ask for a scan.
+6. When the code map is missing or out of date, refresh it with `scanner.scan.start`, or use bounded local searches, targeted source reads and relevant tests.
 7. Fix, then run the mirrored tests under `src/test/java/.../<package>`.
 
 Common areas → where to look:

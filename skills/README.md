@@ -2,7 +2,7 @@
 
 Bu klasör, AI Orchestration üzerinde çalışan AI agent'lar için **invokable skill**'leri içerir. Skill = bir task workflow'u (debug etme, MCP tool ekleme, kod değiştirme). Agent ilgili bir göreve başladığında skill'in `description`'ı tetiklenir ve skill otomatik yüklenir — her turn yüklenen instruction dosyalarından (`CLAUDE.md`/`AGENTS.md`/`.github/copilot-instructions.md`) farklıdır.
 
-Ortak skill'ler aynı iş akışını taşır; runtime'a özgü güvenlik ve araç erişimi farkları kendi klasöründeki varyantta tutulur. Copilot varyantları hiçbir yoldan `scanner.scan*` kullanmaz ve yalnızca `ai_orch` terminal komutunu çağırır; AI Orchestration skill'leri Copilot'a özeldir. Ayrı klasörler her runtime'ın resmi keşif yoluna temiz kurulum sağlar.
+Ortak skill'ler aynı iş akışını taşır. Claude Code, Codex ve Copilot aynı sunucu yüzeyini kısıtlamasız kullanır; Copilot varyantları `ai_orch` terminal komutlarını öğretir, native MCP araçları da kayıtlıdır. Ayrı klasörler her runtime'ın resmi keşif yoluna temiz kurulum sağlar.
 
 ## Skill'ler
 - `debugging-this-project` — bir hata / test failure debug ederken.
@@ -40,34 +40,26 @@ python3 skills/copilot/ai-orchestration-memory/scripts/install_user_integration.
 python3 skills/copilot/ai-orchestration-memory/scripts/install_user_integration.py --check
 ```
 
-Installer yalnızca sahibi olduğu öğeleri kurar: user-level `preToolUse` hook'u
-(`~/.copilot/hooks/ai-orchestration-safety.json`), `~/.local/bin` altındaki
-`ai_orch` ve `ai-orch-memory` symlink'leri, `~/.copilot/copilot-instructions.md`
-içindeki işaretli managed blok, `~/.copilot/skills/` altındaki checkout'a bağlı
-skill symlink'leri, özel staging dizini ve ownership manifest'i. Managed blok
+`./install.sh` bunu otomatik çağırır. Installer yalnızca sahibi olduğu öğeleri
+kurar: `~/.copilot/mcp-config.json` içindeki `ai-orchestration` MCP kaydı (yerel
+sunucu, `X-AI-Orch-Client: copilot`), `~/.local/bin` altındaki `ai-orch-memory`
+ve `ai_orch` symlink'leri (install.sh'in yazdığı `ai_orch` komutu olduğu gibi
+kalır), `~/.copilot/copilot-instructions.md` içindeki işaretli managed blok,
+`~/.copilot/skills/` altındaki tüm Copilot skill symlink'leri, özel staging
+dizini ve ownership manifest'i. Yükseltmede eski `preToolUse` hook dosyasını
+siler, başka bir checkout'a işaret eden skill/launcher symlink'lerini bu
+checkout'a taşır ve `settings.json` içinde başka checkout'un `skills/copilot`
+dizinini gösteren `skillDirectories` girdisini kaldırır. Managed blok
 dışındaki kişisel metin byte düzeyinde korunur; yabancı dosya/symlink ezilmez,
 çakışma raporlanır. `--dry-run` tam planı ve diff'i yazar, hiçbir şeyi
 değiştirmez. `--check` kurulumu değiştirmeden drift arar. `--uninstall` yalnızca
 sahip olunan öğeleri kaldırır; sunucuda oluşmuş memory/rule/job/reference
 kayıtlarına dokunmaz. `COPILOT_HOME` desteklenir.
 
-**Copilot için tek arayüz `ai_orch` terminal komutudur.** Copilot'a native AI
-Orchestration MCP kaydı, araç keşfi veya tool invocation eklenmez; hata sonrası
-native yola düşülmez. Installer hiçbir MCP kaydı oluşturmaz. Bridge süreci
-içeride mevcut loopback MCP taşımasını kullanır — bu bir taşıma detayıdır,
-"hiç MCP yok" demek değildir. Kurumsal ağ/politika kısıtı varsa gizlice aşma.
-
-Copilot'ta scanner erişimi yalnızca proje-bağlı `ai_orch scan` komutlarıyla
-vardır; provider/model sorulmaz, kalıcı silme yoktur ve admin approval bypass'ı
-yoktur. Hook bu sınırları uygular: yalnız
-bu checkout'a çözülen `ai_orch`/`ai-orch-memory` launcher'ını tek doğrudan komut
-olarak pre-approve eder, bu servise ait native araç çağrılarını reddeder ve
-başka MCP servislerini yalnızca kelime benzerliğinden engellemez. Bu user-level
-koruma defense-in-depth'tir: hook devre dışı bırakılabilir, keşfedilmeyebilir
-veya timeout'ta fail-open davranabilir; kullanıcının değiştirebildiği bir
-checkout'taki script yolu değişmez bir güven kökü değildir. Mutlak enforcement
-gereken kurulumlarda Copilot'a `scanner.scan*` scope'u olmayan ayrı bir server
-credential/role verilmelidir.
+Copilot, Claude Code ve Codex ile aynı araç yüzeyini kullanır: native MCP
+araçları veya `ai_orch` terminal komutu (sunucudaki her araç; scan, codebase,
+memory write/update/archive, kurallar, referanslar, işler). Tek kalan koruma
+herkes için aynıdır: kalıcı silme (`hard_delete`) kullanıcının onayını ister.
 
 > **Kısayol uyarısı:** Codex ve Copilot CLI ortak `~/.agents/skills/` dizinini de
 > okuyabilir. Aynı skill'i hem `~/.copilot/skills` hem `~/.agents/skills` hem de
@@ -120,7 +112,7 @@ symlink'li `.github` veya instruction dosyası ezilmez, bozuk/çift işaret
 çakışma sayılır. Birden fazla hedefte tüm preflight bitmeden hiçbir yazma
 yapılmaz. `--dry-run` tam diff'i yazar, `--check` drift'te 1 döner.
 
-Ek launcher, hook veya MCP kaydı **gerekmez**: `ai_orch` zaten `~/.local/bin`
+Ek launcher veya hook **gerekmez**: `ai_orch` zaten `~/.local/bin`
 üzerinden global olarak PATH'tedir ve çalışma dizininin en yakın `.git` köküne
 bağlanır, yani hedef projede o projenin kendi projectKey'ini çözer.
 
@@ -140,7 +132,7 @@ Global talimat dosyasına küçük, sahipliği işaretlenmiş bir blok eklenir: 
 
 `--dry-run` somut diff'i gösterir; `--check` drift/çatışma ve görünen talimat byte boyutlarını raporlar. Eşleşen eski kopyalar yedeklenir; farklı içerik ve yabancı symlink'ler ezilmez. Mevcut `MCP Lifecycle` bölümü varsa içeriği bayt bayt korunur; yeni başlangıç bloğu hemen önüne eklenir. Bu durum bilgi satırı olarak raporlanır, çakışma sayılmaz. Diğer kişisel bölümler ve AI_Developer bloğu korunur. `--uninstall` yalnız sahip olunan bağlantı/blokları kaldırır, kendi oluşturduğu yedekleri geri getirir.
 
-DB'deki yeni `instruction` türü mevcut `rules.draft → rules.preview → rules.promote` onay akışını kullanır. Global kuralları yazarken projectKey bilinçli olarak boş bırakılır; proje/modül için çözümlenmiş projectKey zorunludur. Örnekler ve limitler startup dosyasındadır. Yerel güven ilişkili `scanner.project.resolve`, `.git` dosyası/dizini bulunan kökü tarama yapmadan metadata olarak kaydeder; explicit projectKey verildiğinde aynı projenin aktif dizinini günceller. Aynı dizine ait alias kayıtları engel değildir; anahtar verilmezse alfabetik ilk kayıt seçilir. Resolver ve scanner yol izin listesi uygulamaz. Tarama yalnızca kullanıcı mevcut konuşmada açıkça istediğinde başlatılır; stale/missing baseline otomatik tarama nedeni değildir. Yeni sunucu sürümü ve V51 migration'ı çalışmadan okuma aracı kullanılamaz. MCP kapalıysa veya kapasite aşılırsa yükleme tamamlanmış sayılmaz.
+DB'deki yeni `instruction` türü mevcut `rules.draft → rules.preview → rules.promote` onay akışını kullanır. Global kuralları yazarken projectKey bilinçli olarak boş bırakılır; proje/modül için çözümlenmiş projectKey zorunludur. Örnekler ve limitler startup dosyasındadır. Yerel güven ilişkili `scanner.project.resolve`, `.git` dosyası/dizini bulunan kökü tarama yapmadan metadata olarak kaydeder; explicit projectKey verildiğinde aynı projenin aktif dizinini günceller. Aynı dizine ait alias kayıtları engel değildir; anahtar verilmezse alfabetik ilk kayıt seçilir. Resolver ve scanner yol izin listesi uygulamaz. Kod haritası eksik veya eskiyse agent taramayı kendisi başlatır (`scanner.scan.start`). Yeni sunucu sürümü ve V51 migration'ı çalışmadan okuma aracı kullanılamaz. MCP kapalıysa veya kapasite aşılırsa yükleme tamamlanmış sayılmaz.
 
 ## Sadece bu repo için (project-scope, Claude Code)
 Global yerine yalnızca bu repoda istersen:
@@ -152,10 +144,10 @@ mkdir -p .claude/skills && cp -R skills/claude/* .claude/skills/
 ## Kurulum sonrası doğrulama
 - **Claude Code:** yeni session aç; ilgili bir task'ta skill otomatik tetiklenir.
 - **Codex:** skill'ler native yüklenir; ilgili görevde devreye girer.
-- **Copilot:** `copilot /skills list` çıktısında proje skill'lerini gör; yeni bir session'da ilk istekte `ask_user` ile kural yükleme sorusunun çıktığını doğrula. Evet cevabında `ai_orch rule instructions --scope effective` çalışmalı ve tam metin gelmeli; hayır cevabında bu çağrı yapılmadan görev devam etmeli. `ai_orch capabilities` çıktısında scanner komutlarını `available` gör. Dosyanın var olması yeterli kanıt değildir — gerçek session çıktısını gör.
+- **Copilot:** `copilot /skills list` çıktısında proje skill'lerini gör; yeni bir session'da ilk istekte `ask_user` ile kural yükleme sorusunun çıktığını doğrula. Evet cevabında `ai_orch rule instructions --scope effective` çalışmalı ve tam metin gelmeli; hayır cevabında bu çağrı yapılmadan görev devam etmeli. `ai_orch capabilities` çıktısında scan komutlarını `available` gör. Dosyanın var olması yeterli kanıt değildir — gerçek session çıktısını gör.
 
 ## Bağımlılık
-Genel skill'ler MCP server'a bağlı olmanı varsayar. Copilot skill'leri yalnızca `ai_orch` terminal komutunu kullanır; native MCP kaydı seçeneği yoktur. Bridge de AI Orchestration'ın Streamable HTTP/MCP wire protokolünü kullandığı için şirket politikasını gizlice aşmak amacıyla kullanılmamalıdır. Bağlantı için: `output/mcp-client-connection-guide.md`. Daha derin proje haritası: `docs/agent/PROJECT-MAP.md`.
+Genel skill'ler MCP server'a bağlı olmanı varsayar. Copilot skill'leri `ai_orch` terminal komutunu öğretir; Copilot'ta native MCP kaydı da kuruludur. Bağlantı için: `output/mcp-client-connection-guide.md`. Daha derin proje haritası: `docs/agent/PROJECT-MAP.md`.
 
 ### Belirli bir eski işi hatırlama
 

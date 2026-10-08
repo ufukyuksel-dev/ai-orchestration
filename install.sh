@@ -151,7 +151,7 @@ register_claude() {
   have claude || { warn "Claude Code not found (skipped)"; return; }
   local current; current="$(claude mcp get ai-orchestration 2>/dev/null || true)"
   if [ -n "$current" ]; then
-    if printf '%s' "$current" | grep -q "$MCP_URL" && printf '%s' "$current" | grep -q "X-AI-Orch-Tools: minimal" \
+    if printf '%s' "$current" | grep -q "$MCP_URL" && ! printf '%s' "$current" | grep -q "X-AI-Orch-Tools" \
         && claude_always_loads; then
       ok "Claude Code already registered"
     elif printf '%s' "$current" | grep -Eq 'https?://(127\.0\.0\.1|localhost)'; then
@@ -163,10 +163,10 @@ register_claude() {
     fi
   fi
   if [ -z "$current" ]; then
-    # minimal tool profile: the session start comes from the prompt hook below, so only memory.learn,
-    # rules.instructions and extras travel with every turn. alwaysLoad keeps these three out of Claude Code's
-    # deferred tool search (other MCP servers stay deferred), so the agent sees them without searching first.
-    claude mcp add-json --scope user ai-orchestration "{\"type\":\"http\",\"url\":\"$MCP_URL\",\"alwaysLoad\":true,\"headers\":{\"X-AI-Orch-Client\":\"claude-code\",\"X-AI-Orch-Tools\":\"minimal\"}}" >/dev/null
+    # the full tool surface, the same as Codex and Copilot; the session start still comes from the prompt hook
+    # below. alwaysLoad keeps these tools out of Claude Code's deferred tool search (other MCP servers stay
+    # deferred), so the agent sees them without searching first.
+    claude mcp add-json --scope user ai-orchestration "{\"type\":\"http\",\"url\":\"$MCP_URL\",\"alwaysLoad\":true,\"headers\":{\"X-AI-Orch-Client\":\"claude-code\"}}" >/dev/null
     ok "Claude Code registered ($MCP_URL)"
   fi
   if python3 "$REPO/scripts/claude_hook_config.py" set "$HOME/.claude/settings.json" \
@@ -185,6 +185,21 @@ register_codex() {
   fi
 }
 
+COPILOT_INSTALLER="$REPO/skills/copilot/ai-orchestration-memory/scripts/install_user_integration.py"
+
+have_copilot() { have copilot || [ -d "${COPILOT_HOME:-$HOME/.copilot}" ]; }
+
+register_copilot() {
+  have_copilot || { warn "Copilot not found (skipped)"; return; }
+  # MCP server in mcp-config.json, all Copilot skills, the ai-orch-memory launcher and the instructions block
+  local out
+  if out="$(python3 "$COPILOT_INSTALLER" --bin-dir "$BIN" --mcp-url "$MCP_URL" 2>&1)"
+  then ok "Copilot registered (${COPILOT_HOME:-$HOME/.copilot}: mcp-config.json, skills, instructions)"
+  else die "Copilot integration not installed: $(printf '%s' "$out" | grep 'installation error' | tail -1)" \
+           "python3 $COPILOT_INSTALLER --dry-run   (shows what it would change)"
+  fi
+}
+
 unregister_agents() {
   if have claude && claude mcp get ai-orchestration 2>/dev/null | grep -q "$MCP_URL"; then
     claude mcp remove --scope user ai-orchestration >/dev/null 2>&1 || claude mcp remove ai-orchestration >/dev/null 2>&1 || true
@@ -199,6 +214,9 @@ unregister_agents() {
   fi
   if have claude || have codex; then
     python3 "$REPO/scripts/install_agent_instructions.py" --uninstall >/dev/null && ok "session instruction blocks removed"
+  fi
+  if have_copilot; then
+    python3 "$COPILOT_INSTALLER" --bin-dir "$BIN" --uninstall >/dev/null && ok "Copilot integration removed"
   fi
 }
 
@@ -322,9 +340,7 @@ if [ "$AGENTS" = 1 ]; then
   if have claude || have codex; then
     python3 "$REPO/scripts/install_agent_instructions.py" >/dev/null && ok "session instructions and skills installed"
   fi
-  if have copilot || [ -d "$HOME/.copilot" ]; then
-    ok "Copilot: per repository, run  ai_orch project add <folder> --copilot"
-  fi
+  register_copilot
 fi
 
 step "Checking the installation"

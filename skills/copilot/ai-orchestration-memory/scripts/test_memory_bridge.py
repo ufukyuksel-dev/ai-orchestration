@@ -65,23 +65,21 @@ class WireParsingTest(unittest.TestCase):
 
 
 class AllowlistTest(unittest.TestCase):
-    def test_allowlist_contains_no_scan_or_admin_bypass(self) -> None:
-        scanner_tools = [name for name in bridge.ALLOWED_TOOLS if name.startswith("scanner.")]
-        self.assertEqual(scanner_tools, ["scanner.project.resolve"])
-        self.assertNotIn("memory.approve", bridge.ALLOWED_TOOLS)
-        self.assertNotIn("memory.review.pending", bridge.ALLOWED_TOOLS)
-        self.assertNotIn("memory.review.decide", bridge.ALLOWED_TOOLS)
-        self.assertFalse(any(name.startswith("scanner.scan") for name in bridge.ALLOWED_TOOLS))
+    def test_allowlist_covers_every_registered_server_tool(self) -> None:
+        for name in ("scanner.scan", "scanner.scan.start", "memory.approve",
+                     "memory.review.pending", "memory.review.decide", "session.bootstrap"):
+            self.assertIn(name, bridge.ALLOWED_TOOLS)
+        self.assertEqual(set(bridge.ALLOWED_TOOLS), set(bridge.TOOL_ARGUMENTS))
 
-    def test_catalog_filters_unknown_and_scan_tools(self) -> None:
+    def test_catalog_filters_unknown_tools(self) -> None:
         catalog = bridge.filtered_catalog(
             [
                 {"name": "memory.search", "description": "ok", "inputSchema": {}},
-                {"name": "scanner.scan", "description": "forbidden", "inputSchema": {}},
-                {"name": "memory.approve", "description": "forbidden", "inputSchema": {}},
+                {"name": "scanner.scan", "description": "scan", "inputSchema": {}},
+                {"name": "not.registered", "description": "x", "inputSchema": {}},
             ]
         )
-        self.assertEqual([item["name"] for item in catalog], ["memory.search"])
+        self.assertEqual([item["name"] for item in catalog], ["scanner.scan", "memory.search"])
         self.assertNotIn("inputSchema", catalog[0])
 
     def test_search_accepts_canonical_and_json_style_top_k_flags(self) -> None:
@@ -171,32 +169,32 @@ class ProjectBoundaryTest(unittest.TestCase):
         with self.assertRaises(bridge.BridgeError):
             bridge.validate_item_project(item, "OTHER", allow_global=True, mutation=False)
 
-    def test_global_is_read_only_through_bridge(self) -> None:
+    def test_global_memory_can_be_read_and_repaired(self) -> None:
         item = {"scope": "global", "projectKey": None, "memoryId": str(uuid.uuid4())}
         self.assertEqual(
             bridge.validate_item_project(item, "P", allow_global=True, mutation=False), item
         )
-        with self.assertRaises(bridge.BridgeError):
-            bridge.validate_item_project(item, "P", allow_global=True, mutation=True)
+        self.assertEqual(
+            bridge.validate_item_project(item, "P", allow_global=True, mutation=True), item
+        )
 
 
 class DispatchBoundaryTest(unittest.TestCase):
-    def test_dispatch_rejects_hard_delete_global_mutation_and_unknown_arguments(self) -> None:
+    def test_hard_delete_needs_the_users_confirmation_and_unknown_arguments_fail(self) -> None:
+        memory_id = str(uuid.uuid4())
         with self.assertRaises(bridge.BridgeError):
             bridge._validate_dispatch(
-                "memory.delete", {"memoryId": str(uuid.uuid4()), "mode": "hard_delete", "reason": "x"}
+                "memory.delete", {"memoryId": memory_id, "mode": "hard_delete", "reason": "x"}
             )
-        with self.assertRaises(bridge.BridgeError):
-            bridge._validate_dispatch(
-                "memory.write",
-                {
-                    "summary": "s",
-                    "content": "c",
-                    "memoryType": "decision",
-                    "scope": "global",
-                    "projectKey": "P",
-                },
-            )
+        bridge._validate_dispatch(
+            "memory.delete",
+            {"memoryId": memory_id, "mode": "hard_delete", "reason": "x", "humanConfirmed": True,
+             "humanTurnRef": "turn-1", "humanRawText": "evet, kalici sil"},
+        )
+        bridge._validate_dispatch(
+            "memory.write",
+            {"summary": "s", "content": "c", "memoryType": "decision", "scope": "global"},
+        )
         with self.assertRaises(bridge.BridgeError):
             bridge._validate_dispatch("memory.search", {"projectKey": "P", "query": "q", "scan": True})
 

@@ -45,7 +45,6 @@
         "runtime.capture"
       ],
       "forbidden": [
-        "native_mcp",
         "runtime_finalization_hook",
         "raw_http",
         "agent_authored_persistence_id"

@@ -334,7 +334,10 @@ class InstallerTest(unittest.TestCase):
             self.assertNotIn('ai_orch', text)
             self.assertNotIn('ai-orch-learning', text)
         self.assertIn('memory learn --file memory-learn.json --consume', copilot)
-        self.assertIn('native MCP', copilot)
+        self.assertIn('memory.learn(rootPath, candidates)', copilot)
+        for text in (codex, claude, copilot):
+            self.assertIn('unresolvedLocators', text)
+            self.assertIn('stale card', text)
 
         safe_change = (repo / 'skills/copilot/changing-code-safely/SKILL.md').read_text()
         self.assertIn('Focused fast path', safe_change)

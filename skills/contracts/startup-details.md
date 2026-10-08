@@ -34,8 +34,8 @@
 
 ## Copilot
 
-Copilot uses the `ai_orch` terminal command, never native MCP tools. It asks once per session with `ask_user` whether to load the rules and runs `ai_orch rule instructions --scope effective` on yes. See `skills/copilot/session-instructions.md`.
+Copilot uses the same tools natively or through the `ai_orch` terminal command. It asks once per session with `ask_user` whether to load the rules and runs `ai_orch rule instructions --scope effective` on yes. See `skills/copilot/session-instructions.md`.
 
 ## Scanning
 
-Never start a scan on your own. The user adds a project from the panel ("Proje ekle") or explicitly asks for a scan. A stale or missing baseline is not a reason to scan: use local search and reads, and mention the limitation.
+Scan (`scanner.scan.start`, then `scanner.scan.status`) when the code map is missing or out of date for the work at hand. A project can also be added from the panel ("Proje ekle").

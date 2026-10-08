@@ -118,10 +118,10 @@ class LearningRuntimeParityContractTest(unittest.TestCase):
 
         self.assertEqual(adapter["transport"], "single_direct_ai_orch_terminal_command")
         self.assertEqual(adapter["producerRuntime"], "copilot")
-        self.assertIn("native_mcp", adapter["forbidden"])
+        self.assertNotIn("native_mcp", adapter["forbidden"])
         self.assertEqual(adapter["operations"]["runtime.capture"], "ai_orch memory learn")
         self.assertEqual(adapter["operations"]["runtime.prefetch"], "ai_orch memory search")
-        self.assertNotIn("memory.learn", ai_orch.ALLOWED_TOOLS)
+        # ai_orch memory learn uses the terminal capture endpoint, not the MCP tool.
         self.assertNotIn("memory.learn", ai_orch._OPERATION_TOOLS)
         parsed = parser().parse_args(["memory", "learn", "--file", "memory-learn.json"])
         self.assertEqual(parsed.operation, "memory.learn")
@@ -429,12 +429,14 @@ class MemoryLifecycleTest(CommandTestCase):
 
 
 class AgentLearningCommandTest(CommandTestCase):
-    def test_memory_exposes_search_learn_update_and_archive_only(self) -> None:
+    def test_memory_exposes_every_memory_command(self) -> None:
         root_choices = parser()._subparsers._group_actions[0].choices
         self.assertNotIn("operation", root_choices)
-        self.assertNotIn("context", root_choices)
         memory_choices = root_choices["memory"]._subparsers._group_actions[0].choices
-        self.assertEqual(set(memory_choices), {"search", "learn", "update", "archive"})
+        self.assertEqual(
+            set(memory_choices),
+            {"search", "get", "write", "pending", "confirm", "relate", "learn", "update", "archive"},
+        )
         for retired in ("context.resolve", "context.open", "operation.status"):
             self.assertNotIn(retired, ai_orch.ALLOWED_TOOLS)
             self.assertNotIn(retired, ai_orch._OPERATION_TOOLS)
@@ -750,7 +752,48 @@ class RequestFileContractTest(CommandTestCase):
             ai_orch.read_request_file(str(directory), str(self.workspace.root), "request")
 
 
-class RetiredCodebaseAndReferenceExamples:
+class CodebaseScanAndReferenceTest(CommandTestCase):
+    def test_scan_start_binds_the_project_and_passes_provider_override(self) -> None:
+        request = self.workspace.request("scan.json", {"force": True, "providerOverride": "codex"})
+        _, client = self.run_command(["scan", "start", "--file", request])
+        self.assertEqual(
+            client.calls[-1],
+            (
+                "scanner.scan.start",
+                {"rootPath": str(self.workspace.root), "projectKey": "RESOLVED", "force": True,
+                 "providerOverride": "codex"},
+            ),
+        )
+        _, client = self.run_command(["scan", "run"])
+        self.assertEqual(client.calls[-1][0], "scanner.scan")
+
+    def test_memory_write_may_target_global_scope(self) -> None:
+        request = self.workspace.request(
+            "write.json",
+            {"summary": "s", "content": "c", "memoryType": "decision", "scope": "global"},
+        )
+        _, client = self.run_command(["memory", "write", "--file", request])
+        self.assertEqual(
+            client.calls[-1],
+            ("memory.write", {"summary": "s", "content": "c", "memoryType": "decision",
+                              "scope": "global"}),
+        )
+
+    def test_memory_update_repairs_locators_of_a_global_memory(self) -> None:
+        memory_id = "11111111-1111-1111-1111-111111111111"
+        request = self.workspace.request(
+            "update.json",
+            {"memoryId": memory_id, "reason": "locator moved",
+             "codeLocators": [{"kind": "FILE", "ref": "src/A.java"}]},
+        )
+        results = {"memory.get": {"id": memory_id, "scope": "global", "status": "stale"}}
+        _, client = self.run_command(["memory", "update", "--file", request], results)
+        self.assertEqual(
+            client.calls[-1],
+            ("memory.update", {"memoryId": memory_id, "reason": "locator moved",
+                               "codeLocators": [{"kind": "FILE", "ref": "src/A.java"}]}),
+        )
+
     def test_symbol_neighbors_maps_the_cli_ref_alias_to_symbol_id(self) -> None:
         _, client = self.run_command(
             ["codebase", "symbol", "neighbors", "--ref", "MemoryService#write", "--depth", "2"]
@@ -823,19 +866,6 @@ class RetiredCodebaseAndReferenceExamples:
         )
         self.expect_failure(["reference", "write", "--file", bad])
 
-    def test_graph_retrieval_is_bounded_and_project_bound(self) -> None:
-        request = self.workspace.request(
-            "graph.json", {"query": "write gate", "topK": 5, "maxDepth": 2}
-        )
-        _, client = self.run_command(["context", "graph", "retrieve", "--file", request])
-        self.assertEqual(
-            client.calls[-1][1],
-            {"query": "write gate", "projectKey": "RESOLVED", "topK": 5, "maxDepth": 2},
-        )
-        too_deep = self.workspace.request(
-            "graph2.json", {"query": "x", "maxDepth": 9}
-        )
-        self.expect_failure(["context", "graph", "retrieve", "--file", too_deep])
 
 
 class JobAndPersonalMemoryTest(CommandTestCase):
@@ -1117,16 +1147,35 @@ class DiagnosticTest(CommandTestCase):
         self.assertEqual(
             commands,
             {
+                "project.resolve",
+                "scan.run",
+                "scan.start",
+                "scan.status",
+                "scan.result",
+                "scan.diagnostics",
+                "scan.cancel",
                 "rule.instructions",
                 "rule.draft",
                 "rule.preview",
                 "rule.promote",
                 "memory.search",
+                "memory.get",
+                "memory.write",
+                "memory.pending",
+                "memory.confirm",
+                "memory.relation.write",
                 "memory.learn",
                 "memory.update",
                 "memory.archive",
+                "codebase.baseline.search",
+                "codebase.symbol.get",
+                "codebase.symbol.neighbors",
+                "codebase.impact.analyze",
+                "codebase.diagnose",
                 "reference.list",
                 "reference.read",
+                "reference.mkdir",
+                "reference.write",
                 "last-job.save",
                 "last-job.get",
                 "job.save",
@@ -1157,6 +1206,7 @@ class DiagnosticTest(CommandTestCase):
             )
         )
         self.assertTrue(any("not proof" in w for w in output["warnings"]))
+        self.assertNotIn("excluded", output["result"])
 
     def test_doctor_is_read_only_and_reports_missing_operations(self) -> None:
         client = FakeClient()
@@ -1172,25 +1222,20 @@ class DiagnosticTest(CommandTestCase):
 
 
 class ScopeBoundaryTest(CommandTestCase):
-    def test_no_command_reaches_a_scanner_scan_or_admin_operation(self) -> None:
-        for name in (
-            "scanner.scan",
-            "scanner.scan.start",
-            "memory.approve",
-            "memory.review.pending",
-            "memory.review.decide",
-            "knowledge.ingest",
-            "architecture.understand.start",
-        ):
+    def test_unregistered_tools_are_refused(self) -> None:
+        for name in ("knowledge.ingest", "architecture.understand.start", "plans.check"):
             with self.subTest(name=name), self.assertRaises(ai_orch.BridgeError):
                 ai_orch.validate_dispatch(name, {})
 
-    def test_provider_override_is_never_sent(self) -> None:
-        with self.assertRaises(ai_orch.BridgeError):
-            ai_orch.validate_dispatch(
-                "memory.search",
-                {"query": "x", "projectKey": "P", "providerOverride": "claude"},
-            )
+    def test_provider_override_is_passed_through(self) -> None:
+        ai_orch.validate_dispatch(
+            "memory.search",
+            {"query": "x", "projectKey": "P", "providerOverride": "claude"},
+        )
+        _, client = self.run_command(
+            ["memory", "search", "--query", "x", "--provider-override", "claude"]
+        )
+        self.assertEqual(client.calls[-1][1]["providerOverride"], "claude")
 
     def test_every_operation_maps_to_an_allowlisted_tool(self) -> None:
         for operation, tool in ai_orch._OPERATION_TOOLS.items():
@@ -1219,14 +1264,10 @@ class LinkedReferenceReadTest(CommandTestCase):
             [("reference.list", {"dir": "Pilotlama/MOBIL_MOBILEAPP_BE"})],
         )
 
-    def test_reference_mutations_remain_unavailable(self) -> None:
-        for argv in (
-            ["reference", "mkdir", "--dir", "Pilotlama/x"],
-            ["reference", "write", "--file", "reference.json"],
-        ):
-            with self.subTest(argv=argv), patch("sys.stderr", new=io.StringIO()):
-                with self.assertRaises(SystemExit):
-                    parser().parse_args(argv)
+    def test_reference_mkdir_is_local_user(self) -> None:
+        output, client = self.run_command(["reference", "mkdir", "--dir", "Pilotlama/x"])
+        self.assertEqual(output["context"]["scopeKind"], ai_orch.SCOPE_LOCAL_USER)
+        self.assertEqual(client.calls, [("reference.mkdir", {"relativePath": "Pilotlama/x"})])
 
     def test_explicit_repo_root_must_match_a_bound_trusted_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as other:

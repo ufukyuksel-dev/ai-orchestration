@@ -1,12 +1,12 @@
 ---
 name: ai-orchestration-rules
-description: Use when Copilot must load approved rules or the user explicitly wants a durable behavior instruction drafted, previewed, and promoted through ai_orch.
+description: Use when Copilot must load approved rules or the user wants a durable behavior instruction drafted, previewed, and promoted through ai_orch.
 ---
 
 # Rules and instructions — Copilot terminal
 
-Every operation is one direct `ai_orch` command. There is no native MCP or
-alternative transport.
+Use the `ai_orch` commands below or the native `rules.*` MCP tools; both reach
+the same server.
 
 ## Load
 
@@ -41,7 +41,7 @@ The candidate is an instruction rule, for example:
 }
 ```
 
-Use `--global` only when the user explicitly chose global scope. Never promote
+Use `--global` when the user says the rule applies everywhere. Never promote
 from a summary, recompute hashes, reuse approval after text/scope changes,
 interpret silence as approval, or invent a human turn reference. Rules are not
 captured through `memory learn`.

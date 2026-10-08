@@ -15,6 +15,22 @@ from unittest.mock import patch
 import ai_orch
 
 
+REGISTERED_SERVER_TOOLS = {
+    "session.bootstrap", "memory.learn", "extras",
+    "scanner.project.resolve", "scanner.scan", "scanner.scan.start", "scanner.scan.status",
+    "scanner.scan.result", "scanner.scan.diagnostics", "scanner.scan.cancel",
+    "rules.instructions", "rules.draft", "rules.preview", "rules.promote",
+    "memory.search", "memory.get", "memory.write", "memory.update", "memory.delete",
+    "memory.pending", "memory.confirm", "memory.approve", "memory.review.pending",
+    "memory.review.decide", "memory.relation.write",
+    "codebase.baseline.search", "codebase.symbol.get", "codebase.symbol.neighbors",
+    "codebase.impact.analyze", "codebase.diagnose",
+    "reference.list", "reference.read", "reference.mkdir", "reference.write",
+    "last_job.save", "last_job.get", "job_memory.save", "job_memory.search", "job_memory.get",
+    "personal_memory.save", "personal_memory.search",
+}
+
+
 class FakeClient:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict]] = []
@@ -44,8 +60,11 @@ class ParserAndAllowlistTest(unittest.TestCase):
         self.assertEqual(
             set(root_action.choices),
             {
+                "project",
+                "scan",
                 "rule",
                 "memory",
+                "codebase",
                 "reference",
                 "last-job",
                 "job",
@@ -54,54 +73,9 @@ class ParserAndAllowlistTest(unittest.TestCase):
                 "doctor",
             },
         )
-        self.assertEqual(
-            set(ai_orch.ALLOWED_TOOLS),
-            {
-                # Internal project binding; never advertised as a command.
-                "scanner.project.resolve",
-                "rules.instructions",
-                "rules.draft",
-                "rules.preview",
-                "rules.promote",
-                "memory.search",
-                # Agents may correct or archive a wrong project memory without human approval.
-                "memory.get",
-                "memory.update",
-                "memory.delete",
-                "reference.list",
-                "reference.read",
-                "last_job.get",
-                "last_job.save",
-                "job_memory.save",
-                "job_memory.search",
-                "job_memory.get",
-                "personal_memory.save",
-                "personal_memory.search",
-            },
-        )
-        for name in (
-            "scanner.project.resolve",
-            "rules.instructions",
-            "rules.draft",
-            "rules.preview",
-            "rules.promote",
-            "memory.search",
-            "reference.list",
-            "reference.read",
-        ):
-            self.assertIn(name, ai_orch.ALLOWED_TOOLS)
-        for forbidden in (
-            "plans.check",
-            "scanner.scan",
-            "memory.write",
-            "memory.approve",
-            "memory.review.pending",
-            "memory.review.decide",
-            "reference.mkdir",
-            "reference.write",
-            "knowledge.ingest",
-        ):
-            self.assertNotIn(forbidden, ai_orch.ALLOWED_TOOLS)
+        # The bridge covers every tool the server registers; nothing is held back.
+        self.assertEqual(set(ai_orch.ALLOWED_TOOLS), REGISTERED_SERVER_TOOLS)
+        self.assertNotIn("plans.check", ai_orch.ALLOWED_TOOLS)
         self.assertEqual(len(set(ai_orch.ALLOWED_TOOLS)), len(ai_orch.ALLOWED_TOOLS))
         for retired in ("context.resolve", "context.open", "operation.status"):
             self.assertNotIn(retired, ai_orch.ALLOWED_TOOLS)

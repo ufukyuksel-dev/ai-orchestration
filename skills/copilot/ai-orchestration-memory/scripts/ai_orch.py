@@ -1,20 +1,16 @@
 #!/usr/bin/env python3
-"""Canonical terminal bridge for AI Orchestration workflows used by Copilot.
+"""Terminal bridge for AI Orchestration workflows (any agent, Copilot included).
 
-The command deliberately has no generic tool-dispatch surface. Every command
-resolves one explicit scope class, binds the target project itself, and calls a
-single fixed allowlisted server operation with a validated argument shape.
+Every command resolves its scope class, binds the target project itself, and
+calls one server tool with a validated argument shape. The tool table covers
+every tool the server registers; the server enforces scopes and the hard-delete
+confirmation. Agents can use the same server natively over MCP as well.
 
-There is no `ai_orch call <tool>`, no `--tool`, no `--endpoint`, no
-`--project-key` and no raw JSON-RPC. Request files carry operation payloads
-only; `tool`, `endpoint`, `command`, `Authorization`, `projectKey`, `scope`,
-`rootPath`, `providerOverride`, schema/binding fields, and learning identifiers
-are bridge-owned and rejected. A learn file carries only semantic
+There is no `ai_orch call <tool>`, no `--endpoint` and no `--project-key`.
+Request files carry operation payloads only; `tool`, `endpoint`, `command`,
+`Authorization`, `projectKey`, `rootPath`, schema/binding fields and learning
+identifiers are bridge-owned and rejected. A learn file carries only semantic
 `learningCandidates` with human-readable code locators.
-
-The process talks to the local AI Orchestration service over pinned loopback
-transports. Those are internal transport details; Copilot itself has no native
-MCP registration or backend endpoint access for this service.
 """
 
 from __future__ import annotations
@@ -81,137 +77,10 @@ EXIT_ERROR = 2
 # Commands whose stdout envelope predates this contract. Their shape is frozen.
 LEGACY_ENVELOPE_OPERATIONS = frozenset({"rule.draft", "rule.preview", "rule.promote"})
 
-ALLOWED_TOOLS = (
-    "scanner.project.resolve",
-    "rules.instructions",
-    "rules.draft",
-    "rules.preview",
-    "rules.promote",
-    "memory.search",
-    "memory.get",
-    "memory.update",
-    "memory.delete",
-    "reference.list",
-    "reference.read",
-    "last_job.get",
-    "last_job.save",
-    "job_memory.save",
-    "job_memory.search",
-    "job_memory.get",
-    "personal_memory.save",
-    "personal_memory.search",
-)
-
-# Exact argument names accepted per server operation, read from the live
-# tools/list schema. A supplied key outside this set never reaches the network.
-_TOOL_ARGUMENTS: dict[str, frozenset[str]] = {
-    "scanner.project.resolve": frozenset({"rootPath"}),
-    "scanner.scan": frozenset({"rootPath", "projectKey", "force", "semanticModel", "forceReindex", "includePaths", "excludePaths", "maxSemanticFiles", "maxSemanticSymbols", "semanticEnabled"}),
-    "scanner.scan.start": frozenset({"rootPath", "projectKey", "force", "semanticModel", "forceReindex", "includePaths", "excludePaths", "maxSemanticFiles", "maxSemanticSymbols", "maxSemanticFlows", "semanticEnabled"}),
-    "scanner.scan.status": frozenset({"scanRunId", "projectKey"}),
-    "scanner.scan.result": frozenset({"scanRunId", "projectKey", "diagnosticLimit"}),
-    "scanner.scan.diagnostics": frozenset({"scanRunId", "projectKey", "limit"}),
-    "scanner.scan.cancel": frozenset({"scanRunId", "projectKey", "reason"}),
-    "rules.instructions": frozenset({"projectKey", "scope", "modulePaths"}),
-    "rules.draft": frozenset({"projectKey", "candidateJson"}),
-    "rules.preview": frozenset({"projectKey", "draftId"}),
-    "rules.promote": frozenset(
-        {
-            "projectKey",
-            "draftId",
-            "expectedCandidateHash",
-            "expectedApprovalContentHash",
-            "expectedConfirmationCardHash",
-            "workflowContractVersion",
-            "humanRawText",
-            "humanTurnRef",
-            "aiInterpretedAsApproval",
-            "agentConfidence",
-        }
-    ),
-    "memory.search": frozenset({"query", "topK", "projectKey", "excerptMaxChars", "view"}),
-    "memory.get": frozenset({"memoryId", "view"}),
-    "memory.write": frozenset(
-        {
-            "summary",
-            "content",
-            "memoryType",
-            "tags",
-            "sourceRef",
-            "scope",
-            "projectKey",
-            "codeLocators",
-        }
-    ),
-    "memory.update": frozenset(
-        {
-            "memoryId",
-            "summary",
-            "content",
-            "tags",
-            "confidence",
-            "scope",
-            "projectKey",
-            "sourceRef",
-            "reason",
-            "codeLocators",
-        }
-    ),
-    "memory.pending": frozenset({"projectKey", "limit", "offset"}),
-    "memory.confirm": frozenset(
-        {
-            "memoryId",
-            "decision",
-            "aiInterpretedAsApproval",
-            "humanRawText",
-            "agentConfidence",
-            "humanTurnRef",
-            "projectKey",
-            "editedText",
-            "reason",
-        }
-    ),
-    "memory.delete": frozenset({"memoryId", "mode", "reason"}),
-    "memory.relation.write": frozenset(
-        {"projectKey", "sourceId", "targetKind", "targetId", "type", "explanation", "sectionKey", "contentHash"}
-    ),
-    "mcp.transcript.submit": frozenset({"content", "sessionId", "source", "projectKey"}),
-    "codebase.baseline.search": frozenset({"query", "topK", "projectKey"}),
-    "codebase.symbol.get": frozenset({"ref", "edgeLimit", "projectKey"}),
-    "codebase.symbol.neighbors": frozenset(
-        {"symbolId", "depth", "edgeTypes", "projectKey"}
-    ),
-    "codebase.impact.analyze": frozenset({"ref", "projectKey"}),
-    "codebase.diagnose": frozenset(
-        {"symptom", "errorText", "stackTrace", "changedFiles", "projectKey"}
-    ),
-    "reference.list": frozenset({"dir", "cursor", "limit"}),
-    "reference.read": frozenset({"relativePath", "offsetBytes", "maxBytes"}),
-    "reference.mkdir": frozenset({"relativePath"}),
-    "reference.write": frozenset({"relativePath", "content", "expectedHash"}),
-    "context.graph.retrieve": frozenset(
-        {
-            "query",
-            "projectKey",
-            "topK",
-            "maxDepth",
-            "retrievalMode",
-            "includeStale",
-            "includeSimilarityBackfill",
-            "includeMemorySeeds",
-            "includeRawSourceLines",
-        }
-    ),
-    "last_job.save": frozenset({"content"}),
-    "last_job.get": frozenset(),
-    "job_memory.save": frozenset({"title", "summary", "content", "jobId"}),
-    "job_memory.search": frozenset({"query", "topK"}),
-    "job_memory.get": frozenset({"jobId"}),
-    "personal_memory.save": frozenset({"content"}),
-    "personal_memory.search": frozenset({"query", "topK"}),
-    "knowledge.ask": frozenset({"question", "topK"}),
-    "knowledge.cite": frozenset({"chunkId"}),
-}
+# Every tool the server registers, with its exact argument names. A supplied key
+# outside this set never reaches the network.
+ALLOWED_TOOLS = memory_bridge.ALLOWED_TOOLS
+_TOOL_ARGUMENTS: dict[str, frozenset[str]] = memory_bridge.TOOL_ARGUMENTS
 
 # Fields a request file may never carry: they are owned by the bridge or would
 # turn a typed command into a generic dispatcher.
@@ -222,8 +91,6 @@ BRIDGE_OWNED_FIELDS = frozenset(
         "scope",
         "rootPath",
         "root_path",
-        "providerOverride",
-        "provider_override",
         "tool",
         "toolName",
         "endpoint",
@@ -615,8 +482,6 @@ def validate_dispatch(name: str, arguments: dict[str, Any]) -> None:
     unexpected = sorted(supplied - allowed_arguments)
     if unexpected:
         raise BridgeError(f"unsupported argument for {name}: {unexpected[0]}")
-    if "providerOverride" in supplied:
-        raise BridgeError("ai_orch never sends a provider override")
 
     if name == "scanner.project.resolve":
         root_path = arguments.get("rootPath")
@@ -631,15 +496,14 @@ def validate_dispatch(name: str, arguments: dict[str, Any]) -> None:
             )
         return
 
-    if name == "memory.delete" and arguments.get("mode") != "archive":
-        raise BridgeError("ai_orch permits archive mode only")
-    if name in {"memory.write", "memory.update"} and arguments.get("scope") != "project":
-        raise BridgeError("ai_orch permits project-scoped memory mutations only")
-    if name == "mcp.transcript.submit" and arguments.get("source") != "copilot":
-        raise BridgeError("the transcript source must be copilot")
+    if name == "memory.delete":
+        memory_bridge.validate_delete(arguments)
 
     if name in _GLOBAL_RULE_OPERATIONS and "projectKey" not in supplied:
         # Intentional omission for an explicit global rule authoring call.
+        pass
+    elif name in _SCOPED_MEMORY_MUTATIONS and arguments.get("scope") != "project":
+        # Global memory, or an update that keeps the record's current scope.
         pass
     elif "projectKey" in allowed_arguments and name not in _PROJECT_KEY_OPTIONAL:
         project_key = arguments.get("projectKey")
@@ -652,7 +516,19 @@ def validate_dispatch(name: str, arguments: dict[str, Any]) -> None:
 
 
 _GLOBAL_RULE_OPERATIONS = frozenset({"rules.draft", "rules.preview", "rules.promote"})
-_PROJECT_KEY_OPTIONAL = frozenset({"memory.get"})
+_SCOPED_MEMORY_MUTATIONS = frozenset({"memory.write", "memory.update"})
+# Tools whose project-bound commands must always carry the resolved projectKey.
+_PROJECT_KEY_REQUIRED = frozenset(
+    {
+        "rules.instructions", "memory.search", "memory.pending", "memory.confirm",
+        "memory.relation.write", "codebase.baseline.search", "codebase.symbol.get",
+        "codebase.symbol.neighbors", "codebase.impact.analyze", "codebase.diagnose",
+        "scanner.scan", "scanner.scan.start", "scanner.scan.status", "scanner.scan.result",
+        "scanner.scan.diagnostics", "scanner.scan.cancel", "rules.draft", "rules.preview",
+        "rules.promote", "memory.write", "memory.update",
+    }
+)
+_PROJECT_KEY_OPTIONAL = frozenset(set(memory_bridge.TOOL_ARGUMENTS) - _PROJECT_KEY_REQUIRED)
 
 
 def _validate_rules_instructions(arguments: dict[str, Any]) -> None:
@@ -867,12 +743,15 @@ def _add_repo_root_argument(command: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ai_orch",
-        description="Project-bound AI Orchestration terminal bridge for Copilot.",
+        description="Project-bound AI Orchestration terminal bridge.",
     )
     groups = parser.add_subparsers(dest="group", required=True)
 
+    _build_project_group(groups)
+    _build_scan_group(groups)
     _build_rule_group(groups)
     _build_memory_group(groups)
+    _build_codebase_group(groups)
     _build_reference_group(groups)
     _build_job_groups(groups)
     _build_diagnostic_group(groups)
@@ -880,7 +759,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _build_project_group(groups: Any) -> None:
-    project = groups.add_parser("project", help="resolve the bound project without scanning")
+    project = groups.add_parser("project", help="resolve the bound project")
     actions = project.add_subparsers(dest="action", required=True)
     resolve = actions.add_parser("resolve", help="resolve the canonical projectKey")
     _add_repo_root_argument(resolve)
@@ -888,17 +767,19 @@ def _build_project_group(groups: Any) -> None:
 
 
 def _build_scan_group(groups: Any) -> None:
-    scan = groups.add_parser("scan", help="scan the bound repository")
+    scan = groups.add_parser(
+        "scan", help="build or refresh the code map (when it is missing or out of date)"
+    )
     actions = scan.add_subparsers(dest="action", required=True)
 
     run = actions.add_parser("run", help="run a synchronous code scan")
     _add_repo_root_argument(run)
-    run.add_argument("--file", required=True, help="scan options JSON file")
+    run.add_argument("--file", help="optional scan options JSON file")
     run.set_defaults(operation="scan.run")
 
     start = actions.add_parser("start", help="queue an asynchronous code scan")
     _add_repo_root_argument(start)
-    start.add_argument("--file", required=True, help="scan options JSON file")
+    start.add_argument("--file", help="optional scan options JSON file")
     start.set_defaults(operation="scan.start")
 
     for action, operation in (("status", "scan.status"), ("result", "scan.result"),
@@ -969,7 +850,7 @@ def _build_rule_group(groups: Any) -> None:
 
 
 def _build_memory_group(groups: Any) -> None:
-    memory = groups.add_parser("memory", help="selective retrieval and one-shot learning")
+    memory = groups.add_parser("memory", help="project memory: search, learn, repair")
     actions = memory.add_subparsers(dest="action", required=True)
 
     search = actions.add_parser("search", help="search compact project-memory previews")
@@ -984,7 +865,40 @@ def _build_memory_group(groups: Any) -> None:
         type=_cli_bounded_int(128, 1024, "excerpt-max-chars"),
     )
     search.add_argument("--view", choices=("agent", "debug"))
+    search.add_argument("--provider-override", dest="provider_override")
     search.set_defaults(operation="memory.search")
+
+    get = actions.add_parser("get", help="read one memory record")
+    _add_repo_root_argument(get)
+    get.add_argument("--memory-id", dest="memory_id", required=True)
+    get.add_argument("--view", choices=("agent", "debug"))
+    get.set_defaults(operation="memory.get")
+
+    write = actions.add_parser("write", help="write one memory record from a JSON file")
+    _add_repo_root_argument(write)
+    write.add_argument(
+        "--file",
+        required=True,
+        help="JSON with summary, content, memoryType and optional tags, sourceRef, codeLocators, "
+        "scope (project|global), providerOverride",
+    )
+    write.set_defaults(operation="memory.write")
+
+    pending = actions.add_parser("pending", help="list pending memory of this project")
+    _add_repo_root_argument(pending)
+    pending.add_argument("--limit", default=5, type=_cli_bounded_int(1, 100, "limit"))
+    pending.add_argument("--offset", default=0, type=_cli_bounded_int(0, 10000, "offset"))
+    pending.set_defaults(operation="memory.pending")
+
+    confirm = actions.add_parser("confirm", help="apply the user's decision to a pending memory")
+    _add_repo_root_argument(confirm)
+    confirm.add_argument("--file", required=True)
+    confirm.set_defaults(operation="memory.confirm")
+
+    relate = actions.add_parser("relate", help="link a memory to another memory or a reference")
+    _add_repo_root_argument(relate)
+    relate.add_argument("--file", required=True)
+    relate.set_defaults(operation="memory.relation.write")
 
     learn = actions.add_parser(
         "learn",
@@ -1001,19 +915,20 @@ def _build_memory_group(groups: Any) -> None:
 
     update = actions.add_parser(
         "update",
-        help="correct a wrong or outdated project memory in place (no human approval needed)",
+        help="correct a wrong or outdated memory in place (fix its locators, text or tags)",
     )
     _add_repo_root_argument(update)
     update.add_argument(
         "--file",
         required=True,
-        help="JSON with memoryId, reason and any of summary, content, tags, confidence, sourceRef, codeLocators",
+        help="JSON with memoryId, reason and any of summary, content, tags, confidence, sourceRef, "
+        "codeLocators, scope",
     )
     update.set_defaults(operation="memory.update")
 
     archive = actions.add_parser(
         "archive",
-        help="soft-delete (archive) a wrong project memory; reversible, no human approval needed",
+        help="soft-delete (archive) a wrong memory; reversible",
     )
     _add_repo_root_argument(archive)
     archive.add_argument("--memory-id", dest="memory_id", required=True)
@@ -1023,7 +938,7 @@ def _build_memory_group(groups: Any) -> None:
 
 
 def _build_codebase_group(groups: Any) -> None:
-    codebase = groups.add_parser("codebase", help="bounded queries over the existing baseline")
+    codebase = groups.add_parser("codebase", help="queries over the code map")
     actions = codebase.add_subparsers(dest="action", required=True)
 
     baseline = actions.add_parser("baseline", help="baseline capsule search")
@@ -1067,9 +982,7 @@ def _build_codebase_group(groups: Any) -> None:
 
 
 def _build_reference_group(groups: Any) -> None:
-    reference = groups.add_parser(
-        "reference", help="read-only shared reference catalog (local-user)"
-    )
+    reference = groups.add_parser("reference", help="shared reference catalog (local-user)")
     actions = reference.add_subparsers(dest="action", required=True)
 
     listing = actions.add_parser("list", help="list one shared reference directory")
@@ -1090,21 +1003,18 @@ def _build_reference_group(groups: Any) -> None:
     )
     read.set_defaults(operation="reference.read")
 
+    mkdir = actions.add_parser("mkdir", help="create one shared reference directory")
+    mkdir.add_argument("--dir", required=True, dest="directory")
+    mkdir.set_defaults(operation="reference.mkdir")
 
-def _build_context_group(groups: Any) -> None:
-    context = groups.add_parser("context", help="bounded graph context")
-    actions = context.add_subparsers(dest="action", required=True)
-    graph = actions.add_parser("graph", help="graph retrieval")
-    graph_actions = graph.add_subparsers(dest="sub_action", required=True)
-    retrieve = graph_actions.add_parser("retrieve", help="bounded graph retrieval")
-    _add_repo_root_argument(retrieve)
-    retrieve.add_argument("--file", required=True)
-    retrieve.set_defaults(operation="context.graph.retrieve")
+    write = actions.add_parser("write", help="write one shared reference file")
+    write.add_argument("--file", required=True, help="JSON with relativePath, content, expectedHash?")
+    write.set_defaults(operation="reference.write")
 
 
 def _build_job_groups(groups: Any) -> None:
     last_job = groups.add_parser(
-        "last-job", help="the single local-user LAST_JOB checkpoint (explicit request only)"
+        "last-job", help="the single local-user LAST_JOB checkpoint"
     )
     last_actions = last_job.add_subparsers(dest="action", required=True)
     last_save = last_actions.add_parser("save", help="replace the single checkpoint")
@@ -1113,7 +1023,7 @@ def _build_job_groups(groups: Any) -> None:
     last_get = last_actions.add_parser("get", help="read the single checkpoint")
     last_get.set_defaults(operation="last-job.get")
 
-    job = groups.add_parser("job", help="named local-user job records (explicit request only)")
+    job = groups.add_parser("job", help="named local-user job records")
     job_actions = job.add_subparsers(dest="action", required=True)
     job_save = job_actions.add_parser("save", help="save or update one named job")
     job_save.add_argument("--file", required=True)
@@ -1129,7 +1039,7 @@ def _build_job_groups(groups: Any) -> None:
     job_get.set_defaults(operation="job.get")
 
     personal = groups.add_parser(
-        "personal-memory", help="project-independent personal facts (explicit request only)"
+        "personal-memory", help="project-independent personal facts"
     )
     personal_actions = personal.add_subparsers(dest="action", required=True)
     personal_save = personal_actions.add_parser("save", help="save one personal fact")
@@ -1143,20 +1053,9 @@ def _build_job_groups(groups: Any) -> None:
     personal_search.set_defaults(operation="personal-memory.search")
 
 
-def _build_knowledge_group(groups: Any) -> None:
-    knowledge = groups.add_parser("knowledge", help="read ingested knowledge sources")
-    actions = knowledge.add_subparsers(dest="action", required=True)
-    ask = actions.add_parser("ask", help="ask the knowledge base")
-    ask.add_argument("--file", required=True)
-    ask.set_defaults(operation="knowledge.ask")
-    cite = actions.add_parser("cite", help="fetch one knowledge chunk for citation")
-    cite.add_argument("--file", required=True)
-    cite.set_defaults(operation="knowledge.cite")
-
-
 def _build_diagnostic_group(groups: Any) -> None:
     capabilities = groups.add_parser(
-        "capabilities", help="list allowlisted commands and their availability"
+        "capabilities", help="list commands and their availability"
     )
     capabilities.set_defaults(operation="capabilities")
     doctor = groups.add_parser(
@@ -1171,6 +1070,25 @@ def _build_diagnostic_group(groups: Any) -> None:
 # --------------------------------------------------------------------------
 
 _SCOPE_KINDS: dict[str, str] = {
+    "project.resolve": SCOPE_PROJECT,
+    "scan.run": SCOPE_PROJECT,
+    "scan.start": SCOPE_PROJECT,
+    "scan.status": SCOPE_PROJECT,
+    "scan.result": SCOPE_PROJECT,
+    "scan.diagnostics": SCOPE_PROJECT,
+    "scan.cancel": SCOPE_PROJECT,
+    "memory.get": SCOPE_PROJECT,
+    "memory.write": SCOPE_PROJECT,
+    "memory.pending": SCOPE_PROJECT,
+    "memory.confirm": SCOPE_PROJECT,
+    "memory.relation.write": SCOPE_PROJECT,
+    "codebase.baseline.search": SCOPE_PROJECT,
+    "codebase.symbol.get": SCOPE_PROJECT,
+    "codebase.symbol.neighbors": SCOPE_PROJECT,
+    "codebase.impact.analyze": SCOPE_PROJECT,
+    "codebase.diagnose": SCOPE_PROJECT,
+    "reference.mkdir": SCOPE_LOCAL_USER,
+    "reference.write": SCOPE_LOCAL_USER,
     "rule.instructions": SCOPE_PROJECT,
     "rule.draft": SCOPE_PROJECT,
     "rule.preview": SCOPE_PROJECT,
@@ -1193,6 +1111,25 @@ _SCOPE_KINDS: dict[str, str] = {
 }
 
 _OPERATION_TOOLS: dict[str, str] = {
+    "project.resolve": "scanner.project.resolve",
+    "scan.run": "scanner.scan",
+    "scan.start": "scanner.scan.start",
+    "scan.status": "scanner.scan.status",
+    "scan.result": "scanner.scan.result",
+    "scan.diagnostics": "scanner.scan.diagnostics",
+    "scan.cancel": "scanner.scan.cancel",
+    "memory.get": "memory.get",
+    "memory.write": "memory.write",
+    "memory.pending": "memory.pending",
+    "memory.confirm": "memory.confirm",
+    "memory.relation.write": "memory.relation.write",
+    "codebase.baseline.search": "codebase.baseline.search",
+    "codebase.symbol.get": "codebase.symbol.get",
+    "codebase.symbol.neighbors": "codebase.symbol.neighbors",
+    "codebase.impact.analyze": "codebase.impact.analyze",
+    "codebase.diagnose": "codebase.diagnose",
+    "reference.mkdir": "reference.mkdir",
+    "reference.write": "reference.write",
     "rule.instructions": "rules.instructions",
     "rule.draft": "rules.draft",
     "rule.preview": "rules.preview",
@@ -1252,9 +1189,9 @@ def _b_project_resolve(args, project_key, repo_root):  # type: ignore[no-untyped
 
 
 def _scan_payload(args, project_key, repo_root, *, async_start: bool) -> dict[str, Any]:
-    payload = read_request_file(args.file, repo_root, "scan request")
-    optional = ["force", "semanticModel", "forceReindex", "includePaths", "excludePaths",
-                "maxSemanticFiles", "maxSemanticSymbols", "semanticEnabled"]
+    payload = read_request_file(args.file, repo_root, "scan request") if args.file else {}
+    optional = ["force", "providerOverride", "semanticModel", "forceReindex", "includePaths",
+                "excludePaths", "maxSemanticFiles", "maxSemanticSymbols", "semanticEnabled"]
     if async_start:
         optional.append("maxSemanticFlows")
     take_fields(payload, required=(), optional=tuple(optional))
@@ -1466,6 +1403,8 @@ def _b_memory_search(args, project_key, repo_root):  # type: ignore[no-untyped-d
         arguments["excerptMaxChars"] = args.excerpt_max_chars
     if args.view is not None:
         arguments["view"] = args.view
+    if args.provider_override:
+        arguments["providerOverride"] = _nonblank(args.provider_override, "provider-override")
     return arguments
 
 
@@ -1522,7 +1461,7 @@ def _b_memory_write(args, project_key, repo_root):  # type: ignore[no-untyped-de
     take_fields(
         payload,
         required=("summary", "content", "memoryType"),
-        optional=("tags", "sourceRef", "codeLocators"),
+        optional=("tags", "sourceRef", "codeLocators", "scope", "providerOverride"),
     )
     memory_type = payload["memoryType"]
     if memory_type not in MEMORY_TYPES:
@@ -1540,9 +1479,12 @@ def _b_memory_write(args, project_key, repo_root):  # type: ignore[no-untyped-de
             payload["content"], MAX_MEMORY_CONTENT_CHARS, "content"
         ),
         "memoryType": memory_type,
-        "scope": "project",
-        "projectKey": project_key,
+        "scope": _memory_scope(payload.get("scope", "project")),
     }
+    if arguments["scope"] == "project":
+        arguments["projectKey"] = project_key
+    if "providerOverride" in payload:
+        arguments["providerOverride"] = _nonblank(payload["providerOverride"], "providerOverride")
     if "tags" in payload:
         arguments["tags"] = _string_list(payload["tags"], "tags", 16)
     if "sourceRef" in payload:
@@ -1564,14 +1506,17 @@ def _b_memory_update(args, project_key, repo_root):  # type: ignore[no-untyped-d
             "confidence",
             "sourceRef",
             "codeLocators",
+            "scope",
         ),
     )
     arguments: dict[str, Any] = {
         "memoryId": _uuid_text(payload["memoryId"], "memoryId"),
         "reason": _nonblank(payload["reason"], "reason"),
-        "scope": "project",
-        "projectKey": project_key,
     }
+    if "scope" in payload:
+        arguments["scope"] = _memory_scope(payload["scope"])
+        if arguments["scope"] == "project":
+            arguments["projectKey"] = project_key
     if "summary" in payload:
         arguments["summary"] = _bounded_chars(
             payload["summary"], MAX_MEMORY_SUMMARY_CHARS, "summary"
@@ -1590,10 +1535,16 @@ def _b_memory_update(args, project_key, repo_root):  # type: ignore[no-untyped-d
         arguments["sourceRef"] = _nonblank(payload["sourceRef"], "sourceRef")
     if "codeLocators" in payload:
         arguments["codeLocators"] = _code_locators(payload["codeLocators"])
-    changed = set(arguments) - {"memoryId", "reason", "projectKey", "scope"}
+    changed = set(arguments) - {"memoryId", "reason", "projectKey"}
     if not changed:
         raise BridgeError("memory update requires at least one replacement field")
     return arguments
+
+
+def _memory_scope(value: Any) -> str:
+    if value not in ("project", "global"):
+        raise BridgeError("scope must be project or global")
+    return value
 
 
 def _b_memory_pending(args, project_key, repo_root):  # type: ignore[no-untyped-def]
@@ -1639,17 +1590,6 @@ def _b_memory_archive(args, project_key, repo_root):  # type: ignore[no-untyped-
         "memoryId": _uuid_text(args.memory_id, "memory ID"),
         "mode": "archive",
         "reason": _nonblank(args.reason, "reason"),
-    }
-
-
-def _b_memory_transcript(args, project_key, repo_root):  # type: ignore[no-untyped-def]
-    payload = read_request_file(args.file, repo_root, "transcript request")
-    take_fields(payload, required=("content", "sessionId"))
-    return {
-        "content": _nonblank(payload["content"], "content"),
-        "sessionId": _nonblank(payload["sessionId"], "sessionId"),
-        "source": "copilot",
-        "projectKey": project_key,
     }
 
 
@@ -1764,39 +1704,6 @@ def _b_reference_write(args, project_key, repo_root):  # type: ignore[no-untyped
     }
     if "expectedHash" in payload:
         arguments["expectedHash"] = _hash_text(payload["expectedHash"], "expectedHash")
-    return arguments
-
-
-def _b_graph_retrieve(args, project_key, repo_root):  # type: ignore[no-untyped-def]
-    payload = read_request_file(args.file, repo_root, "graph retrieval request")
-    take_fields(
-        payload,
-        required=("query",),
-        optional=(
-            "topK",
-            "maxDepth",
-            "retrievalMode",
-            "includeStale",
-            "includeSimilarityBackfill",
-            "includeMemorySeeds",
-        ),
-    )
-    arguments: dict[str, Any] = {
-        "query": _nonblank(payload["query"], "query"),
-        "projectKey": project_key,
-    }
-    if "topK" in payload:
-        arguments["topK"] = _bounded_json_int(payload["topK"], 1, 20, "topK")
-    if "maxDepth" in payload:
-        arguments["maxDepth"] = _bounded_json_int(payload["maxDepth"], 1, 3, "maxDepth")
-    if "retrievalMode" in payload:
-        mode = payload["retrievalMode"]
-        if mode not in ("hybrid", "qdrant-seed"):
-            raise BridgeError("retrievalMode must be hybrid or qdrant-seed")
-        arguments["retrievalMode"] = mode
-    for flag in ("includeStale", "includeSimilarityBackfill", "includeMemorySeeds"):
-        if flag in payload:
-            arguments[flag] = _bool_field(payload[flag], flag)
     return arguments
 
 
@@ -2072,21 +1979,6 @@ def _b_personal_search(args, project_key, repo_root):  # type: ignore[no-untyped
     }
 
 
-def _b_knowledge_ask(args, project_key, repo_root):  # type: ignore[no-untyped-def]
-    payload = read_request_file(args.file, repo_root, "knowledge request")
-    take_fields(payload, required=("question",), optional=("topK",))
-    arguments: dict[str, Any] = {"question": _nonblank(payload["question"], "question")}
-    if "topK" in payload:
-        arguments["topK"] = _bounded_json_int(payload["topK"], 1, 10, "topK")
-    return arguments
-
-
-def _b_knowledge_cite(args, project_key, repo_root):  # type: ignore[no-untyped-def]
-    payload = read_request_file(args.file, repo_root, "citation request")
-    take_fields(payload, required=("chunkId",))
-    return {"chunkId": _nonblank(payload["chunkId"], "chunkId")}
-
-
 _BUILDERS: dict[str, Callable[..., dict[str, Any]]] = {
     "project.resolve": _b_project_resolve,
     "scan.run": _b_scan_run,
@@ -2106,7 +1998,6 @@ _BUILDERS: dict[str, Callable[..., dict[str, Any]]] = {
     "memory.pending": _b_memory_pending,
     "memory.confirm": _b_memory_confirm,
     "memory.archive": _b_memory_archive,
-    "memory.transcript": _b_memory_transcript,
     "memory.relation.write": _b_relation_write,
     "memory.learn": _b_memory_learn,
     "codebase.baseline.search": _b_baseline_search,
@@ -2114,7 +2005,6 @@ _BUILDERS: dict[str, Callable[..., dict[str, Any]]] = {
     "codebase.symbol.neighbors": _b_symbol_neighbors,
     "codebase.impact.analyze": _b_impact_analyze,
     "codebase.diagnose": _b_diagnose,
-    "context.graph.retrieve": _b_graph_retrieve,
     "reference.list": _b_reference_list,
     "reference.read": _b_reference_read,
     "reference.mkdir": _b_reference_mkdir,
@@ -2126,8 +2016,6 @@ _BUILDERS: dict[str, Callable[..., dict[str, Any]]] = {
     "job.get": _b_job_get,
     "personal-memory.save": _b_personal_save,
     "personal-memory.search": _b_personal_search,
-    "knowledge.ask": _b_knowledge_ask,
-    "knowledge.cite": _b_knowledge_cite,
 }
 
 # Operations that must first prove the memory record belongs to the bound
@@ -2435,16 +2323,7 @@ def _capabilities_envelope(tools: list[dict[str, Any]]) -> dict[str, Any]:
         "success": True,
         "command": "capabilities",
         "context": {"scopeKind": SCOPE_DIAGNOSTIC, "contractVersion": CONTRACT_VERSION},
-        "result": {
-            "commands": commands,
-            "excluded": [
-                "memory.delete(mode=hard_delete)",
-                "memory.approve",
-                "memory.review.*",
-                "knowledge.ingest",
-                "providerOverride",
-            ],
-        },
+        "result": {"commands": commands},
         "warnings": [
             "An unavailable operation is not proof that the capability does not "
             "exist; it may be disabled or denied for this caller."
@@ -2479,9 +2358,8 @@ def _doctor_envelope(
             "commands are unavailable here."
         )
     warnings.append(
-        "doctor is read-only. It never grants scope, starts the service, repairs an "
-        "installation or triggers a scan. A present hook file is not proof that the "
-        "runtime actually invoked the hook."
+        "doctor is read-only. It never starts the service, repairs an installation "
+        "or triggers a scan."
     )
     return {
         "schemaVersion": SCHEMA_VERSION,
@@ -2495,7 +2373,6 @@ def _doctor_envelope(
             "repoRoot": repo_root,
             "explicitRepoRoot": explicit_root,
             "expectedRootBound": bool(os.environ.get("AI_ORCH_EXPECTED_ROOT")),
-            "guardEnvelopeActive": os.environ.get("AI_ORCH_COPILOT_GUARD") == "1",
             "stagingDir": str(staging_root()),
             "launchers": launchers,
             "missingOperations": missing,
