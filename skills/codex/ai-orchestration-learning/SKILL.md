@@ -39,3 +39,6 @@ Bad (do not send):
 3. "The timeout is probably configurable" — a guess, not verified.
 
 The response reports `created`, `reused` (an existing learned record matched), `duplicates` (the gate refused an already-covered fact; nothing saved) and `rejected`. Reused and duplicate are success, not errors — do not resend. Report only what the tool returned.
+
+## After the call
+After the call, read the receipt `items`: for an item with `outcome` `rejected` or with `unresolvedLocators`, fix that locator (exact `pkg.Class#method`, `signature` and repository `path`; check it with `codebase.symbol.get`) and send that one candidate once more. A stale card means the code it points to is gone: repair its locators with `memory.update` or archive it (`memory.delete` with `mode="archive"`), in the same task.

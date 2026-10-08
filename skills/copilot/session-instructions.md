@@ -1,32 +1,11 @@
 # AI Orchestration — Copilot terminal workflow
 
-Copilot has one AI Orchestration interface: the `ai_orch` terminal command.
-Selecting Claude or another model inside Copilot does not change this contract.
-
-## Exact capability boundary
-
-Only these task operations exist:
-
-```text
-memory.search     -> ai_orch memory search
-memory.learn      -> ai_orch memory learn
-memory.update     -> ai_orch memory update
-memory.archive    -> ai_orch memory archive
-reference.list    -> ai_orch reference list
-reference.read    -> ai_orch reference read
-rule.instructions -> ai_orch rule instructions
-rule.draft        -> ai_orch rule draft
-rule.preview      -> ai_orch rule preview
-rule.promote      -> ai_orch rule promote
-```
-
-`capabilities` and `doctor` are read-only diagnostics. All other historical
-commands are retired for Copilot. Never route around this boundary through MCP,
-HTTP, a database, a learning lifecycle hook, a Python entry point, another
-provider, or direct service configuration.
-
-Every call is one direct command. Do not pipe, redirect, chain, wrap, substitute,
-or prepend `cd`. The bridge owns repository resolution and private transport.
+Copilot reaches AI Orchestration through the native `ai-orchestration` MCP tools
+or the `ai_orch` terminal command; both use the same server and the same scopes
+as Claude Code and Codex. `ai_orch --help` lists every command (memory, rules,
+codebase, scan, references, jobs, personal memory); `ai_orch capabilities` shows
+what the server offers. Scan (`ai_orch scan start`) when the code map is missing
+or out of date.
 
 ## Startup rules
 
@@ -45,9 +24,8 @@ Read the complete returned statements. Load module scope only for a directory
 listed in the effective response. Remember the decision until project switch,
 context reset, or compaction. Do not ask again during the same session/project.
 On no, do not load global, project, or module
-rules for that session/project, but continue using supported non-rule
-capabilities such as `ai_orch memory search` and `ai_orch memory learn` when
-their conditions below are met. On a real load failure, stop rule-dependent
+rules for that session/project, but keep using the other capabilities such as
+`ai_orch memory search` and `ai_orch memory learn`. On a real load failure, stop rule-dependent
 work and report it; do not claim there are no rules.
 
 ## Selective retrieval
@@ -79,14 +57,18 @@ ai_orch memory learn --file memory-learn.json --consume
 ```
 
 Create the request file inside the current repository, not in Copilot's session
-workspace. Never scan or inspect baseline state for learning capture; the
-backend queues structural scanning when a valid symbol locator is not indexed.
+workspace. The backend queues structural scanning when a valid symbol locator is
+not indexed yet.
 
 Zero to three candidates may be submitted. Each candidate names concise facts
 and human-readable symbol/file/module locators. The bridge/backend owns task
 IDs, runtime identity, project binding, idempotency, locator resolution,
-deduplication, and persistence. Do not add extra discovery or verification
-calls solely to save learning. No durable finding means no call.
+deduplication, and persistence. No durable finding means no call.
+
+Read the receipt `items`: for an item with `outcome` `rejected` or with
+`unresolvedLocators`, fix that locator (exact `pkg.Class#method`, `signature`
+and repository `path`; check it with `ai_orch codebase symbol get --ref`) and
+send that one candidate once more.
 
 ## Correcting wrong memory
 
@@ -97,8 +79,10 @@ yourself in the same task; no human approval is needed:
   then save the corrected fact once with `ai_orch memory learn`.
 - Only metadata wrong (tags, confidence, code locators): `ai_orch memory update --file <request.json>`
   with `memoryId`, `reason` and the corrected fields. The request file must live inside the repository.
+- Stale card (the code it points to is gone): repair its `codeLocators` with
+  `ai_orch memory update` or archive it, in the same task.
 
-Archive is a reversible soft delete; never hard-delete.
+Archive is a reversible soft delete. Never hard-delete without the user's confirmation.
 
 ## Rule authoring
 

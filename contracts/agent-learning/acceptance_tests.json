@@ -366,16 +366,9 @@
         "CLAUDE_CODE",
         "CODEX"
       ],
-      "status": "PASS",
-      "evidence": [
-        {
-          "kind": "automated_test",
-          "path": "skills/copilot/ai-orchestration-memory/scripts/test_copilot_pre_tool_guard.py",
-          "observation": "single direct launcher and shell-control guard tests",
-          "observedAt": "2026-09-17"
-        }
-      ],
-      "reason": "Focused automated evidence passed in this workspace."
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Retired 2026-10-08: the Copilot preToolUse guard was removed; Copilot, Claude Code and Codex share one unrestricted surface (hard delete still needs the user's confirmation, enforced by the server)."
     },
     {
       "id": "AT-025",
@@ -484,16 +477,9 @@
         "CLAUDE_CODE",
         "CODEX"
       ],
-      "status": "PASS",
-      "evidence": [
-        {
-          "kind": "automated_test",
-          "path": "skills/copilot/ai-orchestration-memory/scripts/test_copilot_pre_tool_guard.py",
-          "observation": "hard delete/admin paths remain denied",
-          "observedAt": "2026-09-17"
-        }
-      ],
-      "reason": "Focused automated evidence passed in this workspace."
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Retired 2026-10-08: the Copilot preToolUse guard was removed; Copilot, Claude Code and Codex share one unrestricted surface (hard delete still needs the user's confirmation, enforced by the server)."
     },
     {
       "id": "AT-033",
@@ -2553,16 +2539,9 @@
         "CLAUDE_CODE",
         "CODEX"
       ],
-      "status": "PASS",
-      "evidence": [
-        {
-          "kind": "automated_test",
-          "path": "skills/copilot/ai-orchestration-memory/scripts/test_copilot_pre_tool_guard.py",
-          "observation": "new native names are denied and direct ai_orch operation status is allowed",
-          "observedAt": "2026-09-17"
-        }
-      ],
-      "reason": "Focused automated evidence passed in this workspace."
+      "status": "NOT_RUN",
+      "evidence": [],
+      "reason": "Retired 2026-10-08: the Copilot preToolUse guard was removed; Copilot, Claude Code and Codex share one unrestricted surface (hard delete still needs the user's confirmation, enforced by the server)."
     },
     {
       "id": "AT-159",

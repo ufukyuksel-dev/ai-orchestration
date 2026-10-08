@@ -11,7 +11,8 @@ Startup is already covered by the session contract (one `session.bootstrap` call
 2. Create `XxxMcpTool` in `modules/mcp/server`: `@Component` + `@ConditionalOnProperty(prefix="ai-orchestration.mcp", name="enabled", havingValue="true", matchIfMissing=true)`. Methods are annotated `@McpTool(name="x.y", description=...)` with `@McpToolParam` per argument.
 3. In each method: resolve context via `McpClientContextHolder.require()`, **scope-check** (`requireScope`/`context.hasScope`), and **audit** via `McpAuditLogger` for every outcome — success, `denied_scope`, error. Reject cross-project access.
 4. Register the scope in **all** of: `McpApiKeyService` tiers (prod keys); `LocalTrustProperties.DEFAULT_LOCAL_SCOPES` (fallback); the `ai-orchestration.local-trust.local-scopes` list in **both** `application.yml` and `application-local-first.yml` (these YAML lists override the constant, so the scope won't apply in local-first without them); and a Flyway `Vn__<name>_scope.sql` granting it to existing keys.
-5. Never bypass human-approval gates (hard-delete params, `memory.confirm`); redact before any external egress.
+5. Keep the hard-delete confirmation parameters and `memory.confirm` decision fields; redact before any external egress.
+7. Add the tool and its exact argument names to `TOOL_ARGUMENTS` in `skills/copilot/ai-orchestration-memory/scripts/memory_bridge.py` (the terminal bridge's table of every registered tool; `test_ai_orch.py` asserts it matches).
 6. Tests: missing-scope rejected + audited; happy path; ideally an integration test asserting the tool registers.
 
 Mirror an existing tool: `MemoryMcpTool`, `CodebaseMcpTool`, or `ScannerMcpTool`.

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Narrow AI Orchestration MemoryAI client for Copilot CLI.
+"""AI Orchestration MemoryAI client for Copilot CLI.
 
-This is intentionally not a generic MCP client. It exposes a fixed set of
-project-memory commands and never dispatches a model-supplied tool name. It is
-a safety guard for normal CLI use, not a sandbox for hostile local Python code.
+It exposes fixed project-memory commands and never dispatches a model-supplied
+tool name. The tool table below mirrors every tool the server registers; the
+server enforces scopes and the hard-delete confirmation.
 """
 
 from __future__ import annotations
@@ -25,19 +25,6 @@ PROTOCOL_VERSION = "2025-03-26"
 CLIENT_NAME = "copilot-cli-memory-skill"
 CLIENT_VERSION = "1.0.0"
 DEFAULT_TIMEOUT_SECONDS = 10.0
-
-ALLOWED_TOOLS = (
-    "scanner.project.resolve",
-    "memory.search",
-    "memory.get",
-    "memory.write",
-    "memory.update",
-    "memory.pending",
-    "memory.confirm",
-    "memory.delete",
-    "mcp.transcript.submit",
-)
-
 
 class BridgeError(RuntimeError):
     """Expected, safely reportable bridge failure."""
@@ -325,64 +312,111 @@ def _validated_session_id(value: str) -> str:
     return candidate
 
 
-_TOOL_ARGUMENTS: dict[str, frozenset[str]] = {
-    "scanner.project.resolve": frozenset({"rootPath"}),
-    "memory.search": frozenset({"query", "topK", "projectKey"}),
-    "memory.get": frozenset({"memoryId"}),
+# Every tool the server registers, with its exact argument names. A supplied key
+# outside this set never reaches the network.
+TOOL_ARGUMENTS: dict[str, frozenset[str]] = {
+    "session.bootstrap": frozenset({"rootPath", "task", "loadRules", "remember", "knownEtag", "cursor"}),
+    "memory.learn": frozenset({"rootPath", "candidates", "taskRunId"}),
+    "extras": frozenset({"op", "args"}),
+    "scanner.project.resolve": frozenset({"rootPath", "projectKey"}),
+    "scanner.scan": frozenset({"rootPath", "projectKey", "force", "providerOverride", "semanticModel", "forceReindex", "includePaths", "excludePaths", "maxSemanticFiles", "maxSemanticSymbols", "semanticEnabled"}),
+    "scanner.scan.start": frozenset({"rootPath", "projectKey", "force", "providerOverride", "semanticModel", "forceReindex", "includePaths", "excludePaths", "maxSemanticFiles", "maxSemanticSymbols", "maxSemanticFlows", "semanticEnabled"}),
+    "scanner.scan.status": frozenset({"scanRunId", "projectKey"}),
+    "scanner.scan.result": frozenset({"scanRunId", "projectKey", "diagnosticLimit"}),
+    "scanner.scan.diagnostics": frozenset({"scanRunId", "projectKey", "limit"}),
+    "scanner.scan.cancel": frozenset({"scanRunId", "projectKey", "reason"}),
+    "rules.instructions": frozenset({"projectKey", "scope", "modulePaths"}),
+    "rules.draft": frozenset({"projectKey", "candidateJson"}),
+    "rules.preview": frozenset({"projectKey", "draftId"}),
+    "rules.promote": frozenset(
+        {
+            "projectKey",
+            "draftId",
+            "expectedCandidateHash",
+            "expectedApprovalContentHash",
+            "expectedConfirmationCardHash",
+            "workflowContractVersion",
+            "humanRawText",
+            "humanTurnRef",
+            "aiInterpretedAsApproval",
+            "agentConfidence",
+        }
+    ),
+    "memory.search": frozenset(
+        {"query", "topK", "providerOverride", "projectKey", "excerptMaxChars", "view", "rootPath"}
+    ),
+    "memory.get": frozenset({"memoryId", "view"}),
     "memory.write": frozenset(
-        {"summary", "content", "memoryType", "tags", "sourceRef", "scope", "projectKey"}
+        {"summary", "content", "memoryType", "tags", "sourceRef", "scope", "providerOverride",
+         "projectKey", "codeLocators"}
     ),
     "memory.update": frozenset(
-        {
-            "memoryId",
-            "summary",
-            "content",
-            "tags",
-            "confidence",
-            "scope",
-            "projectKey",
-            "sourceRef",
-            "reason",
-        }
+        {"memoryId", "summary", "content", "tags", "confidence", "scope", "projectKey", "sourceRef",
+         "reason", "codeLocators"}
+    ),
+    "memory.delete": frozenset(
+        {"memoryId", "mode", "reason", "humanConfirmed", "humanTurnRef", "humanRawText"}
     ),
     "memory.pending": frozenset({"projectKey", "limit", "offset"}),
     "memory.confirm": frozenset(
-        {
-            "memoryId",
-            "decision",
-            "aiInterpretedAsApproval",
-            "humanRawText",
-            "agentConfidence",
-            "humanTurnRef",
-            "projectKey",
-            "editedText",
-            "reason",
-        }
+        {"memoryId", "decision", "aiInterpretedAsApproval", "humanRawText", "agentConfidence",
+         "humanTurnRef", "projectKey", "editedText", "reason"}
     ),
-    "memory.delete": frozenset({"memoryId", "mode", "reason"}),
-    "mcp.transcript.submit": frozenset({"content", "sessionId", "source", "projectKey"}),
+    "memory.approve": frozenset({"memoryId", "decision", "reason"}),
+    "memory.review.pending": frozenset({"projectKey", "limit", "offset"}),
+    "memory.review.decide": frozenset(
+        {"memoryId", "decision", "humanTurnRef", "editedText", "reason", "projectKey"}
+    ),
+    "memory.relation.write": frozenset(
+        {"projectKey", "sourceId", "targetKind", "targetId", "type", "explanation", "sectionKey", "contentHash"}
+    ),
+    "codebase.baseline.search": frozenset({"query", "topK", "projectKey"}),
+    "codebase.symbol.get": frozenset({"ref", "edgeLimit", "projectKey"}),
+    "codebase.symbol.neighbors": frozenset({"symbolId", "depth", "edgeTypes", "projectKey"}),
+    "codebase.impact.analyze": frozenset({"ref", "projectKey"}),
+    "codebase.diagnose": frozenset({"symptom", "errorText", "stackTrace", "changedFiles", "projectKey"}),
+    "reference.list": frozenset({"dir", "cursor", "limit"}),
+    "reference.read": frozenset({"relativePath", "offsetBytes", "maxBytes"}),
+    "reference.mkdir": frozenset({"relativePath"}),
+    "reference.write": frozenset({"relativePath", "content", "expectedHash"}),
+    "last_job.save": frozenset({"content"}),
+    "last_job.get": frozenset(),
+    "job_memory.save": frozenset({"title", "summary", "content", "jobId"}),
+    "job_memory.search": frozenset({"query", "topK"}),
+    "job_memory.get": frozenset({"jobId"}),
+    "personal_memory.save": frozenset({"content"}),
+    "personal_memory.search": frozenset({"query", "topK"}),
 }
+
+ALLOWED_TOOLS = tuple(TOOL_ARGUMENTS)
+
+
+def validate_delete(arguments: dict[str, Any]) -> None:
+    """Archive is free; a permanent delete carries the human's confirmation (the server checks it too)."""
+    mode = arguments.get("mode")
+    if mode == "archive":
+        return
+    if mode != "hard_delete":
+        raise BridgeError("memory.delete mode must be archive or hard_delete")
+    if arguments.get("humanConfirmed") is not True:
+        raise BridgeError("hard_delete requires humanConfirmed=true from the user")
+    for field in ("humanTurnRef", "humanRawText"):
+        value = arguments.get(field)
+        if not isinstance(value, str) or not value.strip():
+            raise BridgeError(f"hard_delete requires {field}")
 
 
 def _validate_dispatch(name: str, arguments: dict[str, Any]) -> None:
-    allowed_arguments = _TOOL_ARGUMENTS.get(name)
-    if name not in ALLOWED_TOOLS or allowed_arguments is None:
-        raise BridgeError(f"tool is not allowed by the memory bridge: {name}")
+    allowed_arguments = TOOL_ARGUMENTS.get(name)
+    if allowed_arguments is None:
+        raise BridgeError(f"tool is not registered by the server: {name}")
     unknown = set(arguments) - allowed_arguments
     if unknown:
         raise BridgeError(f"unsupported argument for {name}: {sorted(unknown)[0]}")
     if name == "scanner.project.resolve" and arguments.get("rootPath") != current_repo_root():
         raise BridgeError("project resolution must use the bridge process's current repository root")
-    if name == "memory.delete" and arguments.get("mode") != "archive":
-        raise BridgeError("the bridge permits archive mode only")
-    if name in {"memory.write", "memory.update"} and arguments.get("scope") != "project":
-        raise BridgeError("the bridge permits project-scoped mutations only")
-    if name == "mcp.transcript.submit" and arguments.get("source") != "copilot":
-        raise BridgeError("the bridge transcript source must be copilot")
-    if "projectKey" in allowed_arguments and name != "memory.get":
-        project_key = arguments.get("projectKey")
-        if not isinstance(project_key, str) or not project_key.strip():
-            raise BridgeError(f"{name} requires the resolved project key")
+    if name == "memory.delete":
+        validate_delete(arguments)
 
 
 def filtered_catalog(tools: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -433,8 +467,6 @@ def validate_item_project(payload: Any, project_key: str, *, allow_global: bool,
     scope = str(item.get("scope") or "").strip().lower()
     item_project = str(item.get("projectKey") or "").strip()
     if scope == "global":
-        if mutation or not allow_global:
-            raise BridgeError("bridge does not mutate global memory")
         return item
     if item_project != project_key:
         raise BridgeError("memory item does not belong to the resolved project")
@@ -497,13 +529,13 @@ def _stdin_text(label: str) -> str:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ai-orch-memory",
-        description="No-scan, project-bound AI Orchestration MemoryAI bridge.",
+        description="Project-bound AI Orchestration MemoryAI bridge.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    subparsers.add_parser("catalog", help="show only bridge-allowed server tools")
+    subparsers.add_parser("catalog", help="list the server tools")
 
-    subparsers.add_parser("resolve", help="resolve the current Git/workspace root without scanning")
+    subparsers.add_parser("resolve", help="resolve the current Git/workspace root")
 
     search = subparsers.add_parser("search", help="search compact project-memory previews")
     search.add_argument("--query", required=True)
@@ -518,7 +550,7 @@ def build_parser() -> argparse.ArgumentParser:
     get = subparsers.add_parser("get", help="get one project/global memory record")
     get.add_argument("--memory-id", "--id", dest="memory_id", required=True)
 
-    write = subparsers.add_parser("write", help="propose durable project-scoped memory")
+    write = subparsers.add_parser("write", help="write durable memory")
     write.add_argument("--summary", required=True)
     write_content = write.add_mutually_exclusive_group(required=True)
     write_content.add_argument("--content")
@@ -530,8 +562,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     write.add_argument("--tag", action="append", default=[])
     write.add_argument("--source-ref")
+    write.add_argument("--scope", choices=("project", "global"), default="project")
 
-    pending = subparsers.add_parser("pending", help="list project-scoped pending memory cards")
+    pending = subparsers.add_parser("pending", help="list pending memory cards of this project")
     pending.add_argument("--limit", default=5, type=lambda value: _bounded_int(value, 1, 25, "limit"))
     pending.add_argument("--offset", default=0, type=lambda value: _bounded_int(value, 0, 10000, "offset"))
 
@@ -553,7 +586,7 @@ def build_parser() -> argparse.ArgumentParser:
     confirm.add_argument("--edited-text")
     confirm.add_argument("--reason")
 
-    update = subparsers.add_parser("update", help="repair an existing project memory record")
+    update = subparsers.add_parser("update", help="repair an existing memory record")
     update.add_argument("--memory-id", required=True)
     update.add_argument("--reason", required=True)
     update.add_argument("--summary")
@@ -565,16 +598,11 @@ def build_parser() -> argparse.ArgumentParser:
     update_tags.add_argument("--clear-tags", action="store_true")
     update.add_argument("--confidence", type=_confidence)
     update.add_argument("--source-ref")
+    update.add_argument("--scope", choices=("project", "global"))
 
-    archive = subparsers.add_parser("archive", help="recoverably archive one project memory record")
+    archive = subparsers.add_parser("archive", help="recoverably archive one memory record")
     archive.add_argument("--memory-id", required=True)
     archive.add_argument("--reason", required=True)
-
-    transcript = subparsers.add_parser("transcript", help="submit durable transcript candidates")
-    transcript.add_argument("--session-id", required=True)
-    transcript_content = transcript.add_mutually_exclusive_group(required=True)
-    transcript_content.add_argument("--content")
-    transcript_content.add_argument("--content-stdin", action="store_true")
 
     return parser
 
@@ -628,9 +656,10 @@ def _execute_memory_command(
             "summary": _nonblank(args.summary, "summary"),
             "content": content,
             "memoryType": args.memory_type,
-            "scope": "project",
-            "projectKey": project_key,
+            "scope": args.scope,
         }
+        if args.scope == "project":
+            arguments["projectKey"] = project_key
         if args.tag:
             arguments["tags"] = [_nonblank(tag, "tag") for tag in args.tag]
         if args.source_ref:
@@ -678,9 +707,11 @@ def _execute_memory_command(
         arguments = {
             "memoryId": _validate_uuid(args.memory_id),
             "reason": _nonblank(args.reason, "reason"),
-            "projectKey": project_key,
-            "scope": "project",
         }
+        if args.scope is not None:
+            arguments["scope"] = args.scope
+        if args.scope == "project":
+            arguments["projectKey"] = project_key
         if args.summary is not None:
             arguments["summary"] = _nonblank(args.summary, "summary")
         if args.content_stdin:
@@ -695,7 +726,7 @@ def _execute_memory_command(
             arguments["confidence"] = args.confidence
         if args.source_ref is not None:
             arguments["sourceRef"] = _nonblank(args.source_ref, "source-ref")
-        changed = set(arguments) - {"memoryId", "reason", "projectKey", "scope"}
+        changed = set(arguments) - {"memoryId", "reason", "projectKey"}
         if not changed:
             raise BridgeError("memory.update requires at least one replacement field")
         require_tool(tools, "memory.update")
@@ -709,18 +740,6 @@ def _execute_memory_command(
                 "memoryId": _validate_uuid(args.memory_id),
                 "mode": "archive",
                 "reason": _nonblank(args.reason, "reason"),
-            },
-        )
-    if args.command == "transcript":
-        require_tool(tools, "mcp.transcript.submit")
-        content = _stdin_text("transcript") if args.content_stdin else _nonblank(args.content, "content")
-        return client._call_bridge_tool(
-            "mcp.transcript.submit",
-            {
-                "content": content,
-                "sessionId": _nonblank(args.session_id, "session-id"),
-                "source": "copilot",
-                "projectKey": project_key,
             },
         )
     raise BridgeError(f"unsupported bridge command: {args.command}")

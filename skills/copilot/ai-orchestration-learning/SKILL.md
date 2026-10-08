@@ -5,9 +5,8 @@ description: Use when Copilot has found durable project knowledge that should be
 
 # Project learning — Copilot terminal flow
 
-Copilot uses only direct `ai_orch` terminal commands for AI Orchestration. It has no native MCP or
-lifecycle-hook learning path. Never rely on `.github/hooks`, a final-response sidecar, raw HTTP or a
-model-visible persistence tool.
+Save through `ai_orch memory learn` (below) or, when the native `ai-orchestration` MCP tools are
+loaded, `memory.learn(rootPath, candidates)`; both reach the same server.
 
 If the task produced no durable reusable finding, do not write anything. Otherwise create one bounded
 request containing zero to three candidates and make one final learning command:
@@ -47,9 +46,9 @@ Use exact human-readable locators:
 - module/package directory: repository-relative directory in `ref`; navigation only; never add
   `path` or `signature`
 
-Do not scan, poll scanner state, or downgrade a known symbol to a file locator. Submit the exact
-human-readable symbol plus its repository-relative source path. If the backend has not indexed that
-symbol yet, it accepts the declared locator and queues its own structural scan and later binding.
+Do not downgrade a known symbol to a file locator. Submit the exact human-readable symbol plus its
+repository-relative source path. If the backend has not indexed that symbol yet, it accepts the
+declared locator and queues its own structural scan and later binding.
 
 Every candidate needs at least one symbol or file locator. Across the whole batch use at most eight
 distinct locators. Never invent scanner/database IDs, line ranges, persistence IDs, project keys,
@@ -66,4 +65,10 @@ binding.
 
 Persist only stable behavior, navigation, procedure, field mapping, debug findings, change points or
 test addresses. Do not save task logs, changed-file summaries, test-pass reports, trivial facts,
-secrets, hidden reasoning or rules. After an `ACCEPTED` receipt, make no further learning call.
+secrets, hidden reasoning or rules.
+
+Read the receipt `items`: for an item with `outcome` `rejected` or with `unresolvedLocators`, fix that
+locator (exact `pkg.Class#method`, `signature` and `path`; check it with
+`ai_orch codebase symbol get --ref`) and send that one candidate once more; otherwise make no further
+learning call. A stale card means the code it points to is gone: repair its locators with
+`ai_orch memory update` or archive it, in the same task.

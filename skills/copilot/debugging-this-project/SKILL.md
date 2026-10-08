@@ -49,17 +49,16 @@ AI Orchestration call is one direct `ai_orch` terminal command.
    ai_orch memory search --query "<component or exact error phrase>" --top-k 3
    ```
 
-   Treat scanner diagnostics as existing evidence unless the user explicitly
-   requests a fresh scan.
+   Treat scanner diagnostics as existing evidence; refresh the code map with
+   `ai_orch scan start` when it is missing or out of date.
 
 5. **Ambiguity stop:** if the symptom maps to several plausible meanings, or the
    top suspects are weak or conflicting after two focused passes, ask the user one
    concise clarification question with 2–3 likely interpretations. Do not keep
    searching recursively and do not invent business meaning from weak matches.
 
-6. **Stale baseline:** do not start a scan merely because the baseline is stale.
-   When requested, use the approved project-bound `ai_orch scan` commands; never
-   fall back to native MCP, raw HTTP or the database.
+6. **Stale baseline:** refresh it with `ai_orch scan start` (or the native
+   `scanner.scan.start`) when it would change the diagnosis.
 
 7. **Fix, then run the mirrored tests** under `src/test/java/.../<package>`.
 

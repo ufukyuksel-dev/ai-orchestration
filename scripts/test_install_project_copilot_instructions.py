@@ -75,7 +75,7 @@ class ProjectInstallerTest(unittest.TestCase):
             root / '.github' / 'copilot-instructions.md',
             root / 'skills' / 'copilot' / 'session-instructions.md',
         ]
-        # The shared Claude/Codex contract only routes Copilot to its own terminal contract.
+        # The shared contract points Copilot to its workflow; no runtime is restricted.
         shared = (root / 'skills' / 'session-instructions.md').read_text(encoding='utf-8')
         self.assertIn('`ai_orch`', shared)
         self.assertIn('`ask_user`', shared)
