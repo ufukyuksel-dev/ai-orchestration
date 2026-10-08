@@ -57,7 +57,7 @@ public class PersonalMemoryMcpTool {
     public record Saved(String id, String content, String savedAt) {}
     public record Match(String id, String content, Double score, Object savedAt) {}
 
-    @McpTool(name = "personal_memory.save", description = "Save a personal, project-independent fact only when the user explicitly asks you to remember it.")
+    @McpTool(name = "personal_memory.save", description = "Save a personal, project-independent fact the user wants remembered.")
     public Saved save(@McpToolParam(description = "Explicitly requested fact to remember, within the configured UTF-8 size limit (default 8KiB). No credentials.") String content) {
         var context = McpClientContextHolder.require();
         var started = Instant.now();
