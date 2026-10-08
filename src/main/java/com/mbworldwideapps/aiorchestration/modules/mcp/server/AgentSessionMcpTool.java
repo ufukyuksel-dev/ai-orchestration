@@ -14,6 +14,7 @@ import com.mbworldwideapps.aiorchestration.modules.agentlearning.AgentLearningMo
 import com.mbworldwideapps.aiorchestration.modules.agentlearning.AgentLearningModels.LearningCaptureCommand;
 import com.mbworldwideapps.aiorchestration.modules.rules.InstructionReadService;
 import com.mbworldwideapps.aiorchestration.modules.agentlearning.AgentLearningRepository;
+import com.mbworldwideapps.aiorchestration.modules.agentlearning.AgentLearningService;
 import com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryCodeLocator;
 import com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryCodeLocatorKind;
 import com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryRepository;
@@ -110,7 +111,16 @@ public class AgentSessionMcpTool {
     public record PathRule(List<String> paths, String statement) {
     }
 
-    public record LearnedItem(String summary, String route, String status, String memoryId, String reason) {
+    /**
+     * One input candidate, in input order: outcome created, reused, updated, rejected, conflict or (locator-free
+     * gate duplicate) duplicate_not_saved; {@code unresolvedLocators} are symbol refs kept only as file links.
+     */
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_EMPTY)
+    public record LearnedItem(int index, String summary, String outcome, String memoryId, String reason,
+            List<String> unresolvedLocators) {
+        public LearnedItem {
+            unresolvedLocators = unresolvedLocators == null ? List.of() : List.copyOf(unresolvedLocators);
+        }
     }
 
     /**
@@ -340,37 +350,60 @@ public class AgentSessionMcpTool {
             ScannerProjectResolveResponse project = scanner.resolveProject(gitRoot(context, rootPath), null);
             projectKey = project.projectKey();
             List<CaptureCandidate> anchored = new ArrayList<>();
+            List<Integer> anchoredIndexes = new ArrayList<>();
             List<LearnedItem> items = new ArrayList<>();
-            for (CaptureCandidate candidate : candidates) {
+            for (int index = 0; index < candidates.size(); index++) {
+                CaptureCandidate candidate = candidates.get(index);
                 if (candidate == null) {
                     throw new IllegalArgumentException("candidate must not be null");
                 }
                 if (candidate.locators().isEmpty()) {
-                    items.add(writeLocatorFree(new CaptureCandidate(kindOf(candidate.kind()),
+                    items.add(writeLocatorFree(index, new CaptureCandidate(kindOf(candidate.kind()),
                             clip(candidate.summary(), MAX_SUMMARY), clip(candidate.content(), MAX_CONTENT),
                             candidate.locators(), candidate.appliesWhen(), candidate.limitations(),
-                            candidate.reusableFor(), candidate.correctionRef(), candidate.reference()), projectKey));
+                            candidate.reusableFor(), candidate.correctionRef(), candidate.reference()), projectKey,
+                            null, List.of()));
                 } else {
                     anchored.add(lenient(candidate));
+                    anchoredIndexes.add(index);
                 }
             }
             CompactLearnReceipt capture = anchored.isEmpty() ? null
-                    : captureAnchored(context, project, anchored, taskRunId, items);
+                    : captureAnchored(context, project, anchored, anchoredIndexes, taskRunId, items);
             if (capture != null && capture.rejected() > 0
                     && capture.created() + capture.updated() + capture.reused() + capture.conflicts() == 0) {
                 // Nothing resolved against a code scan (e.g. the project was never scanned): keep the cards with
                 // their file locators as declared links instead of losing them; the next scan resolves them.
+                // The refs the capture could not resolve stay visible on the saved card's item.
+                java.util.Map<Integer, List<String>> unresolved = new java.util.HashMap<>();
+                for (var item : capture.items()) {
+                    String reason = item.reason();
+                    if (reason != null && reason.startsWith(LOCATOR_UNRESOLVED)) {
+                        unresolved.put(item.index(),
+                                List.of(reason.substring(LOCATOR_UNRESOLVED.length()).split(",")));
+                    }
+                }
                 capture = null;
-                for (CaptureCandidate candidate : anchored) {
-                    items.add(writeLocatorFree(candidate, projectKey, declaredFileLocators(candidate)));
+                for (int i = 0; i < anchored.size(); i++) {
+                    CaptureCandidate candidate = anchored.get(i);
+                    items.add(writeLocatorFree(anchoredIndexes.get(i), candidate, projectKey,
+                            declaredFileLocators(candidate), unresolved.getOrDefault(i, List.of())));
                 }
             }
-            int created = (int) items.stream().filter(i -> "created".equals(i.status())).count()
+            int created = (int) items.stream().filter(i -> "created".equals(i.outcome())).count()
                     + (capture == null ? 0 : capture.created() + capture.updated());
             int reused = capture == null ? 0 : capture.reused();
-            int duplicates = (int) items.stream().filter(i -> "duplicate_not_saved".equals(i.status())).count();
-            int rejected = (int) items.stream().filter(i -> "rejected".equals(i.status())).count()
+            int duplicates = (int) items.stream().filter(i -> "duplicate_not_saved".equals(i.outcome())).count();
+            int rejected = (int) items.stream().filter(i -> "rejected".equals(i.outcome())).count()
                     + (capture == null ? 0 : capture.rejected() + capture.conflicts());
+            if (capture != null) {
+                for (var item : capture.items()) {
+                    items.add(new LearnedItem(anchoredIndexes.get(item.index()), item.summary(), item.outcome(),
+                            null, item.reason(), item.unresolvedLocators()));
+                }
+                capture = capture.withoutItems(); // the per-candidate items are reported once, at the top level
+            }
+            items.sort(java.util.Comparator.comparingInt(LearnedItem::index));
             String status = rejected == 0 ? "ok" : (created + reused + duplicates > 0 ? "partial" : "rejected");
             LearnResponse response = new LearnResponse(status, created, reused, duplicates, rejected, items, capture);
             audit.log(context, "memory.learn", McpAuditLogger.hashQuery("learn:" + count), count,
@@ -445,10 +478,6 @@ public class AgentSessionMcpTool {
         return text.substring(0, cut > max / 2 ? cut : max - 1).stripTrailing() + "…";
     }
 
-    private LearnedItem writeLocatorFree(CaptureCandidate candidate, String projectKey) {
-        return writeLocatorFree(candidate, projectKey, null);
-    }
-
     private static List<MemoryCodeLocator> declaredFileLocators(CaptureCandidate candidate) {
         List<MemoryCodeLocator> out = new ArrayList<>();
         for (CaptureLocator locator : candidate.locators()) {
@@ -461,30 +490,38 @@ public class AgentSessionMcpTool {
         return out.isEmpty() ? null : out;
     }
 
-    private LearnedItem writeLocatorFree(CaptureCandidate candidate, String projectKey,
-            List<MemoryCodeLocator> codeLocators) {
+    private LearnedItem writeLocatorFree(int index, CaptureCandidate candidate, String projectKey,
+            List<MemoryCodeLocator> codeLocators, List<String> unresolvedLocators) {
         String kind = candidate.kind() == null ? "" : candidate.kind().trim().toLowerCase(Locale.ROOT);
+        String summary = AgentLearningService.receiptSummary(candidate.summary());
         if (!LOCATOR_FREE_KINDS.contains(kind) && codeLocators == null) {
-            return new LearnedItem(candidate.summary(), "memory.write", "rejected", null,
+            return new LearnedItem(index, summary, "rejected", null,
                     "LOCATOR_REQUIRED: kind '" + kind + "' needs at least one symbol or file locator; "
-                            + "only decision, convention and procedure may omit locators");
+                            + "only decision, convention and procedure may omit locators", unresolvedLocators);
         }
         MemoryWriteResponse written = memory.write(candidate.content(), candidate.summary(), "decision",
                 List.of("learned", kind), "memory.learn", "project", null, projectKey, codeLocators);
         boolean saved = written.memoryId() != null;
         boolean duplicate = "duplicate_memory".equals(written.gateReason());
-        String status = saved ? "created" : duplicate ? "duplicate_not_saved" : "rejected";
+        String outcome = saved ? "created" : duplicate ? "duplicate_not_saved" : "rejected";
         String reason = saved ? null : written.gateReason();
-        return new LearnedItem(candidate.summary(), "memory.write", status,
-                saved ? written.memoryId().toString() : null, reason);
+        return new LearnedItem(index, summary, outcome, saved ? written.memoryId().toString() : null, reason,
+                unresolvedLocators);
     }
 
+    private static final String LOCATOR_UNRESOLVED = "LOCATOR_UNRESOLVED:";
+
     private CompactLearnReceipt captureAnchored(McpClientContext context, ScannerProjectResolveResponse project,
-            List<CaptureCandidate> anchored, String taskRunId, List<LearnedItem> items) {
+            List<CaptureCandidate> anchored, List<Integer> anchoredIndexes, String taskRunId,
+            List<LearnedItem> items) {
         AgentLearningMcpTool learner = learning.getIfAvailable();
         if (learner == null || project.workspaceBindingId() == null) {
             String reason = learner == null ? "LEARNING_DISABLED" : "WORKSPACE_BINDING_UNAVAILABLE";
-            anchored.forEach(c -> items.add(new LearnedItem(c.summary(), "capture", "rejected", null, reason)));
+            for (int i = 0; i < anchored.size(); i++) {
+                items.add(new LearnedItem(anchoredIndexes.get(i),
+                        AgentLearningService.receiptSummary(anchored.get(i).summary()), "rejected", null, reason,
+                        List.of()));
+            }
             return null;
         }
         String runId = taskRunId == null || taskRunId.isBlank() ? defaultRunId(context) : taskRunId.trim();

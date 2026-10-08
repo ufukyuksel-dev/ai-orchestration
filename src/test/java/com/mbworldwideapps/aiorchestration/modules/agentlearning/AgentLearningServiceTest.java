@@ -433,6 +433,97 @@ class AgentLearningServiceTest {
     }
 
     @Test
+    void captureReceiptReportsEachCandidateInInputOrderAndReplaysAndRecoversTheSameItems() throws Exception {
+        Files.writeString(root.resolve("Seed.java"), "class Seed { int value; }\n");
+        Files.writeString(root.resolve("Lookup.java"), "class Lookup { Object find() { return null; } }\n");
+        Files.writeString(root.resolve("Present.java"), "class Present {}\n");
+        CodeBaselineRepository baseline = mock(CodeBaselineRepository.class);
+        UnresolvedSymbolScanScheduler scheduler = mock(UnresolvedSymbolScanScheduler.class);
+        Fixture fixture = fixture(proxiedMemoryService(), null, false, baseline, scheduler);
+        String session = "4".repeat(64);
+        UUID binding = fixture.service.issueWorkspaceBinding("principal-a", "runtime-hook", fixture.workspace);
+        fixture.service.captureSemantic("principal-a", "runtime-hook", session, "P", binding, "task-seed",
+                List.of(new CaptureCandidate("behavior", "Seed value", "Seed.value is the seed.",
+                        List.of(fileLocator("Seed.java")), List.of(), List.of(), List.of())), "codex", null);
+        UUID seeded = jdbc.queryForObject("SELECT id FROM memory_items", UUID.class);
+        var active = fixture.service.resolveContext("principal-a", "runtime-hook", session, "P", binding,
+                "correct seed", "change", List.of("Seed.java"), List.of(), List.of(), 512, "never");
+        fixture.repository.insertKnowledgeBindings(active.context().id(), List.of(new KnowledgeBinding("k1",
+                seeded, 99L, "0".repeat(64))));
+        List<CaptureCandidate> batch = List.of(
+                new CaptureCandidate("behavior", "Lookup finds   nothing yet " + "x".repeat(100),
+                        "Lookup.find returns null until the cache is warm.",
+                        List.of(fileLocator("Lookup.java"), new CaptureLocator("symbol", "com.acme.Lookup#find",
+                                null, "Lookup.java", "primary_change_point")),
+                        List.of(), List.of(), List.of()),
+                new CaptureCandidate("behavior", "Missing symbol", "This candidate points to a missing file.",
+                        List.of(fileLocator("Present.java"), new CaptureLocator("symbol", "com.acme.Gone#run",
+                                null, "Gone.java", "supporting")),
+                        List.of(), List.of(), List.of()),
+                new CaptureCandidate("behavior", "Seed value", "Seed.value is the seed and is read at startup.",
+                        List.of(fileLocator("Seed.java")), List.of(), List.of(), List.of(), "k1", null));
+
+        var receipt = fixture.service.captureSemantic("principal-a", "runtime-hook", session, "P", binding,
+                "task-mixed", batch, "codex", null);
+        var replay = fixture.service.captureSemantic("principal-a", "runtime-hook", session, "P", binding,
+                "task-mixed", batch, "codex", null);
+
+        assertThat(receipt.status()).isEqualTo("ACCEPTED");
+        assertThat(List.of(receipt.created(), receipt.updated(), receipt.reused(), receipt.rejected(),
+                receipt.conflicts())).containsExactly(1, 0, 0, 1, 1);
+        assertThat(receipt.items()).extracting(AgentLearningModels.LearnItem::index,
+                AgentLearningModels.LearnItem::outcome, AgentLearningModels.LearnItem::reason)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(0, "created", null),
+                        org.assertj.core.groups.Tuple.tuple(1, "rejected", "LOCATOR_UNRESOLVED:com.acme.Gone#run"),
+                        org.assertj.core.groups.Tuple.tuple(2, "conflict", "CORRECTION_EXPECTATION_MISMATCH"));
+        assertThat(receipt.items().get(0).unresolvedLocators()).containsExactly("com.acme.Lookup#find");
+        assertThat(receipt.items().get(0).summary()).hasSize(80).startsWith("Lookup finds nothing yet x");
+        assertThat(receipt.items().get(1).unresolvedLocators()).isEmpty();
+        assertThat(replay).isEqualTo(receipt);
+        String stored = jdbc.queryForObject("""
+                SELECT result_json::text FROM learning_operations WHERE state='COMPLETED'
+                  AND result_json->'items'->0->>'outcome' = 'created' AND jsonb_array_length(result_json->'items') = 3
+                """, String.class);
+        assertThat(stored).doesNotContain("\"unresolvedLocators\": []");
+
+        // A crash after learning but before the compact receipt was stored leaves the raw receipt behind.
+        Map<String, Object> operation = jdbc.queryForMap("""
+                SELECT request_id FROM learning_operations WHERE result_json->'items'->0->>'outcome' = 'created'
+                  AND jsonb_array_length(result_json->'items') = 3
+                """);
+        UUID memoryId = jdbc.queryForObject("SELECT id FROM memory_items WHERE summary LIKE 'Lookup%'", UUID.class);
+        var raw = new AgentLearningModels.LearnReceipt(1, "COMPLETED", (UUID) operation.get("request_id"), List.of(
+                new AgentLearningModels.CandidateResult(0, "CREATED", memoryId, true, "SUPPORTED", "PENDING",
+                        "PENDING", null),
+                new AgentLearningModels.CandidateResult(1, "CONFLICT", seeded, false, "UNVERIFIED", "PENDING",
+                        "PENDING", "CORRECTION_EXPECTATION_MISMATCH")), null);
+        jdbc.update("UPDATE learning_operations SET result_json=?::jsonb WHERE request_id=?",
+                new ObjectMapper().writeValueAsString(raw), operation.get("request_id"));
+
+        var recovered = fixture.service.captureSemantic("principal-a", "runtime-hook", session, "P", binding,
+                "task-mixed", batch, "codex", null);
+
+        assertThat(recovered).isEqualTo(receipt);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM memory_items", Integer.class)).isEqualTo(2);
+    }
+
+    @Test
+    void captureReceiptNamesAnUnknownCorrectionRef() throws Exception {
+        Files.writeString(root.resolve("Captured.java"), "class Captured {}\n");
+        Fixture fixture = fixture();
+        UUID binding = fixture.service.issueWorkspaceBinding("principal-a", "runtime-hook", fixture.workspace);
+
+        var receipt = fixture.service.captureSemantic("principal-a", "runtime-hook", "4".repeat(64), "P", binding,
+                "task-unknown-correction", List.of(new CaptureCandidate("behavior", "Captured", "Captured exists.",
+                        List.of(fileLocator("Captured.java")), List.of(), List.of(), List.of(), "k9", null)),
+                "codex", null);
+
+        assertThat(receipt.status()).isEqualTo("REJECTED");
+        assertThat(receipt.items()).containsExactly(
+                new AgentLearningModels.LearnItem(0, "Captured", "rejected", "CORRECTION_UNKNOWN", List.of()));
+    }
+
+    @Test
     void postTurnCaptureAcceptsUnresolvedSymbolAndQueuesOneBackendScan() throws Exception {
         Files.createDirectories(root.resolve("src/kestrel"));
         Files.writeString(root.resolve("src/kestrel/routing.py"),

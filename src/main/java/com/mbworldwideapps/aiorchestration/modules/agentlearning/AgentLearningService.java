@@ -31,6 +31,7 @@ import com.mbworldwideapps.aiorchestration.modules.agentlearning.AgentLearningMo
 import com.mbworldwideapps.aiorchestration.modules.agentlearning.AgentLearningModels.ClaimKind;
 import com.mbworldwideapps.aiorchestration.modules.agentlearning.AgentLearningModels.CompactLearnReceipt;
 import com.mbworldwideapps.aiorchestration.modules.agentlearning.AgentLearningModels.ContextReservation;
+import com.mbworldwideapps.aiorchestration.modules.agentlearning.AgentLearningModels.LearnItem;
 import com.mbworldwideapps.aiorchestration.modules.agentlearning.AgentLearningModels.LearnReceipt;
 import com.mbworldwideapps.aiorchestration.modules.agentlearning.AgentLearningModels.Knowledge;
 import com.mbworldwideapps.aiorchestration.modules.agentlearning.AgentLearningModels.KnowledgeBinding;
@@ -87,6 +88,13 @@ public class AgentLearningService {
             "behavior", "navigation", "procedure", "field_mapping", "debug_finding", "change_point", "test_address");
     private static final Set<String> ANCHOR_ROLES = Set.of(
             "primary_change_point", "supporting", "validation", "configuration", "entry_point");
+    /**
+     * Context-target role of a capture symbol locator that matched no scanned symbol and is kept as a file
+     * link. Persisted with the context so replayed and recovered receipts report the same unresolved locators;
+     * anchor roles come from the locator, so this marker never reaches a memory.
+     */
+    static final String UNRESOLVED_SYMBOL_TARGET_ROLE = "unresolved_symbol";
+    private static final int RECEIPT_SUMMARY_CHARS = 80;
 
     private final AgentLearningRepository repository;
     private final ProjectWorkspaceResolver workspaceResolver;
@@ -517,7 +525,11 @@ public class AgentLearningService {
                     "Long-form evidence for the reusable learning");
             if (saved.created()) referencesCreated++; else referencesReused++;
         }
-        CompactLearnReceipt receipt = compactReceipt(raw, referencesCreated, referencesReused);
+        List<LearnItem> items = new ArrayList<>();
+        for (int index = 0; index < batch.learnings().size(); index++) {
+            items.add(learnItem(index, batch.learnings().get(index).summary(), raw.results().get(index), List.of()));
+        }
+        CompactLearnReceipt receipt = withItems(compactReceipt(raw, referencesCreated, referencesReused), items);
         transactions.executeWithoutResult(status -> repository.replaceCompletedResult(raw.requestId(),
                 json(receipt), Instant.now()));
         if (metrics != null) metrics.receipt(receipt, TokenEstimator.estimate(json(receipt)));
@@ -604,7 +616,8 @@ public class AgentLearningService {
                 return replay;
             }
             if ("COMPLETED".equals(operation.state()) && operation.resultJson() != null) {
-                CompactLearnReceipt recovered = compactReceipt(decodeReceipt(operation), 0, 0);
+                CompactLearnReceipt recovered = captureReceipt(decodeReceipt(operation),
+                        planCapture(context, captures, refsByLocator), 0, 0);
                 UUID completedRequest = operation.requestId();
                 transactions.executeWithoutResult(status -> repository.replaceCompletedResult(completedRequest,
                         json(recovered), Instant.now()));
@@ -617,30 +630,18 @@ public class AgentLearningService {
         Map<String, Observation> observations = registerCurrentEvidence(context, binding,
                 context.targets().stream().filter(target -> !"directory".equals(target.locatorKind()))
                         .map(Target::targetId).toList());
-        Map<String, Target> targetsById = context.targets().stream()
-                .collect(java.util.stream.Collectors.toMap(Target::targetId, value -> value));
-        Map<String, KnowledgeBinding> knowledge = repository.findKnowledgeBindings(context.id()).stream()
-                .collect(java.util.stream.Collectors.toMap(KnowledgeBinding::ref, value -> value));
+        List<CapturePlan> plan = planCapture(context, captures, refsByLocator);
         List<Candidate> candidates = new ArrayList<>();
         List<CaptureCandidate> learnedCaptures = new ArrayList<>();
         int preRejected = 0;
-        for (CaptureCandidate capture : captures) {
-            List<Map.Entry<CaptureLocator, Target>> candidateTargets = new ArrayList<>();
-            boolean unresolved = false;
-            for (CaptureLocator locator : capture.locators()) {
-                Target target = targetsById.get(refsByLocator.get(captureLocatorKey(locator)));
-                if (target == null) {
-                    unresolved = true;
-                    break;
-                }
-                candidateTargets.add(Map.entry(locator, target));
-            }
-            KnowledgeBinding correction = capture.correctionRef() == null
-                    ? null : knowledge.get(capture.correctionRef());
-            if (unresolved || capture.correctionRef() != null && correction == null) {
+        for (CapturePlan planned : plan) {
+            if (planned.rejection() != null) {
                 preRejected++;
                 continue;
             }
+            CaptureCandidate capture = planned.capture();
+            List<Map.Entry<CaptureLocator, Target>> candidateTargets = planned.targets();
+            KnowledgeBinding correction = planned.correction();
             candidates.add(new Candidate(capture.kind(), capture.summary(), capture.content(),
                     capture.appliesWhen(), capture.limitations(), candidateTargets.stream()
                             .map(entry -> new Anchor(entry.getValue().targetId(), entry.getKey().role())).toList(),
@@ -653,8 +654,8 @@ public class AgentLearningService {
             learnedCaptures.add(capture);
         }
         if (candidates.isEmpty()) {
-            CompactLearnReceipt rejected = new CompactLearnReceipt("REJECTED", 0, 0, 0,
-                    preRejected, 0, 0, 0);
+            CompactLearnReceipt rejected = captureReceipt(
+                    new LearnReceipt(1, "COMPLETED", null, List.of(), null), plan, 0, 0);
             String rejectedPayloadHash = sha256("agent-learning/capture-rejected-v1:" + operationKey);
             Operation rejectedOperation = operation;
             var claim = transactions.execute(status -> repository.claim(rejectedOperation.learningHandle(),
@@ -695,8 +696,7 @@ public class AgentLearningService {
                     "Long-form evidence for the reusable learning");
             if (saved.created()) referencesCreated++; else referencesReused++;
         }
-        CompactLearnReceipt receipt = withPreRejected(
-                compactReceipt(raw, referencesCreated, referencesReused), preRejected);
+        CompactLearnReceipt receipt = captureReceipt(raw, plan, referencesCreated, referencesReused);
         transactions.executeWithoutResult(status -> repository.replaceCompletedResult(raw.requestId(),
                 json(receipt), Instant.now()));
         if (metrics != null) metrics.receipt(receipt, TokenEstimator.estimate(json(receipt)));
@@ -815,7 +815,7 @@ public class AgentLearningService {
         if (matches.isEmpty()) {
             Path source = requireRegularSource(workspace, locator.path());
             unresolvedSymbolPaths.add(locator.path());
-            return new Target(targetId, locator.path(), declaredSymbolRef(locator), "supporting",
+            return new Target(targetId, locator.path(), declaredSymbolRef(locator), UNRESOLVED_SYMBOL_TARGET_ROLE,
                     sha256(readBounded(source)), null, null, "symbol");
         }
         if (matches.size() != 1) throw new IllegalArgumentException("LOCATOR_AMBIGUOUS:" + locator.ref());
@@ -855,22 +855,21 @@ public class AgentLearningService {
         for (CaptureCandidate capture : captures) {
             LinkedHashMap<String, Target> candidateResolved = new LinkedHashMap<>();
             Set<String> candidateUnresolvedPaths = new LinkedHashSet<>();
-            try {
-                for (CaptureLocator locator : capture.locators()) {
-                    String key = captureLocatorKey(locator);
-                    Target target = resolved.get(key);
-                    if (target == null) {
-                        target = resolveCaptureLocator(projectKey, workspace, refsByLocator.get(key), locator,
-                                candidateUnresolvedPaths);
-                        candidateResolved.put(key, target);
-                    }
+            boolean failed = false;
+            for (CaptureLocator locator : capture.locators()) {
+                String key = captureLocatorKey(locator);
+                if (resolved.containsKey(key) || candidateResolved.containsKey(key)) continue;
+                try {
+                    candidateResolved.put(key, resolveCaptureLocator(projectKey, workspace, refsByLocator.get(key),
+                            locator, candidateUnresolvedPaths));
+                } catch (IllegalArgumentException invalidLocator) {
+                    // Candidate-level rejection is decided after context creation: exactly the
+                    // locators that failed here have no target, so the receipt can name them.
+                    failed = true;
                 }
-                resolved.putAll(candidateResolved);
-                unresolvedSymbolPaths.addAll(candidateUnresolvedPaths);
-            } catch (IllegalArgumentException invalidLocator) {
-                // Candidate-level rejection is counted after context creation from
-                // its unresolved target refs; other candidates remain independent.
             }
+            resolved.putAll(candidateResolved);
+            if (!failed) unresolvedSymbolPaths.addAll(candidateUnresolvedPaths);
         }
         return List.copyOf(resolved.values());
     }
@@ -946,6 +945,94 @@ public class AgentLearningService {
         return new CompactLearnReceipt(allFailed ? "REJECTED" : "ACCEPTED",
                 created, updated, reused, rejected, conflicts,
                 referencesCreated, referencesReused);
+    }
+
+    /**
+     * One capture candidate in input order: its resolved targets, or why it was rejected before learning.
+     * Derived only from the persisted context targets and knowledge bindings, so a recovered receipt
+     * reports exactly what the original one did.
+     */
+    private record CapturePlan(CaptureCandidate capture, List<Map.Entry<CaptureLocator, Target>> targets,
+            KnowledgeBinding correction, String rejection, List<String> unresolvedLocators) {
+    }
+
+    private List<CapturePlan> planCapture(ResearchContext context, List<CaptureCandidate> captures,
+            Map<String, String> refsByLocator) {
+        Map<String, Target> targetsById = context.targets().stream()
+                .collect(java.util.stream.Collectors.toMap(Target::targetId, value -> value));
+        Map<String, KnowledgeBinding> knowledge = repository.findKnowledgeBindings(context.id()).stream()
+                .collect(java.util.stream.Collectors.toMap(KnowledgeBinding::ref, value -> value));
+        List<CapturePlan> plan = new ArrayList<>();
+        for (CaptureCandidate capture : captures) {
+            List<Map.Entry<CaptureLocator, Target>> candidateTargets = new ArrayList<>();
+            List<String> missing = new ArrayList<>();
+            List<String> fileOnly = new ArrayList<>();
+            for (CaptureLocator locator : capture.locators()) {
+                Target target = targetsById.get(refsByLocator.get(captureLocatorKey(locator)));
+                if (target == null) {
+                    missing.add(locator.ref());
+                    continue;
+                }
+                candidateTargets.add(Map.entry(locator, target));
+                if (UNRESOLVED_SYMBOL_TARGET_ROLE.equals(target.role())) fileOnly.add(locator.ref());
+            }
+            KnowledgeBinding correction = capture.correctionRef() == null
+                    ? null : knowledge.get(capture.correctionRef());
+            String rejection = !missing.isEmpty() ? "LOCATOR_UNRESOLVED:" + String.join(",", missing)
+                    : capture.correctionRef() != null && correction == null ? "CORRECTION_UNKNOWN" : null;
+            plan.add(new CapturePlan(capture, List.copyOf(candidateTargets), correction, rejection,
+                    List.copyOf(fileOnly)));
+        }
+        return plan;
+    }
+
+    /** Counts plus one item per capture input; {@code raw.results()} holds only the non-rejected candidates. */
+    private static CompactLearnReceipt captureReceipt(LearnReceipt raw, List<CapturePlan> plan,
+            int referencesCreated, int referencesReused) {
+        List<LearnItem> items = new ArrayList<>();
+        int learned = 0;
+        int preRejected = 0;
+        for (int index = 0; index < plan.size(); index++) {
+            CapturePlan planned = plan.get(index);
+            if (planned.rejection() != null) {
+                preRejected++;
+                items.add(new LearnItem(index, receiptSummary(planned.capture().summary()), "rejected",
+                        planned.rejection(), List.of()));
+                continue;
+            }
+            items.add(learnItem(index, planned.capture().summary(), raw.results().get(learned++),
+                    planned.unresolvedLocators()));
+        }
+        return withItems(withPreRejected(compactReceipt(raw, referencesCreated, referencesReused), preRejected),
+                items);
+    }
+
+    private static LearnItem learnItem(int index, String summary, CandidateResult result,
+            List<String> unresolvedLocators) {
+        String outcome = switch (result.outcome()) {
+            case "CREATED" -> "created";
+            case "UPDATED" -> "updated";
+            case "EXISTS" -> "reused";
+            case "CONFLICT" -> "conflict";
+            default -> "rejected";
+        };
+        String reason = result.reason() != null ? result.reason()
+                : "rejected".equals(outcome) ? result.outcome() : null;
+        return new LearnItem(index, receiptSummary(summary), outcome, reason, unresolvedLocators);
+    }
+
+    private static CompactLearnReceipt withItems(CompactLearnReceipt receipt, List<LearnItem> items) {
+        return new CompactLearnReceipt(receipt.status(), receipt.created(), receipt.updated(), receipt.reused(),
+                receipt.rejected(), receipt.conflicts(), receipt.referencesCreated(), receipt.referencesReused(),
+                items);
+    }
+
+    /** Enough of the summary to tell candidates apart; the agent already holds the full text. */
+    public static String receiptSummary(String summary) {
+        if (summary == null) return null;
+        String normalized = summary.strip().replaceAll("\\s+", " ");
+        return normalized.length() <= RECEIPT_SUMMARY_CHARS ? normalized
+                : normalized.substring(0, RECEIPT_SUMMARY_CHARS - 1) + "…";
     }
 
     private static CompactLearnReceipt withPreRejected(CompactLearnReceipt receipt, int preRejected) {

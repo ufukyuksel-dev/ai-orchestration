@@ -17,6 +17,7 @@ import static org.mockito.Mockito.when;
 import java.util.List;
 import java.util.UUID;
 
+import com.mbworldwideapps.aiorchestration.modules.agentlearning.AgentLearningModels;
 import com.mbworldwideapps.aiorchestration.modules.agentlearning.AgentLearningModels.CaptureCandidate;
 import com.mbworldwideapps.aiorchestration.modules.agentlearning.AgentLearningModels.CaptureLocator;
 import com.mbworldwideapps.aiorchestration.modules.agentlearning.AgentLearningModels.CompactLearnReceipt;
@@ -345,7 +346,8 @@ class AgentSessionMcpToolTest {
         assertThat(response.status()).isEqualTo("ok");
         assertThat(response.created()).isEqualTo(1);
         assertThat(response.items()).singleElement().satisfies(item -> {
-            assertThat(item.route()).isEqualTo("memory.write");
+            assertThat(item.index()).isZero();
+            assertThat(item.outcome()).isEqualTo("created");
             assertThat(item.memoryId()).isEqualTo(id.toString());
         });
         verify(learning, never()).capture(any());
@@ -367,7 +369,7 @@ class AgentSessionMcpToolTest {
         assertThat(response.rejected()).isZero();
         assertThat(response.status()).isEqualTo("ok");
         assertThat(response.items()).singleElement().satisfies(item -> {
-            assertThat(item.status()).isEqualTo("duplicate_not_saved");
+            assertThat(item.outcome()).isEqualTo("duplicate_not_saved");
             assertThat(item.memoryId()).isNull();
             assertThat(item.reason()).isEqualTo("duplicate_memory");
         });
@@ -410,12 +412,50 @@ class AgentSessionMcpToolTest {
     }
 
     @Test
+    void learnReportsEachInputCandidateInInputOrderAndCaptureCountsOnce() throws Exception {
+        McpClientContextHolder.set(context(List.of("scanner.scan", "memory.write", "codebase.read")));
+        resolves();
+        when(learningProvider.getIfAvailable()).thenReturn(learning);
+        when(learning.capture(any())).thenReturn(new CompactLearnReceipt("ACCEPTED", 1, 0, 0, 1, 0, 0, 0,
+                List.of(new AgentLearningModels.LearnItem(0, "Route", "created", null, List.of("com.acme.Route#select")),
+                        new AgentLearningModels.LearnItem(1, "Gone", "rejected", "LOCATOR_UNRESOLVED:src/Gone.java",
+                                List.of()))));
+        UUID id = UUID.randomUUID();
+        when(memory.write(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new MemoryWriteResponse(id, "active", "src"));
+        CaptureCandidate route = new CaptureCandidate("behavior", "Route", "Route is chosen here.",
+                List.of(new CaptureLocator("symbol", "com.acme.Route#select", null, "src/Route.java", null)),
+                List.of(), List.of(), List.of());
+        CaptureCandidate gone = new CaptureCandidate("behavior", "Gone", "Gone is gone.",
+                List.of(new CaptureLocator("file", "src/Gone.java", null, null, null)),
+                List.of(), List.of(), List.of());
+
+        var response = tool.learn("/repo", List.of(route, decision("d"), gone), null);
+
+        assertThat(response.status()).isEqualTo("partial");
+        assertThat(response.created()).isEqualTo(2);
+        assertThat(response.rejected()).isEqualTo(1);
+        assertThat(response.items()).extracting(AgentSessionMcpTool.LearnedItem::index,
+                AgentSessionMcpTool.LearnedItem::outcome, AgentSessionMcpTool.LearnedItem::reason)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(0, "created", null),
+                        org.assertj.core.groups.Tuple.tuple(1, "created", null),
+                        org.assertj.core.groups.Tuple.tuple(2, "rejected", "LOCATOR_UNRESOLVED:src/Gone.java"));
+        assertThat(response.items().get(0).unresolvedLocators()).containsExactly("com.acme.Route#select");
+        assertThat(response.capture().items()).isEmpty();
+        String json = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(response);
+        assertThat(json).contains("\"index\":0", "\"unresolvedLocators\":[\"com.acme.Route#select\"]")
+                .doesNotContain("\"unresolvedLocators\":[]", "\"items\":[]");
+    }
+
+    @Test
     void cardsWhoseLocatorsCannotBeResolvedYetAreKeptWithDeclaredFileLinks() {
         // An unscanned project: the capture path resolves nothing, so the card must not be lost.
         McpClientContextHolder.set(context(List.of("scanner.scan", "memory.write")));
         resolves();
         when(learningProvider.getIfAvailable()).thenReturn(learning);
-        when(learning.capture(any())).thenReturn(new CompactLearnReceipt("REJECTED", 0, 0, 0, 1, 0, 0, 0));
+        when(learning.capture(any())).thenReturn(new CompactLearnReceipt("REJECTED", 0, 0, 0, 1, 0, 0, 0,
+                List.of(new AgentLearningModels.LearnItem(0, "Running the tests", "rejected",
+                        "LOCATOR_UNRESOLVED:com.acme.App#main", List.of()))));
         UUID id = UUID.randomUUID();
         when(memory.write(eq("Run ./mvnw test."), eq("Running the tests"), eq("decision"), any(),
                 eq("memory.learn"), eq("project"), isNull(), eq("P"), any()))
@@ -430,6 +470,10 @@ class AgentSessionMcpToolTest {
         assertThat(response.status()).isEqualTo("ok");
         assertThat(response.created()).isEqualTo(1);
         assertThat(response.capture()).isNull();
+        assertThat(response.items()).singleElement().satisfies(item -> {
+            assertThat(item.outcome()).isEqualTo("created");
+            assertThat(item.unresolvedLocators()).containsExactly("com.acme.App#main");
+        });
         verify(memory).write(any(), any(), any(), any(), any(), any(), any(), any(),
                 org.mockito.ArgumentMatchers.argThat(locators -> locators != null && locators.size() == 1
                         && locators.get(0).ref().equals("pom.xml")));
