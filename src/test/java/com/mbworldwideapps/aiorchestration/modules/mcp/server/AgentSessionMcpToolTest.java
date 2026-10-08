@@ -507,6 +507,70 @@ class AgentSessionMcpToolTest {
     }
 
     @Test
+    void anUnknownCorrectionStaysRejectedAndIsNeverWrittenAsANewCard() {
+        McpClientContextHolder.set(context(List.of("scanner.scan", "memory.write")));
+        resolves();
+        when(learningProvider.getIfAvailable()).thenReturn(learning);
+        when(learning.capture(any())).thenReturn(new CompactLearnReceipt("REJECTED", 0, 0, 0, 1, 0, 0, 0,
+                List.of(new AgentLearningModels.LearnItem(0, "Corrected route", "rejected",
+                        "CORRECTION_UNKNOWN", List.of()))));
+        CaptureCandidate correction = new CaptureCandidate("behavior", "Corrected route", "c",
+                List.of(new CaptureLocator("file", "src/Route.java", null, null, null)),
+                List.of(), List.of(), List.of());
+
+        var response = tool.learn("/repo", List.of(correction), null);
+
+        assertThat(response.status()).isEqualTo("rejected");
+        assertThat(response.created()).isZero();
+        assertThat(response.rejected()).isEqualTo(1);
+        assertThat(response.items()).singleElement().satisfies(item -> {
+            assertThat(item.outcome()).isEqualTo("rejected");
+            assertThat(item.reason()).isEqualTo("CORRECTION_UNKNOWN");
+        });
+        verify(memory, never()).write(any(), any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void allRejectedBatchFallsBackOnlyForUnresolvedLocatorsAndKeepsOtherRejections() {
+        McpClientContextHolder.set(context(List.of("scanner.scan", "memory.write")));
+        resolves();
+        when(learningProvider.getIfAvailable()).thenReturn(learning);
+        when(learning.capture(any())).thenReturn(new CompactLearnReceipt("REJECTED", 0, 0, 0, 2, 0, 0, 0,
+                List.of(new AgentLearningModels.LearnItem(0, "Running the tests", "rejected",
+                                "LOCATOR_UNRESOLVED:com.acme.App#main", List.of()),
+                        new AgentLearningModels.LearnItem(1, "Corrected route", "rejected",
+                                "CORRECTION_UNKNOWN", List.of()))));
+        when(memory.write(eq("Run ./mvnw test."), eq("Running the tests"), eq("decision"), any(),
+                eq("memory.learn"), eq("project"), isNull(), eq("P"), any()))
+                .thenReturn(new MemoryWriteResponse(UUID.randomUUID(), "active", "src"));
+        CaptureCandidate unresolved = new CaptureCandidate("procedure", "Running the tests", "Run ./mvnw test.",
+                List.of(new CaptureLocator("file", "pom.xml", null, null, null),
+                        new CaptureLocator("symbol", "com.acme.App#main", null, null, null)),
+                List.of(), List.of(), List.of());
+        CaptureCandidate correction = new CaptureCandidate("behavior", "Corrected route", "c",
+                List.of(new CaptureLocator("file", "src/Route.java", null, null, null)),
+                List.of(), List.of(), List.of());
+
+        var response = tool.learn("/repo", List.of(unresolved, correction), null);
+
+        assertThat(response.status()).isEqualTo("partial");
+        assertThat(response.created()).isEqualTo(1);
+        assertThat(response.rejected()).isEqualTo(1);
+        assertThat(response.items()).hasSize(2);
+        assertThat(response.items().get(0)).satisfies(item -> {
+            assertThat(item.index()).isZero();
+            assertThat(item.outcome()).isEqualTo("created");
+            assertThat(item.unresolvedLocators()).containsExactly("com.acme.App#main");
+        });
+        assertThat(response.items().get(1)).satisfies(item -> {
+            assertThat(item.index()).isEqualTo(1);
+            assertThat(item.outcome()).isEqualTo("rejected");
+            assertThat(item.reason()).isEqualTo("CORRECTION_UNKNOWN");
+        });
+        verify(memory).write(any(), any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
     void learnReportsDisabledLearningInsteadOfDroppingAnchoredCandidates() {
         McpClientContextHolder.set(context(List.of("scanner.scan", "memory.write")));
         resolves();

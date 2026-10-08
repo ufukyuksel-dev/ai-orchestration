@@ -313,7 +313,10 @@ public class MemoryLifecycleService {
         List<String> missing = carried.stream().filter(referenced::contains).filter(ref -> !resolvedRefs.contains(ref)).toList();
         boolean empty = previous.isEmpty() && snapshot.targets().isEmpty() && snapshot.missingTargets() == 0;
         boolean record = !empty && (!snapshot.fingerprint().equals(previous.get("codeFingerprint"))
-                || !previous.containsKey("missingRefs") || !new TreeSet<>(strings(previous.get("missingRefs"))).equals(new TreeSet<>(missing)));
+                || !previous.containsKey("missingRefs") || !new TreeSet<>(strings(previous.get("missingRefs"))).equals(new TreeSet<>(missing))
+                // A locator rewritten to an equivalent ref keeps the fingerprint; record it so a later deletion of
+                // the target is matched against the ref the memory uses now.
+                || !new TreeSet<>(strings(previous.get("resolvedRefs"))).equals(new TreeSet<>(resolvedRefs)));
         MemoryStatus target = missing.isEmpty() ? MemoryStatus.ACTIVE : MemoryStatus.STALE;
         // The status follows the evidence even when nothing new is recorded (e.g. STALE with complete evidence).
         if (!record && current.status() == target) return empty ? Observation.SKIPPED : Observation.UNCHANGED;

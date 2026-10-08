@@ -378,12 +378,8 @@ public class AgentSessionMcpTool {
             }
             CompactLearnReceipt capture = anchored.isEmpty() ? null
                     : captureAnchored(context, project, anchored, anchoredIndexes, taskRunId, items);
-            if (capture != null && capture.rejected() > 0
-                    && capture.created() + capture.updated() + capture.reused() + capture.conflicts() == 0) {
-                // Nothing resolved against a code scan (e.g. the project was never scanned): keep the cards with
-                // their file locators as declared links instead of losing them; the next scan resolves them.
-                // The refs the capture could not resolve stay visible on the saved card's item.
-                java.util.Map<Integer, List<String>> unresolved = new java.util.HashMap<>();
+            java.util.Map<Integer, List<String>> unresolved = new java.util.HashMap<>();
+            if (capture != null) {
                 for (var item : capture.items()) {
                     String reason = item.reason();
                     if (reason != null && reason.startsWith(LOCATOR_UNRESOLVED)) {
@@ -391,12 +387,24 @@ public class AgentSessionMcpTool {
                                 List.of(reason.substring(LOCATOR_UNRESOLVED.length()).split(",")));
                     }
                 }
-                capture = null;
-                for (int i = 0; i < anchored.size(); i++) {
-                    CaptureCandidate candidate = anchored.get(i);
-                    items.add(writeLocatorFree(anchoredIndexes.get(i), candidate, projectKey,
-                            declaredFileLocators(candidate), unresolved.getOrDefault(i, List.of())));
+            }
+            if (capture != null && !unresolved.isEmpty() && capture.rejected() > 0
+                    && capture.created() + capture.updated() + capture.reused() + capture.conflicts() == 0) {
+                // Nothing resolved against a code scan (e.g. the project was never scanned): keep the cards whose
+                // locators could not be resolved with their file locators as declared links instead of losing them;
+                // the next scan resolves them. Other rejections (e.g. an unknown correction) stay rejected.
+                for (var item : capture.items()) {
+                    int i = item.index();
+                    if (unresolved.containsKey(i)) {
+                        CaptureCandidate candidate = anchored.get(i);
+                        items.add(writeLocatorFree(anchoredIndexes.get(i), candidate, projectKey,
+                                declaredFileLocators(candidate), unresolved.get(i)));
+                    } else {
+                        items.add(new LearnedItem(anchoredIndexes.get(i), item.summary(), item.outcome(),
+                                null, item.reason(), item.unresolvedLocators()));
+                    }
                 }
+                capture = null;
             }
             int created = (int) items.stream().filter(i -> "created".equals(i.outcome())).count()
                     + (capture == null ? 0 : capture.created() + capture.updated());

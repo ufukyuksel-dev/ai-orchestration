@@ -15,6 +15,7 @@ import org.springframework.jdbc.datasource.*;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.*;
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @Testcontainers
@@ -138,6 +139,24 @@ class MemoryLifecycleServiceTest {
         projection.linkMemory(id);
         assertThat(item().status()).isEqualTo(MemoryStatus.ACTIVE); assertThat(lifecycle.missingRefs(id)).isEmpty();
         assertThat(memories.reviewQueueForMemory(id)).allSatisfy(r -> assertThat(r.status()).isNotEqualTo(ReviewStatus.OPEN));
+    }
+
+    @Test void locatorRewrittenToAnEquivalentRefIsTrackedSoALaterDeletionIsStale() throws Exception {
+        CodeSymbolRecord run = new CodeSymbolRecord(UUID.randomUUID(), "P", UUID.randomUUID(), "method", "run",
+                "p.A#run", "run()", "service", 1, 5, "hs", UUID.randomUUID(), Map.of());
+        when(baseline.findSymbolsByRef(eq("P"), anyString(), anyInt())).thenReturn(List.of(run));
+        locators(new MemoryCodeLocator(MemoryCodeLocatorKind.SYMBOL, "p.A#run", null, null));
+        projection.linkMemory(id);
+        assertThat(item().status()).isEqualTo(MemoryStatus.ACTIVE);
+        locators(new MemoryCodeLocator(MemoryCodeLocatorKind.SYMBOL, "p.A#run()", null, null)); // same target
+        projection.linkMemory(id);
+        assertThat(item().status()).isEqualTo(MemoryStatus.ACTIVE);
+        when(baseline.findSymbolsByRef(eq("P"), anyString(), anyInt())).thenReturn(List.of()); // method deleted
+        for (int i = 0; i < 2; i++) {
+            projection.linkMemory(id);
+            assertThat(item().status()).isEqualTo(MemoryStatus.STALE);
+            assertThat(lifecycle.missingRefs(id)).containsExactly("p.A#run()");
+        }
     }
 
     @Test void legacyStaleRecordSeedsMissingRefsFromHistory() {
