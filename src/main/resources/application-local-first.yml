@@ -101,15 +101,15 @@ ai-orchestration:
     enabled: true
     default-project-key: ${AI_ORCH_LOCAL_TRUST_PROJECT_KEY:AI_ORCHESTRATION}
     default-client-id: ${AI_ORCH_LOCAL_TRUST_CLIENT_ID:local-client}
-    # Default-off: true lets loopback local agents write AUTO_ACTIVE memory after the gate's policy,
-    # confidence, and duplicate checks pass.
-    auto-active-write: ${AI_ORCH_LOCAL_TRUST_AUTO_ACTIVE_WRITE:false}
     local-scopes:
       - memory.read
       - memory.write
       - memory.delete
       - memory.pending
       - memory.human_confirmed_approve
+      - memory.approve
+      - memory.admin
+      - memory.auto_active_write
       - rules.read
       - rules.write
       - rules.confirm
@@ -120,10 +120,9 @@ ai-orchestration:
       - context.semantic.read
       - knowledge.ingest
       - scanner.scan
+      - scanner.insights.write-memory
       - transcript.write
-      - provider.local-qwen
-      - provider.claude
-      - provider.codex
+      - provider.*
   memory:
     episodic-collection-name: memory_episodic_bge_m3_1024
     embedding:

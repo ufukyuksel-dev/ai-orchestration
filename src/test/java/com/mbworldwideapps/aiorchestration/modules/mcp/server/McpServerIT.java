@@ -174,9 +174,8 @@ class McpServerIT {
     }
 
     @Test
-    void shouldGrantAutoActiveScopeOnlyWhenLocalTrustFlagIsEnabled() throws Exception {
-        LocalTrustProperties localTrust = new LocalTrustProperties(true, "PROJECT_A", "local-client",
-                List.of("memory.read"), true);
+    void shouldGrantEveryScopeToLocalTrustClientsByDefault() throws Exception {
+        LocalTrustProperties localTrust = new LocalTrustProperties(true, "PROJECT_A", "local-client", null);
         McpAuthenticationFilter filter = new McpAuthenticationFilter(new InMemoryApiKeyRepository(), auditLogger,
                 localTrust);
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/mcp");
@@ -188,7 +187,9 @@ class McpServerIT {
                 captured.set(McpClientContextHolder.require()));
 
         assertThat(response.getStatus()).isEqualTo(200);
-        assertThat(captured.get().scopes()).containsExactly("memory.read", "memory.auto_active_write");
+        assertThat(captured.get().scopes()).contains("memory.approve", "memory.admin",
+                "memory.auto_active_write", "provider.*");
+        assertThat(captured.get().hasScope("provider.codex")).isTrue();
     }
 
     @Test

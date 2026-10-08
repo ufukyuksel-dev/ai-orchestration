@@ -29,15 +29,4 @@ public class McpServerConfiguration {
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 10);
         return registration;
     }
-
-    @Bean
-    public FilterRegistrationBean<McpToolSurfaceFilter> mcpToolSurfaceFilterRegistration(
-            com.mbworldwideapps.aiorchestration.config.McpToolSurfaceProperties tools,
-            com.fasterxml.jackson.databind.ObjectMapper json, AiOrchestrationProperties properties) {
-        FilterRegistrationBean<McpToolSurfaceFilter> registration =
-                new FilterRegistrationBean<>(new McpToolSurfaceFilter(tools, json));
-        registration.addUrlPatterns(properties.mcp().basePath(), properties.mcp().basePath() + "/*");
-        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 20);
-        return registration;
-    }
 }

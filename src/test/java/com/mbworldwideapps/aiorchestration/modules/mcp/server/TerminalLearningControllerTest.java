@@ -1,10 +1,8 @@
 package com.mbworldwideapps.aiorchestration.modules.mcp.server;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -14,10 +12,8 @@ import java.util.UUID;
 import com.mbworldwideapps.aiorchestration.modules.agentlearning.AgentLearningModels.CaptureCandidate;
 import com.mbworldwideapps.aiorchestration.modules.agentlearning.AgentLearningModels.CaptureLocator;
 import com.mbworldwideapps.aiorchestration.modules.agentlearning.AgentLearningModels.CompactLearnReceipt;
-import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.web.server.ResponseStatusException;
 
 class TerminalLearningControllerTest {
 
@@ -31,40 +27,23 @@ class TerminalLearningControllerTest {
     }
 
     @Test
-    void rejectsAnythingExceptTheTypedCopilotTerminalClient() {
-        HttpServletRequest request = mock(HttpServletRequest.class);
-        when(request.getHeader("X-AI-Orch-Client")).thenReturn("codex");
-        McpClientContextHolder.set(context("scope-1"));
+    void acceptsAnyAgentClient() {
+        UUID binding = UUID.randomUUID();
+        when(scanner.resolveProject("/repo", null)).thenReturn(
+                new ScannerProjectResolveResponse("/repo", "P", "P", true, true, "fingerprint", binding));
+        CompactLearnReceipt receipt = new CompactLearnReceipt("ACCEPTED", 0, 0, 0, 0, 0, 0, 0);
+        when(learning.capture(any())).thenReturn(receipt);
 
-        assertThatThrownBy(() -> controller.capture(
-                new TerminalLearningController.CaptureRequest("/repo", "task-1", List.of()), request))
-                .isInstanceOf(ResponseStatusException.class)
-                .hasMessageContaining("COPILOT_TERMINAL_REQUIRED");
-
-        verify(scanner, never()).resolveProject(any(), any());
-        verify(learning, never()).capture(any());
-    }
-
-    @Test
-    void rejectsSpoofedHeaderWhenAuthenticatedClientIsDifferent() {
-        HttpServletRequest request = mock(HttpServletRequest.class);
-        when(request.getHeader("X-AI-Orch-Client")).thenReturn(TerminalLearningController.COPILOT_CLIENT);
-        McpClientContextHolder.set(new McpClientContext("P", "another-client", "key",
-                List.of("memory.write"), McpAuditLogger.sha256Hex("another-client:scope-1")));
-
-        assertThatThrownBy(() -> controller.capture(
-                new TerminalLearningController.CaptureRequest("/repo", "task-1", List.of()), request))
-                .isInstanceOf(ResponseStatusException.class)
-                .hasMessageContaining("COPILOT_TERMINAL_REQUIRED");
-
-        verify(scanner, never()).resolveProject(any(), any());
-        verify(learning, never()).capture(any());
+        for (String client : List.of("claude-code", "codex", "copilot-cli-memory-skill")) {
+            McpClientContextHolder.set(context(client, "scope-1"));
+            assertThat(controller.capture(
+                    new TerminalLearningController.CaptureRequest("/repo", "task-" + client, List.of())))
+                    .isEqualTo(receipt);
+        }
     }
 
     @Test
     void derivesProjectAndDelegatesOneLocatorBasedBatch() {
-        HttpServletRequest request = mock(HttpServletRequest.class);
-        when(request.getHeader("X-AI-Orch-Client")).thenReturn(TerminalLearningController.COPILOT_CLIENT);
         UUID binding = UUID.randomUUID();
         when(scanner.resolveProject("/repo", null)).thenReturn(
                 new ScannerProjectResolveResponse("/repo", "P", "P", true, true, "fingerprint", binding));
@@ -74,10 +53,10 @@ class TerminalLearningControllerTest {
                 List.of(), List.of(), List.of());
         CompactLearnReceipt receipt = new CompactLearnReceipt("ACCEPTED", 1, 0, 0, 0, 0, 0, 0);
         when(learning.capture(any())).thenReturn(receipt);
-        McpClientContextHolder.set(context("scope-1"));
+        McpClientContextHolder.set(context("codex", "scope-1"));
 
         var actual = controller.capture(
-                new TerminalLearningController.CaptureRequest("/repo", "task-1", List.of(candidate)), request);
+                new TerminalLearningController.CaptureRequest("/repo", "task-1", List.of(candidate)));
 
         assertThat(actual).isEqualTo(receipt);
         verify(learning).capture(org.mockito.ArgumentMatchers.argThat(command ->
@@ -87,8 +66,7 @@ class TerminalLearningControllerTest {
                         && command.learningCandidates().equals(List.of(candidate))));
     }
 
-    private static McpClientContext context(String rawScope) {
-        String clientId = TerminalLearningController.COPILOT_CLIENT;
+    private static McpClientContext context(String clientId, String rawScope) {
         return new McpClientContext("P", clientId, "local",
                 List.of("memory.read", "memory.write", "codebase.read", "rules.read"),
                 McpAuditLogger.sha256Hex(clientId + ":" + rawScope));

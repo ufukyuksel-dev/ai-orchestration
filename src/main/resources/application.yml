@@ -154,13 +154,15 @@ ai-orchestration:
     enabled: ${AI_ORCH_LOCAL_TRUST_ENABLED:false}
     default-project-key: ${AI_ORCH_LOCAL_TRUST_PROJECT_KEY:AI_ORCHESTRATION}
     default-client-id: ${AI_ORCH_LOCAL_TRUST_CLIENT_ID:local-client}
-    auto-active-write: ${AI_ORCH_LOCAL_TRUST_AUTO_ACTIVE_WRITE:false}
     local-scopes:
       - memory.read
       - memory.write
       - memory.delete
       - memory.pending
       - memory.human_confirmed_approve
+      - memory.approve
+      - memory.admin
+      - memory.auto_active_write
       - rules.read
       - rules.write
       - rules.confirm
@@ -171,10 +173,9 @@ ai-orchestration:
       - context.semantic.read
       - knowledge.ingest
       - scanner.scan
+      - scanner.insights.write-memory
       - transcript.write
-      - provider.local-qwen
-      - provider.claude
-      - provider.codex
+      - provider.*
   orchestrator:
     routing:
       hybrid-enabled: ${AI_ORCH_ORCHESTRATOR_HYBRID_ENABLED:true}
@@ -265,7 +266,7 @@ ai-orchestration:
       session-fallback-provider: qwen
       auto-active-confidence: 0.85
       gate-timeout: 3s
-      trusted-client-ids: self-pipeline,claude-code,codex
+      trusted-client-ids: self-pipeline,claude-code,codex,copilot-cli-memory-skill,copilot
     confirm:
       min-agent-confidence: 0.75
     relation-judge:

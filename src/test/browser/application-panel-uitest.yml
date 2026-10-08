@@ -15,8 +15,6 @@ spring:
 ai-orchestration:
   references:
     root-path: ${user.dir}/.benchmark/panel-references
-  local-trust:
-    auto-active-write: true
   memory:
     load-on-startup: false
     write-gate:

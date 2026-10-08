@@ -237,7 +237,8 @@ public class MemoryMcpTool {
     static String agentDefaultView(McpClientContext context, String view) {
         if (view != null && !view.isBlank()) return view;
         String client = context == null || context.clientId() == null ? "" : context.clientId();
-        return client.startsWith("claude-code") || client.startsWith("codex") ? "agent" : view;
+        return client.startsWith("claude-code") || client.startsWith("codex") || client.startsWith("copilot")
+                ? "agent" : view;
     }
 
     private static ResponseView responseView(String view) {
@@ -747,7 +748,7 @@ public class MemoryMcpTool {
         return null;
     }
 
-    @McpTool(name = "memory.approve", description = "Emergency/debug only. Bypasses AI gate. Use memory.confirm for normal AI-mediated approval.")
+    @McpTool(name = "memory.approve", description = "Approve or reject a memory directly, without the AI gate; a reason is required. memory.confirm runs the gate.")
     public MemoryApproveResponse approve(
             @McpToolParam(description = "Memory item UUID") String memoryId,
             @McpToolParam(description = "Decision: approve or reject") String decision,
@@ -757,7 +758,7 @@ public class MemoryMcpTool {
         requireScope(context, "memory.approve", "memory.approve", memoryId, started);
         try {
             if (blankToNull(reason) == null) {
-                throw new IllegalArgumentException("reason is required for emergency/debug memory.approve bypass");
+                throw new IllegalArgumentException("reason is required for memory.approve");
             }
             UUID id = UUID.fromString(memoryId);
             MemoryItem item = memoryService.findById(id);
@@ -792,7 +793,7 @@ public class MemoryMcpTool {
         }
     }
 
-    @McpTool(name = "memory.review.pending", description = "List pending memory review items for any project (admin scope). Use memory.pending for the project-scoped, non-admin direct-client path.")
+    @McpTool(name = "memory.review.pending", description = "List pending memory review items for a project.")
     public MemoryReviewPendingResponse reviewPending(
             @McpToolParam(description = "Optional project key; defaults to the API key project", required = false) String projectKey,
             @McpToolParam(description = "Number of items, max 100", required = false) Integer limit,
