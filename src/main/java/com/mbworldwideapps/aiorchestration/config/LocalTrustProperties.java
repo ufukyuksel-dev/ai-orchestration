@@ -3,17 +3,17 @@ package com.mbworldwideapps.aiorchestration.config;
 import java.util.List;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.boot.context.properties.bind.ConstructorBinding;
 
+/**
+ * Loopback agents (Claude Code, Codex, Copilot) get every scope by default, so all of them have the same, unrestricted
+ * capability surface. Remote clients authenticate with bearer API keys whose levels are set in McpApiKeyService.
+ */
 @ConfigurationProperties(prefix = "ai-orchestration.local-trust")
 public record LocalTrustProperties(
         boolean enabled,
         String defaultProjectKey,
         String defaultClientId,
-        List<String> localScopes,
-        boolean autoActiveWrite) {
-
-    private static final String AUTO_ACTIVE_WRITE_SCOPE = "memory.auto_active_write";
+        List<String> localScopes) {
 
     public static final List<String> DEFAULT_LOCAL_SCOPES = List.of(
             "memory.read",
@@ -21,6 +21,9 @@ public record LocalTrustProperties(
             "memory.delete",
             "memory.pending",
             "memory.human_confirmed_approve",
+            "memory.approve",
+            "memory.admin",
+            "memory.auto_active_write",
             "rules.read",
             "rules.write",
             "rules.confirm",
@@ -31,17 +34,10 @@ public record LocalTrustProperties(
             "context.semantic.read",
             "knowledge.ingest",
             "scanner.scan",
+            "scanner.insights.write-memory",
             "transcript.write",
-            "provider.local-qwen",
-            "provider.claude",
-            "provider.codex");
+            "provider.*");
 
-    public LocalTrustProperties(boolean enabled, String defaultProjectKey, String defaultClientId,
-            List<String> localScopes) {
-        this(enabled, defaultProjectKey, defaultClientId, localScopes, false);
-    }
-
-    @ConstructorBinding
     public LocalTrustProperties {
         if (defaultProjectKey == null || defaultProjectKey.isBlank()) {
             defaultProjectKey = "AI_ORCHESTRATION";
@@ -59,7 +55,6 @@ public record LocalTrustProperties(
             localScopes = localScopes.stream()
                     .filter(scope -> scope != null && !scope.isBlank())
                     .map(String::trim)
-                    .filter(scope -> autoActiveWrite || !AUTO_ACTIVE_WRITE_SCOPE.equals(scope))
                     .distinct()
                     .toList();
             if (localScopes.isEmpty()) {
@@ -69,15 +64,10 @@ public record LocalTrustProperties(
     }
 
     public List<String> effectiveLocalScopes() {
-        if (!autoActiveWrite || localScopes.contains(AUTO_ACTIVE_WRITE_SCOPE)) {
-            return localScopes;
-        }
-        return java.util.stream.Stream.concat(localScopes.stream(), java.util.stream.Stream.of(AUTO_ACTIVE_WRITE_SCOPE))
-                .distinct()
-                .toList();
+        return localScopes;
     }
 
     public static LocalTrustProperties disabled() {
-        return new LocalTrustProperties(false, "AI_ORCHESTRATION", "local-client", DEFAULT_LOCAL_SCOPES, false);
+        return new LocalTrustProperties(false, "AI_ORCHESTRATION", "local-client", DEFAULT_LOCAL_SCOPES);
     }
 }

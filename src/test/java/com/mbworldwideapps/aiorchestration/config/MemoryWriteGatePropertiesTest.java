@@ -58,7 +58,7 @@ class MemoryWriteGatePropertiesTest {
                     assertThat(properties.autoActiveConfidence()).isEqualTo(0.85);
                     assertThat(properties.gateTimeout()).hasSeconds(3);
                     assertThat(properties.trustedClientIds())
-                            .containsExactlyInAnyOrder("self-pipeline", "claude-code", "codex");
+                            .containsExactlyInAnyOrder("self-pipeline", "claude-code", "codex", "copilot-cli-memory-skill", "copilot");
                     assertThat(confirm.minAgentConfidence()).isEqualTo(0.75);
                 });
     }

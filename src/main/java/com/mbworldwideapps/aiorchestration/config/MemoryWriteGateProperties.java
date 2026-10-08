@@ -75,7 +75,7 @@ public record MemoryWriteGateProperties(
 
     private static Set<String> normalizeTrustedClients(Set<String> trustedClientIds) {
         Set<String> source = trustedClientIds == null
-                ? Set.of("self-pipeline", "claude-code", "codex")
+                ? Set.of("self-pipeline", "claude-code", "codex", "copilot-cli-memory-skill", "copilot")
                 : trustedClientIds;
         return source.stream()
                 .filter(value -> value != null && !value.isBlank())

@@ -104,32 +104,13 @@ class LlmMemoryWriteGateTest {
     }
 
     @Test
-    void localTrustDefaultScopesStillStoreMemoryActive() {
-        FakeGateway gateway = FakeGateway.responding("""
-                {"verdict":"AUTO_ACTIVE","gateReason":"clear_rule","suggestedQuestion":"Approve?",
-                 "contextHints":[],"confidence":0.91,"debugMetadata":{}}
-                """);
-        LocalTrustProperties localTrust = new LocalTrustProperties(true, "PROJECT_A", "local-client",
-                LocalTrustProperties.DEFAULT_LOCAL_SCOPES);
-
-        MemoryWriteGate.GateDecision decision = gate(gateway, PolicyEngine.allowAll()).evaluate(request(),
-                new MemoryWriteGate.GateContext(context("local-client",
-                        localTrust.effectiveLocalScopes().toArray(String[]::new)), null));
-
-        assertThat(localTrust.effectiveLocalScopes()).doesNotContain("memory.auto_active_write");
-        assertThat(decision.verdict()).isEqualTo(MemoryWriteGate.Verdict.AUTO_ACTIVE);
-        assertThat(decision.debugMetadata()).containsEntry("untrustedClient", true);
-        assertThat(gateway.lastRequest).isNotNull();
-    }
-
-    @Test
-    void localTrustAutoActiveFlagAllowsAutoActiveWritesViaScope() {
+    void localTrustDefaultScopesAllowAutoActiveWritesViaScope() {
         FakeGateway gateway = FakeGateway.responding("""
                 {"verdict":"AUTO_ACTIVE","gateReason":"clear_rule","suggestedQuestion":null,
                  "contextHints":[],"confidence":0.91,"debugMetadata":{}}
                 """);
         LocalTrustProperties localTrust = new LocalTrustProperties(true, "PROJECT_A", "local-client",
-                LocalTrustProperties.DEFAULT_LOCAL_SCOPES, true);
+                LocalTrustProperties.DEFAULT_LOCAL_SCOPES);
 
         MemoryWriteGate.GateDecision decision = gate(gateway, PolicyEngine.allowAll()).evaluate(request(),
                 new MemoryWriteGate.GateContext(context("local-client",
