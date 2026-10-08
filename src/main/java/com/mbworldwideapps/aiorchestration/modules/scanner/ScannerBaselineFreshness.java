@@ -75,7 +75,7 @@ public final class ScannerBaselineFreshness {
                 return true;
             }
         }
-        return false;
+        return NestedCheckouts.inside(root, path);
     }
 
     private static Set<String> normalized(Iterable<String> values, boolean lowercase) {

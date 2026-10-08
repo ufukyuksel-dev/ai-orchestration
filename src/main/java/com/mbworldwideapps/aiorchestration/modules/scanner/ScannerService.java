@@ -2136,7 +2136,7 @@ public class ScannerService implements ScannerAgentExecutor {
                 return true;
             }
         }
-        return false;
+        return NestedCheckouts.inside(root, path);
     }
 
     private record ScanScope(List<String> includePaths, List<String> excludePaths) {
