@@ -233,11 +233,9 @@ public class MemoryReviewService {
                 request.codeLocators(), scope, projectKey));
         metadata.put("reviewContentHash", contentHash(summary, text));
         UUID vectorId = MemoryService.deterministicVectorId(scope, projectKey, summary, text);
-        // Only a changed learned claim (summary/text) invalidates a discovery; tag, confidence or locator
-        // corrections keep its status so agents can repair metadata without making a memory look outdated.
-        boolean claimChanged = !summary.equals(existing.summary()) || !text.equals(existing.text());
-        MemoryStatus updatedStatus = existing.memoryType() == MemoryType.DISCOVERY && claimChanged
-                ? MemoryStatus.STALE : existing.status();
+        // An edit is the correction itself: a live memory comes out ACTIVE. The code-link projection that follows
+        // the edit returns it to STALE only if a locator still points to missing code.
+        MemoryStatus updatedStatus = existing.status() == MemoryStatus.STALE ? MemoryStatus.ACTIVE : existing.status();
         MemoryItem updated = new MemoryItem(
                 existing.id(),
                 vectorId,

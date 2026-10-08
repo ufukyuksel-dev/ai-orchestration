@@ -41,6 +41,21 @@ class MemoryCodeLinkProjectionSchedulerTest {
         scheduler.shutdown();
     }
 
+    @Test
+    void editedProjectMemoryIsReobservedButLifecycleChangesAreNot() {
+        MemoryCodeLinkProjectionService service = mock(MemoryCodeLinkProjectionService.class);
+        DefaultMemoryCodeLinkProjectionScheduler scheduler = new DefaultMemoryCodeLinkProjectionScheduler(
+                properties(4), service);
+        java.time.Instant now = java.time.Instant.now();
+        MemoryItem item = new MemoryItem(UUID.randomUUID(), UUID.randomUUID(), MemoryScope.PROJECT, "P", MemoryType.DISCOVERY,
+                "s", "t", java.util.List.of(), 0.9, MemoryStatus.ACTIVE, MemorySourceType.MCP_EXTERNAL, "test", "tester",
+                java.util.Map.of(), now, now, null, now, null);
+        scheduler.onMemoryEdited(new MemoryItemChangedEvent(item, MemoryItemChangedEvent.Origin.LIFECYCLE));
+        scheduler.onMemoryEdited(new MemoryItemChangedEvent(item, MemoryItemChangedEvent.Origin.EXTERNAL_EDIT));
+        org.mockito.Mockito.verify(service, org.mockito.Mockito.timeout(2000).times(1)).linkMemory(item.id());
+        scheduler.shutdown();
+    }
+
     private static void awaitState(DefaultMemoryCodeLinkProjectionScheduler scheduler, String state)
             throws InterruptedException {
         long deadline = System.currentTimeMillis() + 2000L;

@@ -134,5 +134,8 @@ public interface AgentLearningRepository {
 
     void markLearningProfileStale(UUID memoryId);
 
+    /** Aligns a discovery's profile with its item's current status: active → ACTIVE, stale → STALE_EVIDENCE. */
+    void syncLearningProfileWithItem(UUID memoryId);
+
     PurgeResult purgeExpired(Instant now, int batchSize);
 }

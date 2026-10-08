@@ -3,8 +3,8 @@ package com.mbworldwideapps.aiorchestration.config;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * How memories are linked to scanned code. After every completed scan the links are re-resolved, and a memory
- * whose code changed is marked stale for review (code drift).
+ * How memories are linked to scanned code. After every completed scan the links are re-resolved; a memory is stale
+ * while code it is bound to is missing and becomes active again once it resolves (or its locator is repaired).
  */
 @ConfigurationProperties(prefix = "ai-orchestration.memory.code-links")
 public record MemoryCodeLinkProperties(

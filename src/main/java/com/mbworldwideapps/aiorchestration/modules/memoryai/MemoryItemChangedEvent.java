@@ -17,6 +17,8 @@ public record MemoryItemChangedEvent(MemoryItem item, Origin origin, MemoryItem 
     public enum Origin {
         NORMAL,
         EXTERNAL_EDIT,
-        LEARNING_CORRECTION
+        LEARNING_CORRECTION,
+        /** Automatic status change from code evidence (a bound target went missing or resolves again). */
+        LIFECYCLE
     }
 }

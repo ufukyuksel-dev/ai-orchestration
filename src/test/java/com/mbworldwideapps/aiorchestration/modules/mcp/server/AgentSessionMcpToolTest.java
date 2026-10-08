@@ -265,6 +265,33 @@ class AgentSessionMcpToolTest {
                 .containsExactly("csv export of owners", "run the tests with JAVA_HOME set to JDK 21");
     }
 
+    @Test
+    void aStaleCardNamesTheMissingCodeRefs() {
+        McpClientContextHolder.set(context(List.of("scanner.scan")));
+        resolves();
+        var retrieval = mock(com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryRetrievalService.class);
+        var fresh = card("fresh", 0.60);
+        UUID id = UUID.randomUUID();
+        var stale = new com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextItem(id, id, "c",
+                com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryScope.PROJECT, "P",
+                com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryType.DECISION, "stale", "stale text",
+                null, 0.9, true, 10, 0.60, java.time.Instant.now());
+        when(retrieval.retrieveForInjection("add a field", "P", null)).thenReturn(
+                new com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextResponse(
+                        List.of(fresh, stale), List.of(), 2, 30, java.util.Map.of(), 0, 0, 0L));
+        var lifecycle = mock(com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryLifecycleService.class);
+        when(lifecycle.missingRefs(id)).thenReturn(List.of("p.Gone#run"));
+        tool.setSessionSupport(retrieval, null, emptyProvider(), null, 0.0);
+        tool.setLifecycle(lifecycle);
+
+        var response = tool.bootstrap("/repo", "add a field", null, null, null, null);
+
+        assertThat(response.memory()).filteredOn(c -> c.summary().equals("stale")).singleElement()
+                .satisfies(c -> { assertThat(c.stale()).isTrue(); assertThat(c.missingRefs()).containsExactly("p.Gone#run"); });
+        assertThat(response.memory()).filteredOn(c -> c.summary().equals("fresh")).singleElement()
+                .satisfies(c -> assertThat(c.missingRefs()).isEmpty());
+    }
+
     private static com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextItem card(String summary,
             double score) {
         UUID id = UUID.randomUUID();

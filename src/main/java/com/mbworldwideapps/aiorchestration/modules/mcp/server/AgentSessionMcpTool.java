@@ -51,6 +51,7 @@ public class AgentSessionMcpTool {
     private AgentLearningRepository learned;
     private AgentPrefsStore prefs;
     private double cardMinScore = 0.0;
+    private com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryLifecycleService lifecycle;
 
     public AgentSessionMcpTool(ScannerMcpTool scanner, InstructionReadService rules, MemoryMcpTool memory,
             ObjectProvider<AgentLearningMcpTool> learning, McpAuditLogger audit) {
@@ -74,6 +75,11 @@ public class AgentSessionMcpTool {
         this.cardMinScore = cardMinScore;
     }
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setLifecycle(com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryLifecycleService lifecycle) {
+        this.lifecycle = lifecycle;
+    }
+
     /** One approved rule, as the agent needs it (approval evidence stays in the panel). */
     @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_EMPTY)
     public record Rule(String scope, String statement, String rationale, List<String> modulePaths) {
@@ -81,7 +87,7 @@ public class AgentSessionMcpTool {
 
     /** A remembered piece of project knowledge relevant to the task: what it says and where to look. */
     @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_EMPTY)
-    public record Card(String id, String summary, String text, List<String> files, Boolean stale) {
+    public record Card(String id, String summary, String text, List<String> files, Boolean stale, List<String> missingRefs) {
     }
 
     /**
@@ -295,8 +301,10 @@ public class AgentSessionMcpTool {
                 }
                 String text = item.text() == null ? "" : item.text().trim();
                 if (text.length() > 700) text = text.substring(0, 700) + "…";
+                // A stale card names the bound code that is gone, so the agent can repair the locator or archive it.
+                List<String> missing = item.stale() && lifecycle != null ? lifecycle.missingRefs(item.memoryId()) : List.of();
                 cards.add(new Card(item.memoryId().toString(), item.summary(), text,
-                        files.stream().limit(8).toList(), item.stale() ? Boolean.TRUE : null));
+                        files.stream().limit(8).toList(), item.stale() ? Boolean.TRUE : null, missing));
             }
             return cards;
         } catch (RuntimeException e) {

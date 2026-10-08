@@ -147,7 +147,22 @@ class MemoryReviewServiceTest {
     }
 
     @Test
-    void generalDiscoveryEditMarksItemStaleAndPublishesExternalEditOrigin() {
+    void editOfStaleMemoryReactivatesIt() {
+        MemoryItem item = item(MemoryScope.PROJECT, "AI_ORCHESTRATION", MemoryStatus.STALE,
+                MemoryType.DISCOVERY, "The old route is here.");
+        repository.save(item);
+
+        MemoryItem edited = reviewService.edit(item.id(), new EditMemoryRequest(
+                item.summary(), "The route moved to the new controller.", item.tags(), item.confidence(), "agent",
+                "Corrected after the code moved."));
+
+        assertThat(edited.status()).isEqualTo(MemoryStatus.ACTIVE);
+        assertThat(publishedEvents).singleElement().satisfies(event ->
+                assertThat(event.origin()).isEqualTo(MemoryItemChangedEvent.Origin.EXTERNAL_EDIT));
+    }
+
+    @Test
+    void generalDiscoveryEditKeepsItemActiveAndPublishesExternalEditOrigin() {
         MemoryItem item = item(MemoryScope.PROJECT, "AI_ORCHESTRATION", MemoryStatus.ACTIVE,
                 MemoryType.DISCOVERY, "The old route is here.");
         repository.save(item);
@@ -159,7 +174,7 @@ class MemoryReviewServiceTest {
                 "Edited discovery", "A human edited this without fresh learning evidence.",
                 List.of("discovery"), 0.9, "reviewer", "Legacy edit."));
 
-        assertThat(edited.status()).isEqualTo(MemoryStatus.STALE);
+        assertThat(edited.status()).isEqualTo(MemoryStatus.ACTIVE);
         assertThat(events).singleElement().satisfies(event -> {
             assertThat(event.item().id()).isEqualTo(item.id());
             assertThat(event.origin()).isEqualTo(MemoryItemChangedEvent.Origin.EXTERNAL_EDIT);

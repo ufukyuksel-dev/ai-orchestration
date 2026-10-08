@@ -46,6 +46,14 @@ class PromptContextHookTest(unittest.TestCase):
         # the next prompt of the same session repeats neither the rules nor the card
         self.assertEqual("", run_hook(self.event("and a test"), BOOT))
 
+    def test_stale_card_names_the_missing_code_and_how_to_fix_it(self):
+        card = {"id": "s1", "summary": "Pricing rule", "text": "See PriceService.", "stale": True,
+                "missingRefs": ["p.PriceService#quote", "src/Price.java"]}
+        text = run_hook(self.event(), {"projectKey": "P", "memory": [card]})
+        self.assertIn("Memory card (code it points to is missing: p.PriceService#quote, src/Price.java; "
+                      "fix its locators with ai_orch memory update or archive it): Pricing rule.", text)
+        self.assertNotIn("may be outdated", text)
+
     def test_nothing_relevant_prints_nothing(self):
         self.assertEqual("", run_hook(self.event(), {"projectKey": "P", "rules": [], "memory": []}))
 

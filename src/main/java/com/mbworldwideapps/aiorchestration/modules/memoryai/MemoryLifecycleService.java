@@ -16,11 +16,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** Canonical lifecycle evidence. Automatic observation can mark stale, never approve or delete a memory. */
+/**
+ * Canonical lifecycle evidence. A memory is STALE exactly while a code target it is bound to (one that resolved
+ * before) is missing; observation reactivates it once every such target resolves again or its locator is repaired.
+ * Automatic observation never approves a pending memory or deletes one.
+ */
 @Service
 public class MemoryLifecycleService {
     private static final Logger log = LoggerFactory.getLogger(MemoryLifecycleService.class);
-    public enum Observation { OBSERVED, STALE, UNCHANGED, UNKNOWN, SKIPPED, CONFLICT }
+    private static final String SCANNER_INSIGHT = "scanner-flow-insight:";
+    public enum Observation { OBSERVED, STALE, REVALIDATED, UNCHANGED, UNKNOWN, SKIPPED, CONFLICT }
     public record CodeTarget(String locatorKind, String canonicalRef, String targetContentHash) {}
     public record CodeSnapshot(String fingerprint, List<CodeTarget> targets, int missingTargets) {}
     private final JdbcTemplate jdbc;
@@ -51,7 +56,7 @@ public class MemoryLifecycleService {
             String evidence, String humanRawText, String humanTurnRef) {}
     public record DecisionResult(UUID memoryId, MemoryStatus status, UUID replacementId, UUID proposalId) {}
     private record Proposal(UUID id, UUID memoryId, Map<String,Object> metadata, String status) {}
-    private record Prepared(Preview preview, MemoryItem old, MemoryItem replacement, Proposal proposal) {}
+    private record Prepared(Preview preview, MemoryItem old, MemoryItem replacement, Proposal proposal, List<String> resolvedRefs) {}
 
     /** Read-only preview; locks end before returning and its digest must be rechecked on decision. */
     public Preview preview(Selection selection) {
@@ -92,6 +97,7 @@ public class MemoryLifecycleService {
                 observation.put("action", "code_evidence_observed"); observation.put("kind", "code_drift");
                 observation.put("codeFingerprint", p.preview().codeEvidence().fingerprint());
                 observation.put("codeTargets", p.preview().codeEvidence().targets()); observation.put("missingTargets", 0);
+                observation.put("resolvedRefs", p.resolvedRefs()); observation.put("missingRefs", List.of());
                 observation.put("memoryHash", p.preview().memoryHash()); observation.put("acceptedPreviewHash", approval.previewHash());
                 memories.insertEvent(new MemoryEvent(UUID.randomUUID(), p.old().id(), MemoryEventType.UPDATED, observation, now));
                 closeReviews(p.old().id(), "approved", audit, now, true);
@@ -176,14 +182,17 @@ public class MemoryLifecycleService {
                 throw new IllegalStateException("Supersession proposal changed or is no longer current");
         }
         CodeSnapshot code = null;
+        List<String> refs = List.of();
         if (input.decision() == Decision.REVALIDATE) {
             activation.assertActivationAllowed(old.memoryType(), old.status(), MemoryStatus.ACTIVE);
             if (!graphProperties.deterministicLinksEnabled())
                 throw new IllegalStateException("Deterministic code evidence is disabled");
             if (baseline.latestCompletedRun(old.projectKey()).isEmpty()) throw new IllegalStateException("Code baseline unavailable");
             MemoryCodeLocatorMetadata.read(old.metadata()); // Malformed explicit bindings cannot be approved as empty evidence.
-            code = snapshot(resolver.resolve(old));
+            MemoryCodeLinkResolveResult resolved = resolver.resolve(old);
+            code = snapshot(resolved);
             if (code.missingTargets() != 0) throw new IllegalStateException("Bound code target is missing");
+            refs = resolvedRefs(resolved, bindings(old)).stream().sorted().toList();
         }
         Selection selection = new Selection(input.decision(), input.projectKey(), oldId, newId, input.proposalId());
         Map<String,Object> digest = new TreeMap<>();
@@ -192,7 +201,7 @@ public class MemoryLifecycleService {
         digest.put("proposal", proposed); digest.put("codeEvidence", code);
         Preview preview = new Preview(selection, old.summary(), replacement == null ? null : replacement.summary(), oldHash, newHash,
                 code, MemoryRelationService.contentHash("", serialize(digest)));
-        return new Prepared(preview, old, replacement, proposed);
+        return new Prepared(preview, old, replacement, proposed, refs);
     }
 
     private Map<String,Object> memorySnapshot(MemoryItem item) {
@@ -272,10 +281,12 @@ public class MemoryLifecycleService {
             log.warn("Memory code evidence unavailable: memoryId={} reason=incomplete_or_oversized", observed.id());
             return Observation.UNKNOWN;
         }
-        return transactions.execute(tx -> observeLocked(observed, snapshot));
+        List<Binding> bindings = bindings(observed);
+        Set<String> resolvedRefs = resolvedRefs(resolved, bindings);
+        return transactions.execute(tx -> observeLocked(observed, snapshot, bindings, resolvedRefs));
     }
 
-    private Observation observeLocked(MemoryItem observed, CodeSnapshot snapshot) {
+    private Observation observeLocked(MemoryItem observed, CodeSnapshot snapshot, List<Binding> bindings, Set<String> resolvedRefs) {
         MemoryItem current = memories.findByIdForUpdate(observed.id()).orElse(null);
         if (current == null || current.scope() != MemoryScope.PROJECT || !Objects.equals(current.projectKey(), observed.projectKey())
                 || !(current.status() == MemoryStatus.ACTIVE || current.status() == MemoryStatus.STALE)
@@ -286,73 +297,156 @@ public class MemoryLifecycleService {
             return Observation.CONFLICT;
         if (current.memoryType() == MemoryType.RULE && rules.hasLinkedDefinition(current.id())) return Observation.SKIPPED;
         Map<String,Object> previous = latestCodeEvidence(current.id());
-        if (snapshot.fingerprint().equals(previous.get("codeFingerprint"))) return Observation.UNCHANGED;
-        if (previous.isEmpty() && snapshot.targets().isEmpty() && snapshot.missingTargets() == 0) return Observation.SKIPPED;
-        boolean drift = isCodeDrift(previous, snapshot);
+        // Missing refs persist across observations: a target that resolved once and is gone now stays missing until
+        // it resolves again or no current locator points to it (repair/removal). A locator that never resolved is
+        // unresolved evidence, not a missing target, so a freshly learned memory is never made STALE by it.
+        Set<String> carried = new TreeSet<>();
+        if (previous.containsKey("missingRefs")) {
+            carried.addAll(strings(previous.get("missingRefs")));
+            carried.addAll(previouslyResolved(previous, bindings, current.projectKey()));
+        } else {
+            for (Map<String,Object> event : codeEvidenceHistory(current.id()))
+                carried.addAll(previouslyResolved(event, bindings, current.projectKey()));
+        }
+        Set<String> referenced = new HashSet<>();
+        for (Binding binding : bindings) referenced.add(binding.ref());
+        List<String> missing = carried.stream().filter(referenced::contains).filter(ref -> !resolvedRefs.contains(ref)).toList();
+        boolean empty = previous.isEmpty() && snapshot.targets().isEmpty() && snapshot.missingTargets() == 0;
+        boolean record = !empty && (!snapshot.fingerprint().equals(previous.get("codeFingerprint"))
+                || !previous.containsKey("missingRefs") || !new TreeSet<>(strings(previous.get("missingRefs"))).equals(new TreeSet<>(missing)));
+        MemoryStatus target = missing.isEmpty() ? MemoryStatus.ACTIVE : MemoryStatus.STALE;
+        // The status follows the evidence even when nothing new is recorded (e.g. STALE with complete evidence).
+        if (!record && current.status() == target) return empty ? Observation.SKIPPED : Observation.UNCHANGED;
         Map<String,Object> evidence = new LinkedHashMap<>();
         evidence.put("action", "code_evidence_observed"); evidence.put("kind", "code_drift");
         evidence.put("codeFingerprint", snapshot.fingerprint()); evidence.put("codeTargets", snapshot.targets());
         evidence.put("missingTargets", snapshot.missingTargets());
+        evidence.put("resolvedRefs", resolvedRefs.stream().sorted().toList()); evidence.put("missingRefs", missing);
         evidence.put("memoryHash", MemoryRelationService.contentHash(current.summary(), current.text()));
         if (!previous.isEmpty()) evidence.put("previousFingerprint", previous.get("codeFingerprint"));
         Instant now = Instant.now();
-        memories.insertEvent(new MemoryEvent(UUID.randomUUID(), current.id(), MemoryEventType.UPDATED, evidence, now));
-        if (!drift) return Observation.OBSERVED;
-        if (!Boolean.TRUE.equals(jdbc.queryForObject("""
+        if (record) memories.insertEvent(new MemoryEvent(UUID.randomUUID(), current.id(), MemoryEventType.UPDATED, evidence, now));
+        if (target == MemoryStatus.ACTIVE)
+            closeReviews(current.id(), "approved", Map.of("action", "code_drift_auto_revalidated", "actor", "system:code-evidence"), now, true);
+        else if (!Boolean.TRUE.equals(jdbc.queryForObject("""
                 SELECT EXISTS(SELECT 1 FROM memory_review_queue WHERE candidate_memory_id=? AND status='open'
                     AND metadata->>'kind'='code_drift')
                 """, Boolean.class, current.id())))
             memories.insertReviewQueue(new ReviewQueueItem(UUID.randomUUID(), current.id(), ReviewReason.LOW_CONFIDENCE,
                     ReviewStatus.OPEN, evidence, now, null));
-        if (current.status() != MemoryStatus.STALE) {
-            MemoryItem stale = withStatus(current, MemoryStatus.STALE, now);
-            memories.update(stale);
-            Map<String,Object> transition = new LinkedHashMap<>(evidence);
-            transition.put("action", "code_drift"); transition.put("oldStatus", current.status().value()); transition.put("newStatus", "stale");
-            transition.put("actor", "system:code-evidence"); transition.put("reason", "Code evidence changed or a bound target is missing");
-            memories.insertEvent(new MemoryEvent(UUID.randomUUID(), current.id(), MemoryEventType.STATUS_CHANGED, transition, now));
-            events.publishEvent(new MemoryItemChangedEvent(stale));
+        if (current.status() == target) return target == MemoryStatus.STALE ? Observation.STALE : Observation.OBSERVED;
+        MemoryItem changed = withStatus(current, target, now);
+        memories.update(changed);
+        Map<String,Object> transition = new LinkedHashMap<>(evidence);
+        transition.put("oldStatus", current.status().value()); transition.put("newStatus", target.value());
+        transition.put("actor", "system:code-evidence");
+        if (target == MemoryStatus.STALE) {
+            transition.put("action", "code_drift"); transition.put("reason", "A bound code target is missing");
+        } else {
+            transition.put("action", "code_drift_auto_revalidated"); transition.put("reason", "Every bound code target resolves");
         }
-        return Observation.STALE;
+        memories.insertEvent(new MemoryEvent(UUID.randomUUID(), current.id(), MemoryEventType.STATUS_CHANGED, transition, now));
+        events.publishEvent(new MemoryItemChangedEvent(changed, MemoryItemChangedEvent.Origin.LIFECYCLE));
+        return target == MemoryStatus.STALE ? Observation.STALE : Observation.REVALIDATED;
     }
 
-    /**
-     * Drift means previously observed code changed: a target that resolved before now has a different content
-     * hash or is no longer resolvable. A locator that never resolved
-     * (first observation, or a target added later) is unresolved evidence, not drift, so a freshly learned
-     * memory is never marked STALE just because one of its locators could not be bound.
-     */
-    static boolean isCodeDrift(Map<String,Object> previous, CodeSnapshot snapshot) {
-        if (previous.isEmpty()) return false;
-        Map<String,String> before = targetHashes(previous.get("codeTargets"));
-        Map<String,String> now = new HashMap<>();
-        for (CodeTarget target : snapshot.targets()) now.put(target.locatorKind() + "|" + target.canonicalRef(), target.targetContentHash());
-        for (Map.Entry<String,String> entry : before.entrySet()) {
-            if (!Objects.equals(entry.getValue(), now.get(entry.getKey()))) return true;
+    /** What a memory currently points to: its typed locators, or the legacy filePath/symbol/scanner-insight hints. */
+    record Binding(MemoryCodeTargetKind kind, String ref, String capsuleKind) {}
+
+    static List<Binding> bindings(MemoryItem item) {
+        Map<String,Object> metadata = item.metadata() == null ? Map.of() : item.metadata();
+        MemoryCodeLocatorMetadata.Decoded typed;
+        try { typed = MemoryCodeLocatorMetadata.read(metadata); }
+        catch (IllegalArgumentException e) { return List.of(); }
+        List<Binding> result = new ArrayList<>();
+        if (typed.present()) {
+            for (MemoryCodeLocator locator : typed.items())
+                result.add(new Binding(MemoryCodeTargetKind.valueOf(locator.kind().name()), locator.ref(), locator.capsuleKind()));
+            return result;
         }
-        return false;
+        for (String key : List.of("filePath", "symbolId", "symbolRef")) {
+            String value = Objects.toString(metadata.get(key), "").trim();
+            if (!value.isBlank())
+                result.add(new Binding(key.equals("filePath") ? MemoryCodeTargetKind.FILE : MemoryCodeTargetKind.SYMBOL, value, null));
+        }
+        String sourceRef = Objects.toString(item.sourceRef(), "").trim();
+        if (sourceRef.startsWith(SCANNER_INSIGHT)) result.add(new Binding(MemoryCodeTargetKind.CAPSULE, sourceRef, null));
+        return result;
     }
 
-    private static Map<String,String> targetHashes(Object rawTargets) {
-        Map<String,String> hashes = new HashMap<>();
-        if (rawTargets instanceof List<?> list) {
-            for (Object entry : list) {
-                if (entry instanceof Map<?,?> target && target.get("canonicalRef") != null)
-                    hashes.put(target.get("locatorKind") + "|" + target.get("canonicalRef"),
-                            Objects.toString(target.get("targetContentHash"), null));
+    static Set<String> resolvedRefs(MemoryCodeLinkResolveResult resolved, List<Binding> bindings) {
+        Set<String> refs = new HashSet<>(), known = new HashSet<>();
+        for (Binding binding : bindings) known.add(binding.ref());
+        for (var link : resolved.links()) {
+            if ("similarity_backfill".equals(link.resolution())) continue;
+            for (String key : List.of("ref", "filePath", "symbolId", "symbolRef", "sourceRef")) {
+                String value = Objects.toString(link.evidence().get(key), "").trim();
+                if (known.contains(value)) refs.add(value);
             }
         }
-        return hashes;
+        return refs;
+    }
+
+    /** Refs resolved in one evidence event: stored since missingRefs exist, otherwise matched from its code targets. */
+    private static Set<String> previouslyResolved(Map<String,Object> event, List<Binding> bindings, String projectKey) {
+        if (event.containsKey("resolvedRefs")) return new HashSet<>(strings(event.get("resolvedRefs")));
+        Set<String> refs = new HashSet<>();
+        if (!(event.get("codeTargets") instanceof List<?> targets)) return refs;
+        Binding scanner = bindings.stream().filter(b -> b.ref().startsWith(SCANNER_INSIGHT)).findFirst().orElse(null);
+        for (Object entry : targets) {
+            if (!(entry instanceof Map<?,?> target) || target.get("canonicalRef") == null) continue;
+            String kind = Objects.toString(target.get("locatorKind"), ""), canonical = target.get("canonicalRef").toString();
+            boolean matched = false;
+            for (Binding binding : bindings) {
+                if (binding.kind().name().equals(kind) && matches(binding, canonical, projectKey)) { refs.add(binding.ref()); matched = true; }
+            }
+            if (!matched && scanner != null) refs.add(scanner.ref());
+        }
+        return refs;
+    }
+
+    private static boolean matches(Binding binding, String canonical, String projectKey) {
+        String ref = binding.ref();
+        return switch (binding.kind()) {
+            case FILE, DIRECTORY -> ref.equals(canonical);
+            case CAPSULE -> canonical.equals(projectKey + "|" + ref + "|" + binding.capsuleKind());
+            case SYMBOL -> {
+                int bar = canonical.indexOf('|'), paren = ref.indexOf('(');
+                String fqn = bar < 0 ? canonical : canonical.substring(0, bar), signature = bar < 0 ? "" : canonical.substring(bar + 1);
+                yield ref.equals(fqn) || ref.equals(signature) || (paren > 0 && ref.substring(0, paren).equals(fqn));
+            }
+        };
+    }
+
+    private static List<String> strings(Object raw) {
+        if (!(raw instanceof List<?> list)) return List.of();
+        return list.stream().filter(Objects::nonNull).map(Object::toString).toList();
+    }
+
+    /** Refs the latest code evidence reports as missing (empty before the first observation or when none is). */
+    public List<String> missingRefs(UUID id) {
+        return strings(latestCodeEvidence(id).get("missingRefs"));
     }
 
     private Map<String,Object> latestCodeEvidence(UUID id) {
-        var rows = jdbc.queryForList("""
+        List<Map<String,Object>> rows = codeEvidence(id, 1);
+        return rows.isEmpty() ? Map.of() : rows.getFirst();
+    }
+
+    private List<Map<String,Object>> codeEvidenceHistory(UUID id) {
+        return codeEvidence(id, 500);
+    }
+
+    private List<Map<String,Object>> codeEvidence(UUID id, int limit) {
+        List<Map<String,Object>> result = new ArrayList<>();
+        for (String raw : jdbc.queryForList("""
                 SELECT metadata::text FROM memory_events WHERE memory_id=? AND event_type='updated'
-                    AND metadata->>'action'='code_evidence_observed' ORDER BY created_at DESC,id DESC LIMIT 1
-                """, String.class, id);
-        if (rows.isEmpty()) return Map.of();
-        try { return json.readValue(rows.getFirst(), new TypeReference<Map<String,Object>>() {}); }
-        catch (java.io.IOException e) { throw new IllegalStateException("Invalid code evidence event", e); }
+                    AND metadata->>'action'='code_evidence_observed' ORDER BY created_at DESC,id DESC LIMIT ?
+                """, String.class, id, limit)) {
+            try { result.add(json.readValue(raw, new TypeReference<Map<String,Object>>() {})); }
+            catch (java.io.IOException e) { throw new IllegalStateException("Invalid code evidence event", e); }
+        }
+        return result;
     }
 
     private String serialize(Object value) {

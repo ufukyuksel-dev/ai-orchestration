@@ -81,22 +81,127 @@ class MemoryLifecycleServiceTest {
         assertThat(published).isEmpty();
     }
 
-    @Test void changedCodeHashMarksStaleAndOpensOneReviewWithoutDeletingMemory() {
+    void missing() { when(baseline.findFileByPath("P", "a/A.java")).thenReturn(Optional.empty()); }
+    MemoryItemChangedEvent lastPublished() { return (MemoryItemChangedEvent) published.getLast(); }
+
+    @Test void hashOnlyChangeRecordsEvidenceButStaysActiveWithoutReview() {
         projection.linkMemory(id); file("h2"); projection.linkMemory(id);
+        assertThat(item().status()).isEqualTo(MemoryStatus.ACTIVE);
+        assertThat(events()).isEqualTo(2); assertThat(reviews()).isZero(); assertThat(published).isEmpty();
+        assertThat(lifecycle.missingRefs(id)).isEmpty();
+    }
+
+    @Test void deletedTargetStaysStaleUntilRestoredThenRevalidatesAutomatically() {
+        projection.linkMemory(id); missing(); projection.linkMemory(id);
         assertThat(item().status()).isEqualTo(MemoryStatus.STALE);
-        assertThat(events()).isEqualTo(3); assertThat(reviews()).isEqualTo(1);
+        assertThat(reviews()).isEqualTo(1); assertThat(lifecycle.missingRefs(id)).containsExactly("a/A.java");
+        assertThat(memories.reviewQueueForMemory(id).getFirst().metadata()).containsEntry("kind", "code_drift");
         assertThat(memories.eventsForMemory(id)).anySatisfy(event -> {
             assertThat(event.eventType()).isEqualTo(MemoryEventType.STATUS_CHANGED);
             assertThat(event.metadata()).containsEntry("oldStatus", "active").containsEntry("newStatus", "stale")
-                    .containsEntry("actor", "system:code-evidence");
+                    .containsEntry("actor", "system:code-evidence").containsEntry("missingRefs", List.of("a/A.java"));
         });
-        assertThat(memories.reviewQueueForMemory(id).getFirst().metadata()).containsEntry("kind", "code_drift");
-        assertThat(memories.reviewQueueForMemory(id).getFirst().status()).isEqualTo(ReviewStatus.OPEN);
         assertThat(published).hasSize(1);
-        projection.linkAll("P"); assertThat(events()).isEqualTo(3);
+        assertThat(lastPublished().origin()).isEqualTo(MemoryItemChangedEvent.Origin.LIFECYCLE);
+        for (int i = 0; i < 2; i++) {
+            projection.linkMemory(id);
+            assertThat(item().status()).isEqualTo(MemoryStatus.STALE); assertThat(lifecycle.missingRefs(id)).containsExactly("a/A.java");
+        }
+        assertThat(reviews()).isEqualTo(1); assertThat(published).hasSize(1);
         file("h3"); projection.linkMemory(id);
-        assertThat(events()).isEqualTo(4); assertThat(reviews()).isEqualTo(1);
-        assertThat(published).hasSize(1); // No recursive same-status event loop.
+        assertThat(item().status()).isEqualTo(MemoryStatus.ACTIVE); assertThat(lifecycle.missingRefs(id)).isEmpty();
+        assertThat(memories.reviewQueueForMemory(id).getFirst().status()).isEqualTo(ReviewStatus.APPROVED);
+        assertThat(memories.eventsForMemory(id)).anySatisfy(event -> {
+            assertThat(event.eventType()).isEqualTo(MemoryEventType.STATUS_CHANGED);
+            assertThat(event.metadata()).containsEntry("action", "code_drift_auto_revalidated")
+                    .containsEntry("actor", "system:code-evidence").containsEntry("newStatus", "active");
+        });
+        assertThat(published).hasSize(2); assertThat(lastPublished().item().status()).isEqualTo(MemoryStatus.ACTIVE);
+    }
+
+    @Test void staleMemoryWithUnchangedCompleteEvidenceIsReactivated() {
+        projection.linkMemory(id); int before = events(); stale();
+        assertThat(lifecycle.observe(item(), resolver.resolve(item()))).isEqualTo(MemoryLifecycleService.Observation.REVALIDATED);
+        assertThat(item().status()).isEqualTo(MemoryStatus.ACTIVE); assertThat(events()).isEqualTo(before + 1);
+    }
+
+    @Test void locatorRepairReactivatesButAnEditStillPointingToMissingCodeIsStaleAgain() throws Exception {
+        projection.linkMemory(id); missing(); projection.linkMemory(id);
+        assertThat(item().status()).isEqualTo(MemoryStatus.STALE);
+        jdbc.update("UPDATE memory_items SET status='active',text='edited' WHERE id=?", id); // edit without locator change
+        projection.linkMemory(id);
+        assertThat(item().status()).isEqualTo(MemoryStatus.STALE); assertThat(lifecycle.missingRefs(id)).containsExactly("a/A.java");
+        when(baseline.findFileByPath("P", "b/B.java")).thenReturn(Optional.of(new CodeFileRecord(
+                UUID.randomUUID(), "P", "b/B.java", "hb", "java", UUID.randomUUID(), Map.of())));
+        locators(new MemoryCodeLocator(MemoryCodeLocatorKind.FILE, "b/B.java", null, null));
+        jdbc.update("UPDATE memory_items SET status='active' WHERE id=?", id); // locator repaired by edit
+        projection.linkMemory(id);
+        assertThat(item().status()).isEqualTo(MemoryStatus.ACTIVE); assertThat(lifecycle.missingRefs(id)).isEmpty();
+        assertThat(memories.reviewQueueForMemory(id)).allSatisfy(r -> assertThat(r.status()).isNotEqualTo(ReviewStatus.OPEN));
+    }
+
+    @Test void legacyStaleRecordSeedsMissingRefsFromHistory() {
+        Instant t = Instant.now();
+        memories.insertEvent(new MemoryEvent(UUID.randomUUID(), id, MemoryEventType.UPDATED, Map.of("action", "code_evidence_observed",
+                "codeFingerprint", "old-1", "missingTargets", 0, "codeTargets",
+                List.of(Map.of("locatorKind", "FILE", "canonicalRef", "a/A.java", "targetContentHash", "h0"))), t.minusSeconds(20)));
+        memories.insertEvent(new MemoryEvent(UUID.randomUUID(), id, MemoryEventType.UPDATED, Map.of("action", "code_evidence_observed",
+                "codeFingerprint", "old-2", "missingTargets", 1, "codeTargets", List.of()), t.minusSeconds(10)));
+        stale(); missing();
+        assertThat(lifecycle.observe(item(), resolver.resolve(item()))).isEqualTo(MemoryLifecycleService.Observation.STALE);
+        assertThat(item().status()).isEqualTo(MemoryStatus.STALE); assertThat(lifecycle.missingRefs(id)).containsExactly("a/A.java");
+        file("h1");
+        assertThat(lifecycle.observe(item(), resolver.resolve(item()))).isEqualTo(MemoryLifecycleService.Observation.REVALIDATED);
+        assertThat(item().status()).isEqualTo(MemoryStatus.ACTIVE);
+    }
+
+    @Test void legacyStaleRecordWhoseTargetsStillResolveIsReactivated() {
+        memories.insertEvent(new MemoryEvent(UUID.randomUUID(), id, MemoryEventType.UPDATED, Map.of("action", "code_evidence_observed",
+                "codeFingerprint", "old-1", "missingTargets", 0, "codeTargets",
+                List.of(Map.of("locatorKind", "FILE", "canonicalRef", "a/A.java", "targetContentHash", "h0"))), Instant.now().minusSeconds(5)));
+        stale();
+        projection.linkAll("P");
+        assertThat(item().status()).isEqualTo(MemoryStatus.ACTIVE);
+    }
+
+    @Test void reconcilerReactivatesStaleMemoriesAndSkipsProjectsWithoutBaseline() {
+        projection.linkMemory(id); stale();
+        UUID other = UUID.randomUUID();
+        jdbc.update("""
+                INSERT INTO memory_items(id,vector_id,scope,project_key,memory_type,summary,text,confidence,status,source_type)
+                VALUES (?,?,'project','Q','decision','s','t',1,'stale','manual')
+                """, other, UUID.randomUUID());
+        var reconciler = new StaleMemoryReconciler(jdbc, memories, baseline, resolver, lifecycle, properties, true);
+        var result = reconciler.reconcile();
+        assertThat(result.reactivated()).isEqualTo(1); assertThat(result.skippedProjects()).isEqualTo(1);
+        assertThat(item().status()).isEqualTo(MemoryStatus.ACTIVE);
+        assertThat(memories.findById(other).orElseThrow().status()).isEqualTo(MemoryStatus.STALE);
+    }
+
+    @Test void discoveryLearningProfileFollowsItemStatusThroughLifecycleTransitions() {
+        var learning = new com.mbworldwideapps.aiorchestration.modules.agentlearning.JdbcAgentLearningRepository(jdbc);
+        var listener = new com.mbworldwideapps.aiorchestration.modules.agentlearning.DiscoveryLearningLifecycleListener(learning);
+        var synced = service(event -> listener.onMemoryChanged((MemoryItemChangedEvent) event));
+        var linked = new MemoryCodeLinkProjectionService(properties, memories, resolver, synced);
+        jdbc.update("UPDATE memory_items SET memory_type='discovery' WHERE id=?", id);
+        String hash = "a".repeat(64);
+        jdbc.update("""
+                INSERT INTO memory_learning_profiles(memory_id,project_key,discovery_kind,origin,verification_level,usefulness_state,
+                    canonical_hash,producer_runtime,producer_contract_version,capture_coverage,semantic_identity,content_revision,evidence_revision)
+                VALUES (?,'P','navigation','agent','SUPPORTED','STALE_EVIDENCE',?,'test','1','agent_reported',?,?,?)
+                """, id, hash, hash, hash, hash);
+        java.util.function.Supplier<String> profile = () -> jdbc.queryForObject(
+                "SELECT usefulness_state FROM memory_learning_profiles WHERE memory_id=?", String.class, id);
+        linked.linkMemory(id); stale(); linked.linkMemory(id); // stale with complete evidence → ACTIVE
+        assertThat(item().status()).isEqualTo(MemoryStatus.ACTIVE); assertThat(profile.get()).isEqualTo("ACTIVE");
+        missing(); linked.linkMemory(id);
+        assertThat(item().status()).isEqualTo(MemoryStatus.STALE); assertThat(profile.get()).isEqualTo("STALE_EVIDENCE");
+        listener.onMemoryChanged(new MemoryItemChangedEvent(item(), MemoryItemChangedEvent.Origin.EXTERNAL_EDIT));
+        assertThat(profile.get()).isEqualTo("STALE_EVIDENCE"); // derived from the item, not from the event origin
+        file("h1"); linked.linkMemory(id);
+        assertThat(item().status()).isEqualTo(MemoryStatus.ACTIVE); assertThat(profile.get()).isEqualTo("ACTIVE");
+        listener.onMemoryChanged(new MemoryItemChangedEvent(item(), MemoryItemChangedEvent.Origin.EXTERNAL_EDIT)); // tag-only edit
+        assertThat(profile.get()).isEqualTo("ACTIVE");
     }
 
     @Test void directoryLossRequiresReviewButInitiallyMissingExplicitTargetDoesNot() throws Exception {
@@ -181,7 +286,7 @@ class MemoryLifecycleServiceTest {
     }
 
     @Test void staleStatusQueueAndEventsRollbackTogetherIfSynchronousPublicationFails() {
-        projection.linkMemory(id); file("h2");
+        projection.linkMemory(id); missing();
         var failing = service(event -> { throw new IllegalStateException("vector write failed"); });
         assertThatThrownBy(() -> failing.observe(item(), resolver.resolve(item()))).isInstanceOf(IllegalStateException.class);
         assertThat(item().status()).isEqualTo(MemoryStatus.ACTIVE);
@@ -214,7 +319,9 @@ class MemoryLifecycleServiceTest {
     }
 
     @Test void revalidateAcceptsFreshEvidenceAndDoesNotImmediatelyMarkStaleAgain() {
-        projection.linkAll("P"); file("h2"); projection.linkAll("P");
+        projection.linkAll("P"); missing(); projection.linkAll("P");
+        assertThat(item().status()).isEqualTo(MemoryStatus.STALE);
+        file("h2"); // the human revalidates before the next observation would
         var preview = lifecycle.preview(selection(MemoryLifecycleService.Decision.REVALIDATE, null, null));
         int before = events();
         var result = lifecycle.decide(approval(preview), "workspace:test");

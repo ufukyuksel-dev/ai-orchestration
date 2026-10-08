@@ -14,11 +14,14 @@ public class DiscoveryLearningLifecycleListener {
         this.repository = repository;
     }
 
+    /**
+     * Every change of a discovery (edit, correction or code-evidence lifecycle) re-derives its learning profile from
+     * the item's current status in the database, so event order does not matter and a tag-only edit stays ACTIVE.
+     */
     @EventListener
     public void onMemoryChanged(MemoryItemChangedEvent event) {
-        if (event.origin() == MemoryItemChangedEvent.Origin.EXTERNAL_EDIT
-                && event.item().memoryType() == MemoryType.DISCOVERY) {
-            repository.markLearningProfileStale(event.item().id());
+        if (event.item() != null && event.item().memoryType() == MemoryType.DISCOVERY) {
+            repository.syncLearningProfileWithItem(event.item().id());
         }
     }
 }

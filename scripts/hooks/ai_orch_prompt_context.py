@@ -97,7 +97,9 @@ def render(data: dict, seen: dict) -> list[str]:
         if card.get("id") in seen.get("cards", []):
             continue
         files = f" Files: {', '.join(card['files'])}." if card.get("files") else ""
-        stale = " (may be outdated: the code changed since)" if card.get("stale") else ""
+        missing = f": {', '.join(card['missingRefs'])}" if card.get("missingRefs") else ""
+        stale = (f" (code it points to is missing{missing}; fix its locators with ai_orch memory update or archive it)"
+                 if card.get("stale") else "")
         out.append(f"- Memory card{stale}: {card.get('summary')}. {card.get('text')}{files}")
     return out
 

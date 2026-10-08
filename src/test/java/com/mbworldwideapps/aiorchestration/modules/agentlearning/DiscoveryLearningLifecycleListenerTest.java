@@ -2,6 +2,7 @@ package com.mbworldwideapps.aiorchestration.modules.agentlearning;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.time.Instant;
@@ -20,21 +21,20 @@ import org.junit.jupiter.api.Test;
 class DiscoveryLearningLifecycleListenerTest {
 
     @Test
-    void onlyExternalDiscoveryEditsStaleTheLearningProfile() {
+    void everyDiscoveryChangeSyncsTheProfileWithTheItemAndOtherTypesAreIgnored() {
         AgentLearningRepository repository = mock(AgentLearningRepository.class);
         DiscoveryLearningLifecycleListener listener = new DiscoveryLearningLifecycleListener(repository);
         MemoryItem discovery = item(MemoryType.DISCOVERY);
         MemoryItem decision = item(MemoryType.DECISION);
 
-        listener.onMemoryChanged(new MemoryItemChangedEvent(discovery,
-                MemoryItemChangedEvent.Origin.EXTERNAL_EDIT));
-        listener.onMemoryChanged(new MemoryItemChangedEvent(discovery,
-                MemoryItemChangedEvent.Origin.LEARNING_CORRECTION));
-        listener.onMemoryChanged(new MemoryItemChangedEvent(decision,
-                MemoryItemChangedEvent.Origin.EXTERNAL_EDIT));
+        for (MemoryItemChangedEvent.Origin origin : MemoryItemChangedEvent.Origin.values()) {
+            listener.onMemoryChanged(new MemoryItemChangedEvent(discovery, origin));
+            listener.onMemoryChanged(new MemoryItemChangedEvent(decision, origin));
+        }
 
-        verify(repository).markLearningProfileStale(discovery.id());
-        verify(repository, never()).markLearningProfileStale(decision.id());
+        verify(repository, times(MemoryItemChangedEvent.Origin.values().length)).syncLearningProfileWithItem(discovery.id());
+        verify(repository, never()).syncLearningProfileWithItem(decision.id());
+        verify(repository, never()).markLearningProfileStale(discovery.id());
     }
 
     private static MemoryItem item(MemoryType type) {

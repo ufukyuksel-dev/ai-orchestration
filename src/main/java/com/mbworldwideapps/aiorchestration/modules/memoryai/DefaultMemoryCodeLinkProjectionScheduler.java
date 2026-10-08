@@ -14,6 +14,8 @@ import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 @Service
 public class DefaultMemoryCodeLinkProjectionScheduler implements MemoryCodeLinkProjectionScheduler {
@@ -47,6 +49,15 @@ public class DefaultMemoryCodeLinkProjectionScheduler implements MemoryCodeLinkP
         }
         status.set(MemoryCodeLinkProjectionStatus.queued(memoryId, "", droppedCount.get()));
         enqueue(memoryId, "", () -> projectionService.linkMemory(memoryId));
+    }
+
+    /** An edited project memory is re-observed against the code map, so a locator that still misses code shows up. */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onMemoryEdited(MemoryItemChangedEvent event) {
+        MemoryItem item = event.item();
+        if ((event.origin() == MemoryItemChangedEvent.Origin.EXTERNAL_EDIT || event.origin() == MemoryItemChangedEvent.Origin.LEARNING_CORRECTION)
+                && item != null && item.scope() == MemoryScope.PROJECT
+                && (item.status() == MemoryStatus.ACTIVE || item.status() == MemoryStatus.STALE)) linkMemory(item.id());
     }
 
     @Override

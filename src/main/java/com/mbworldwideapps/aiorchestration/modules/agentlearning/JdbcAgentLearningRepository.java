@@ -560,6 +560,19 @@ public class JdbcAgentLearningRepository implements AgentLearningRepository {
     }
 
     @Override
+    public void syncLearningProfileWithItem(UUID memoryId) {
+        jdbc.update("""
+                UPDATE memory_learning_profiles p
+                SET usefulness_state=CASE WHEN mi.status='active' THEN 'ACTIVE' ELSE 'STALE_EVIDENCE' END,
+                    learning_revision=p.learning_revision+1,updated_at=now()
+                FROM memory_items mi
+                WHERE p.memory_id=? AND mi.id=p.memory_id AND mi.memory_type='discovery'
+                  AND ((mi.status='active' AND p.usefulness_state IN ('STALE','STALE_EVIDENCE'))
+                    OR (mi.status='stale' AND p.usefulness_state='ACTIVE'))
+                """, memoryId);
+    }
+
+    @Override
     public PurgeResult purgeExpired(Instant now, int batchSize) {
         int limit = Math.max(1, Math.min(batchSize, 1000));
         Timestamp cutoff = timestamp(now);
