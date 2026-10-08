@@ -88,6 +88,9 @@ ALLOWED_TOOLS = (
     "rules.preview",
     "rules.promote",
     "memory.search",
+    "memory.get",
+    "memory.update",
+    "memory.delete",
     "reference.list",
     "reference.read",
     "last_job.get",
@@ -996,6 +999,27 @@ def _build_memory_group(groups: Any) -> None:
     )
     learn.set_defaults(operation="memory.learn")
 
+    update = actions.add_parser(
+        "update",
+        help="correct a wrong or outdated project memory in place (no human approval needed)",
+    )
+    _add_repo_root_argument(update)
+    update.add_argument(
+        "--file",
+        required=True,
+        help="JSON with memoryId, reason and any of summary, content, tags, confidence, sourceRef, codeLocators",
+    )
+    update.set_defaults(operation="memory.update")
+
+    archive = actions.add_parser(
+        "archive",
+        help="soft-delete (archive) a wrong project memory; reversible, no human approval needed",
+    )
+    _add_repo_root_argument(archive)
+    archive.add_argument("--memory-id", dest="memory_id", required=True)
+    archive.add_argument("--reason", required=True)
+    archive.set_defaults(operation="memory.archive")
+
 
 
 def _build_codebase_group(groups: Any) -> None:
@@ -1153,6 +1177,8 @@ _SCOPE_KINDS: dict[str, str] = {
     "rule.promote": SCOPE_PROJECT,
     "memory.search": SCOPE_PROJECT,
     "memory.learn": SCOPE_PROJECT,
+    "memory.update": SCOPE_PROJECT,
+    "memory.archive": SCOPE_PROJECT,
     "reference.list": SCOPE_LOCAL_USER,
     "reference.read": SCOPE_LOCAL_USER,
     "last-job.save": SCOPE_LOCAL_USER,
@@ -1172,6 +1198,8 @@ _OPERATION_TOOLS: dict[str, str] = {
     "rule.preview": "rules.preview",
     "rule.promote": "rules.promote",
     "memory.search": "memory.search",
+    "memory.update": "memory.update",
+    "memory.archive": "memory.delete",
     "reference.list": "reference.list",
     "reference.read": "reference.read",
     "last-job.save": "last_job.save",

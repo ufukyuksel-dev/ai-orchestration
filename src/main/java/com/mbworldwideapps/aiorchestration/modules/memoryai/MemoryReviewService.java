@@ -233,7 +233,10 @@ public class MemoryReviewService {
                 request.codeLocators(), scope, projectKey));
         metadata.put("reviewContentHash", contentHash(summary, text));
         UUID vectorId = MemoryService.deterministicVectorId(scope, projectKey, summary, text);
-        MemoryStatus updatedStatus = existing.memoryType() == MemoryType.DISCOVERY
+        // Only a changed learned claim (summary/text) invalidates a discovery; tag, confidence or locator
+        // corrections keep its status so agents can repair metadata without making a memory look outdated.
+        boolean claimChanged = !summary.equals(existing.summary()) || !text.equals(existing.text());
+        MemoryStatus updatedStatus = existing.memoryType() == MemoryType.DISCOVERY && claimChanged
                 ? MemoryStatus.STALE : existing.status();
         MemoryItem updated = new MemoryItem(
                 existing.id(),

@@ -16,4 +16,6 @@ Tools come from the `ai-orchestration` MCP server. If they are missing or a call
    - optional `appliesWhen`, `limitations`, `reusableFor` (up to six short items each); `reference: {details}` only for long-form evidence that does not fit in `content`
 
 Details, only when needed, in `skills/contracts/` next to this file: `startup-details.md`, `memory.md`, `references.md`, `last-job.md`, `saved-jobs.md`, `personal-memory.md`, `rule-authoring.md`, `memory-delete.md`.
+**Wrong memory card.** When a card you were given is contradicted by the code, fix it in the same task without asking the user: archive it (`memory.delete(memoryId, mode="archive", reason=...)`, or `ai_orch memory archive --memory-id <id> --reason "..."`; reversible soft delete, never hard-delete), then save the corrected fact with `memory.learn`. If only tags or code locators are wrong, use `memory.update` (or `ai_orch memory update --file <request.json inside the repository>`).
+
 GitHub Copilot does not use these tools: it uses the `ai_orch` terminal command with its `ask_user` gates, see `skills/copilot/session-instructions.md`.

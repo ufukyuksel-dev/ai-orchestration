@@ -150,6 +150,9 @@ public class MemoryCodeLinkResolver {
             target = resolveExactSymbolRef(projectKey, locator.ref());
         }
         if (target.isEmpty()) {
+            target = resolveMethodRefWithParameters(projectKey, locator.ref());
+        }
+        if (target.isEmpty()) {
             collector.missingSymbols++;
             collector.missingTypedTargets++;
             return;
@@ -444,6 +447,34 @@ public class MemoryCodeLinkResolver {
                 .filter(symbol -> exactSymbolMatch(symbol, symbolRef))
                 .toList();
         return exact.size() == 1 ? Optional.of(exact.getFirst()) : Optional.empty();
+    }
+
+    /**
+     * Agents commonly write method locators as {@code pkg.Class#method(ArgType)}, while the scanner stores
+     * {@code fqn=pkg.Class#method} and {@code signature=method(ArgType)} separately. Split such refs and match
+     * both parts so a valid method locator is not reported as a missing target.
+     */
+    private Optional<CodeSymbolRecord> resolveMethodRefWithParameters(String projectKey, String symbolRef) {
+        String value = trim(symbolRef);
+        int hash = value.lastIndexOf('#');
+        int paren = value.indexOf('(', Math.max(hash, 0));
+        if (hash <= 0 || paren <= hash + 1 || !value.endsWith(")")) {
+            return Optional.empty();
+        }
+        String fqn = value.substring(0, paren);
+        String signature = normalizeSignature(value.substring(hash + 1));
+        List<CodeSymbolRecord> candidates = codeBaselineRepository.findSymbolsByRef(projectKey, fqn, 20).stream()
+                .filter(symbol -> projectKey.equals(symbol.projectKey()))
+                .filter(symbol -> fqn.equals(trim(symbol.fqn())))
+                .toList();
+        List<CodeSymbolRecord> bySignature = candidates.stream()
+                .filter(symbol -> signature.equals(normalizeSignature(symbol.signature())))
+                .toList();
+        return bySignature.size() == 1 ? Optional.of(bySignature.getFirst()) : Optional.empty();
+    }
+
+    private static String normalizeSignature(String signature) {
+        return trim(signature).replaceAll("\\s+", "");
     }
 
     private static boolean exactSymbolMatch(CodeSymbolRecord symbol, String ref) {

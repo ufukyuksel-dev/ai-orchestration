@@ -288,7 +288,7 @@ public class MemoryLifecycleService {
         Map<String,Object> previous = latestCodeEvidence(current.id());
         if (snapshot.fingerprint().equals(previous.get("codeFingerprint"))) return Observation.UNCHANGED;
         if (previous.isEmpty() && snapshot.targets().isEmpty() && snapshot.missingTargets() == 0) return Observation.SKIPPED;
-        boolean drift = snapshot.missingTargets() > 0 || !previous.isEmpty();
+        boolean drift = isCodeDrift(previous, snapshot);
         Map<String,Object> evidence = new LinkedHashMap<>();
         evidence.put("action", "code_evidence_observed"); evidence.put("kind", "code_drift");
         evidence.put("codeFingerprint", snapshot.fingerprint()); evidence.put("codeTargets", snapshot.targets());
@@ -314,6 +314,35 @@ public class MemoryLifecycleService {
             events.publishEvent(new MemoryItemChangedEvent(stale));
         }
         return Observation.STALE;
+    }
+
+    /**
+     * Drift means previously observed code changed: a target that resolved before now has a different content
+     * hash or is no longer resolvable. A locator that never resolved
+     * (first observation, or a target added later) is unresolved evidence, not drift, so a freshly learned
+     * memory is never marked STALE just because one of its locators could not be bound.
+     */
+    static boolean isCodeDrift(Map<String,Object> previous, CodeSnapshot snapshot) {
+        if (previous.isEmpty()) return false;
+        Map<String,String> before = targetHashes(previous.get("codeTargets"));
+        Map<String,String> now = new HashMap<>();
+        for (CodeTarget target : snapshot.targets()) now.put(target.locatorKind() + "|" + target.canonicalRef(), target.targetContentHash());
+        for (Map.Entry<String,String> entry : before.entrySet()) {
+            if (!Objects.equals(entry.getValue(), now.get(entry.getKey()))) return true;
+        }
+        return false;
+    }
+
+    private static Map<String,String> targetHashes(Object rawTargets) {
+        Map<String,String> hashes = new HashMap<>();
+        if (rawTargets instanceof List<?> list) {
+            for (Object entry : list) {
+                if (entry instanceof Map<?,?> target && target.get("canonicalRef") != null)
+                    hashes.put(target.get("locatorKind") + "|" + target.get("canonicalRef"),
+                            Objects.toString(target.get("targetContentHash"), null));
+            }
+        }
+        return hashes;
     }
 
     private Map<String,Object> latestCodeEvidence(UUID id) {

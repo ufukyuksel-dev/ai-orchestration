@@ -64,6 +64,10 @@ class ParserAndAllowlistTest(unittest.TestCase):
                 "rules.preview",
                 "rules.promote",
                 "memory.search",
+                # Agents may correct or archive a wrong project memory without human approval.
+                "memory.get",
+                "memory.update",
+                "memory.delete",
                 "reference.list",
                 "reference.read",
                 "last_job.get",
@@ -89,7 +93,6 @@ class ParserAndAllowlistTest(unittest.TestCase):
         for forbidden in (
             "plans.check",
             "scanner.scan",
-            "memory.get",
             "memory.write",
             "memory.approve",
             "memory.review.pending",

@@ -99,7 +99,7 @@ class MemoryLifecycleServiceTest {
         assertThat(published).hasSize(1); // No recursive same-status event loop.
     }
 
-    @Test void directoryLossAndInitiallyMissingExplicitTargetRequireReview() throws Exception {
+    @Test void directoryLossRequiresReviewButInitiallyMissingExplicitTargetDoesNot() throws Exception {
         locators(new MemoryCodeLocator(MemoryCodeLocatorKind.DIRECTORY, "a/b/", null, null));
         when(baseline.directoryExists("P", "a/b")).thenReturn(true);
         projection.linkMemory(id);
@@ -112,7 +112,9 @@ class MemoryLifecycleServiceTest {
         jdbc.update("DELETE FROM memory_review_queue WHERE candidate_memory_id=?", id);
         jdbc.update("UPDATE memory_items SET status='active' WHERE id=?", id);
         projection.linkMemory(id);
-        assertThat(item().status()).isEqualTo(MemoryStatus.STALE); assertThat(reviews()).isEqualTo(1);
+        // A locator that never resolved is unresolved evidence, not code drift: a fresh memory stays ACTIVE.
+        assertThat(item().status()).isEqualTo(MemoryStatus.ACTIVE); assertThat(reviews()).isZero();
+        assertThat(memories.eventsForMemory(id)).anySatisfy(event -> assertThat(event.metadata()).containsEntry("missingTargets", 1));
     }
 
     @Test void initiallyUnresolvedLegacyFileHintDoesNotRequireReview() {

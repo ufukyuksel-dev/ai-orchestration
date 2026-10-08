@@ -10,6 +10,8 @@ Only these task operations exist:
 ```text
 memory.search     -> ai_orch memory search
 memory.learn      -> ai_orch memory learn
+memory.update     -> ai_orch memory update
+memory.archive    -> ai_orch memory archive
 reference.list    -> ai_orch reference list
 reference.read    -> ai_orch reference read
 rule.instructions -> ai_orch rule instructions
@@ -85,6 +87,18 @@ and human-readable symbol/file/module locators. The bridge/backend owns task
 IDs, runtime identity, project binding, idempotency, locator resolution,
 deduplication, and persistence. Do not add extra discovery or verification
 calls solely to save learning. No durable finding means no call.
+
+## Correcting wrong memory
+
+When a retrieved memory card is wrong or outdated (code contradicts it), fix it
+yourself in the same task; no human approval is needed:
+
+- Wrong claim: `ai_orch memory archive --memory-id <id> --reason "<why it is wrong>"`,
+  then save the corrected fact once with `ai_orch memory learn`.
+- Only metadata wrong (tags, confidence, code locators): `ai_orch memory update --file <request.json>`
+  with `memoryId`, `reason` and the corrected fields. The request file must live inside the repository.
+
+Archive is a reversible soft delete; never hard-delete.
 
 ## Rule authoring
 

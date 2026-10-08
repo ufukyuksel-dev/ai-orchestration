@@ -207,6 +207,47 @@ class MemoryCodeLinkResolverTest {
         assertThat(result.missingSymbols()).isEqualTo(1);
     }
 
+    @Test
+    void methodRefWithParameterListResolvesBySplittingFqnAndSignature() {
+        CodeBaselineRepository repository = mock(CodeBaselineRepository.class);
+        CodeBaselineVectorIndex vectorIndex = mock(CodeBaselineVectorIndex.class);
+        UUID fileId = UUID.randomUUID();
+        UUID wanted = UUID.randomUUID();
+        CodeSymbolRecord overload = new CodeSymbolRecord(UUID.randomUUID(), "AI_ORCHESTRATION", fileId, "method", "pay",
+                "com.acme.PaymentService#pay", "pay(String,int)", "service", 30, 40, "hash2", UUID.randomUUID(), Map.of());
+        when(repository.findSymbolsByRef(eq("AI_ORCHESTRATION"), eq("com.acme.PaymentService#pay"), anyInt()))
+                .thenReturn(List.of(symbol(wanted, fileId), overload));
+        Map<String, Object> metadata = MemoryCodeLocatorMetadata.replace(Map.of(), List.of(new MemoryCodeLocator(
+                MemoryCodeLocatorKind.SYMBOL, "com.acme.PaymentService#pay(String)", null, null)),
+                MemoryScope.PROJECT, "AI_ORCHESTRATION");
+
+        MemoryCodeLinkResolveResult result = new MemoryCodeLinkResolver(properties(false), repository, vectorIndex)
+                .resolve(item(MemoryType.DECISION, "mcp-external:test", metadata));
+
+        assertThat(result.missingTypedTargets()).isZero();
+        assertThat(result.links()).singleElement().satisfies(link -> assertThat(link.symbolId()).isEqualTo(wanted));
+    }
+
+    @Test
+    void methodRefWithMismatchedParameterListStaysUnresolvedEvenWithSingleCandidate() {
+        CodeBaselineRepository repository = mock(CodeBaselineRepository.class);
+        CodeBaselineVectorIndex vectorIndex = mock(CodeBaselineVectorIndex.class);
+        CodeSymbolRecord onlyIntOverload = new CodeSymbolRecord(UUID.randomUUID(), "AI_ORCHESTRATION", UUID.randomUUID(),
+                "method", "pay", "com.acme.PaymentService#pay", "pay(int)", "service", 10, 20, "hash",
+                UUID.randomUUID(), Map.of());
+        when(repository.findSymbolsByRef(eq("AI_ORCHESTRATION"), eq("com.acme.PaymentService#pay"), anyInt()))
+                .thenReturn(List.of(onlyIntOverload));
+        Map<String, Object> metadata = MemoryCodeLocatorMetadata.replace(Map.of(), List.of(new MemoryCodeLocator(
+                MemoryCodeLocatorKind.SYMBOL, "com.acme.PaymentService#pay(String)", null, null)),
+                MemoryScope.PROJECT, "AI_ORCHESTRATION");
+
+        MemoryCodeLinkResolveResult result = new MemoryCodeLinkResolver(properties(false), repository, vectorIndex)
+                .resolve(item(MemoryType.DECISION, "mcp-external:test", metadata));
+
+        assertThat(result.links()).isEmpty();
+        assertThat(result.missingTypedTargets()).isEqualTo(1);
+    }
+
     private static CodeCapsuleLinkTargetRecord capsule(UUID id, UUID fileId, UUID symbolId, String outputHash) {
         return new CodeCapsuleLinkTargetRecord(id, "AI_ORCHESTRATION", symbolId, fileId,
                 "flow:PaymentService#pay", "project_insight", outputHash, "local-qwen", "qwen3:8b",

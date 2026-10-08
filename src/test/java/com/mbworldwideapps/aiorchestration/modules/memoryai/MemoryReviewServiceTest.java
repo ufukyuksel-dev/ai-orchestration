@@ -131,6 +131,22 @@ class MemoryReviewServiceTest {
     }
 
     @Test
+    void discoveryTagOnlyEditKeepsActiveStatus() {
+        MemoryItem item = item(MemoryScope.PROJECT, "AI_ORCHESTRATION", MemoryStatus.ACTIVE,
+                MemoryType.DISCOVERY, "The old route is here.");
+        repository.save(item);
+        MemoryReviewService service = MemoryReviewServiceTestFixture.create(repository, vectorIndex,
+                event -> { }, PolicyEngine.allowAll(), new PiiScrubber());
+
+        MemoryItem edited = service.edit(item.id(), new EditMemoryRequest(
+                item.summary(), item.text(), List.of("discovery", "verified"), item.confidence(), "agent",
+                "Tag correction only."));
+
+        assertThat(edited.status()).isEqualTo(MemoryStatus.ACTIVE);
+        assertThat(edited.tags()).contains("verified");
+    }
+
+    @Test
     void generalDiscoveryEditMarksItemStaleAndPublishesExternalEditOrigin() {
         MemoryItem item = item(MemoryScope.PROJECT, "AI_ORCHESTRATION", MemoryStatus.ACTIVE,
                 MemoryType.DISCOVERY, "The old route is here.");

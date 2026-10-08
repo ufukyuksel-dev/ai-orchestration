@@ -11,6 +11,8 @@ command. The task-capability surface is intentionally limited to:
 ```text
 ai_orch memory search
 ai_orch memory learn
+ai_orch memory update
+ai_orch memory archive
 ai_orch reference list
 ai_orch reference read
 ai_orch rule instructions
@@ -96,6 +98,18 @@ facts plus human-readable symbol/file/module locators; the backend resolves and
 persists them. Never submit line ranges, hidden reasoning, task logs, secrets,
 project keys, runtime fields, or backend IDs. Follow the installed
 `ai-orchestration-learning` skill for the request schema.
+
+## Correcting wrong memory
+
+When a retrieved memory card is wrong or outdated (code contradicts it), fix it
+yourself in the same task; no human approval is needed:
+
+- Wrong claim: `ai_orch memory archive --memory-id <id> --reason "<why it is wrong>"`,
+  then save the corrected fact once with `ai_orch memory learn`.
+- Only metadata wrong (tags, confidence, code locators): `ai_orch memory update --file <request.json>`
+  with `memoryId`, `reason` and the corrected fields. The request file must live inside the repository.
+
+Archive is a reversible soft delete; never hard-delete.
 
 ## Rules
 

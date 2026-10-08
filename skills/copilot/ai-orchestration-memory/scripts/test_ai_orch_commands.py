@@ -429,15 +429,33 @@ class MemoryLifecycleTest(CommandTestCase):
 
 
 class AgentLearningCommandTest(CommandTestCase):
-    def test_only_search_and_learn_are_exposed_under_memory(self) -> None:
+    def test_memory_exposes_search_learn_update_and_archive_only(self) -> None:
         root_choices = parser()._subparsers._group_actions[0].choices
         self.assertNotIn("operation", root_choices)
         self.assertNotIn("context", root_choices)
         memory_choices = root_choices["memory"]._subparsers._group_actions[0].choices
-        self.assertEqual(set(memory_choices), {"search", "learn"})
+        self.assertEqual(set(memory_choices), {"search", "learn", "update", "archive"})
         for retired in ("context.resolve", "context.open", "operation.status"):
             self.assertNotIn(retired, ai_orch.ALLOWED_TOOLS)
             self.assertNotIn(retired, ai_orch._OPERATION_TOOLS)
+
+    def test_memory_archive_soft_deletes_a_guarded_project_memory(self) -> None:
+        memory_id = "11111111-1111-1111-1111-111111111111"
+        results = {"memory.get": {"id": memory_id, "scope": "project", "projectKey": "RESOLVED", "status": "active"}}
+        _, client = self.run_command(
+            ["memory", "archive", "--memory-id", memory_id, "--reason", "wrong claim"], results)
+        self.assertEqual(client.calls[-2][0], "memory.get")
+        self.assertEqual(
+            client.calls[-1],
+            ("memory.delete", {"memoryId": memory_id, "mode": "archive", "reason": "wrong claim"}),
+        )
+
+    def test_memory_archive_rejects_another_projects_memory(self) -> None:
+        memory_id = "11111111-1111-1111-1111-111111111111"
+        results = {"memory.get": {"id": memory_id, "scope": "project", "projectKey": "OTHER", "status": "active"}}
+        _, client = self.expect_failure(
+            ["memory", "archive", "--memory-id", memory_id, "--reason", "wrong claim"], results)
+        self.assertNotIn("memory.delete", [name for name, _ in client.calls])
 
     def test_non_learning_command_ignores_malformed_optional_workspace_binding(self) -> None:
         scanner_result = {
@@ -1105,6 +1123,8 @@ class DiagnosticTest(CommandTestCase):
                 "rule.promote",
                 "memory.search",
                 "memory.learn",
+                "memory.update",
+                "memory.archive",
                 "reference.list",
                 "reference.read",
                 "last-job.save",
