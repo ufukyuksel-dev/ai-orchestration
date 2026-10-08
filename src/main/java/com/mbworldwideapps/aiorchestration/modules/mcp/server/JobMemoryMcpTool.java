@@ -76,7 +76,7 @@ public class JobMemoryMcpTool {
     public record Match(String jobId, String title, String summary, Double score, String updatedAt) {}
     public record Checkpoint(boolean found, String jobId, String title, String summary, String content, String updatedAt) {}
 
-    @McpTool(name = "job_memory.save", description = "Save a named job for later (only when the user asks to save this job).")
+    @McpTool(name = "job_memory.save", description = "Save a named job for later.")
     public Saved save(
             @McpToolParam(description = "Short job title; max512 UTF-8 bytes") String title,
             @McpToolParam(description = "Searchable synopsis with project names, topic, decisions and current stage; max8KiB UTF-8. Only title and summary are embedded.") String summary,

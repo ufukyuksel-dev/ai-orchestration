@@ -76,7 +76,7 @@ public class PersonalMemoryMcpTool {
         }
     }
 
-    @McpTool(name = "personal_memory.search", description = "Search the user's personal facts (only when the user asks about their own preferences).")
+    @McpTool(name = "personal_memory.search", description = "Search the user's personal facts.")
     public List<Match> search(@McpToolParam(description = "The user's recall question, within the configured UTF-8 size limit (default 8KiB)") String query,
             @McpToolParam(description = "Maximum matches, 1 to 10", required = false) Integer topK) {
         var context = McpClientContextHolder.require();

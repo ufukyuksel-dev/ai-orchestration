@@ -126,7 +126,7 @@ ai-orchestration:
       session-fallback-provider: qwen
       auto-active-confidence: 0.85
       gate-timeout: 3s
-      trusted-client-ids: self-pipeline,claude-code,codex
+      trusted-client-ids: self-pipeline,claude-code,codex,copilot-cli-memory-skill,copilot
     confirm:
       min-agent-confidence: 0.75
   policy:

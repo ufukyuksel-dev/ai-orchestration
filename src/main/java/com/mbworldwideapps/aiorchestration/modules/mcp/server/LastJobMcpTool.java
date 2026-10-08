@@ -22,7 +22,7 @@ public class LastJobMcpTool {
     public record Checkpoint(boolean found, String content, Instant updatedAt) {}
     public record Saved(boolean saved, Instant updatedAt) {}
 
-    @McpTool(name = "last_job.get", description = "Read the saved \"continue where I left off\" handoff (only when the user asks to resume).")
+    @McpTool(name = "last_job.get", description = "Read the saved \"continue where I left off\" handoff.")
     public Checkpoint get() {
         var context = McpClientContextHolder.require();
         var started = Instant.now();
@@ -39,7 +39,7 @@ public class LastJobMcpTool {
         }
     }
 
-    @McpTool(name = "last_job.save", description = "Save the single \"continue where I left off\" handoff (only when the user asks to save progress).")
+    @McpTool(name = "last_job.save", description = "Save the single \"continue where I left off\" handoff.")
     public Saved save(@McpToolParam(description = "Complete replacement handoff: goal, repositories, artifacts, verified outcomes, pending work and approval provenance. No secrets.") String content) {
         var context = McpClientContextHolder.require();
         var started = Instant.now();
