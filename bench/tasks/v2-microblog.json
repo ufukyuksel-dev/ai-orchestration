@@ -1,0 +1,140 @@
+{
+  "suite": "v2-microblog",
+  "repo": "microblog",
+  "url": "https://github.com/miguelgrinberg/microblog.git",
+  "sha": "a975ef64864354867c88e0ed3a17ba7d17dca752",
+  "pathPrepend": [
+    "bench/.work/venvs/microblog/bin"
+  ],
+  "qualityCommand": "python -m compileall -q app",
+  "ownTestCommand": "python -m unittest -v tests",
+  "hiddenTestCommand": "python -m unittest -v {hidden}",
+  "hiddenTarget": ".",
+  "note": "v2 scored suite on miguelgrinberg/microblog (Python/Flask/unittest): 7 independent tasks, B x2 (bugs injected through baseline patches), I x2, T x1 (5 mutants), R x1, F x1 (convention probe). Prepare with `bash bench/setup/microblog.sh`. Hidden checks under bench/hidden/<task>, references under bench/reference, answer keys under bench/answers, mutants under bench/mutants; details in bench/v2-microblog-notes.md.",
+  "families": [
+    {
+      "id": "MB01",
+      "title": "API collections lose the partial last page",
+      "tasks": [
+        {
+          "id": "mb01",
+          "type": "B",
+          "kind": "code",
+          "hidden": [
+            "test_bench_mb01.py"
+          ],
+          "baseline": {
+            "patch": "baselines/mb01.patch"
+          },
+          "prompt": "API clients that page through user lists lose users. A client calls `GET /api/users?per_page=5` and keeps requesting the URL in `_links.next` until it is `null`: with 12 users it receives only 10 of them, and `_meta.total_pages` says 2. The same happens for a user's followers and following lists (`GET /api/users/<id>/followers`, `GET /api/users/<id>/following`) whenever the number of entries is not a multiple of `per_page`; when it is a multiple, everything is correct. Expected: following the `next` links reaches every entry exactly once, the `next` link of the last page is `null`, and `_meta.total_pages` is the real number of pages. Fix the cause. The API responses must keep their format, and the project's tests must still pass.",
+          "checkSeconds": 1.2
+        }
+      ]
+    },
+    {
+      "id": "MB02",
+      "title": "last_seen shifted by the server's UTC offset",
+      "tasks": [
+        {
+          "id": "mb02",
+          "type": "B",
+          "kind": "code",
+          "hidden": [
+            "test_bench_mb02.py"
+          ],
+          "baseline": {
+            "patch": "baselines/mb02.patch"
+          },
+          "prompt": "A user's \"last seen\" time is wrong when the server does not run in UTC. After a user browses the site, `GET /api/users/<id>` reports their `last_seen` (e.g. `2026-03-01T15:30:00+00:00`) shifted by the server's UTC offset: on a server in UTC+05:30 it lies 5 hours 30 minutes in the future, and the \"Last seen on\" line of the profile page is off by the same amount. On a server that runs in UTC it looks right. Expected: `last_seen` is the time of the user's last request, in UTC, whatever the server's time zone; values that were stored correctly before must still be reported as they are. Fix the cause. Make sure the project's tests still pass.",
+          "checkSeconds": 1.2
+        }
+      ]
+    },
+    {
+      "id": "MB03",
+      "title": "How posts reach the search index",
+      "tasks": [
+        {
+          "id": "mb03",
+          "type": "I",
+          "kind": "investigation",
+          "prompt": "When someone writes a new post, how does it end up in the full-text search index, and what turns indexing off? Do not change any files. End your reply with a block that starts with a line `ANSWER:` followed by one `key: value` line per key: `listener` (the method, as `Class.method`, that after a successful database commit hands new and changed posts to the indexing function), `event` (the name of the database session event that method is registered for), `indexer` (the function, as `module.function`, that writes one object into the search index), `fields` (the class attribute, as `Class.attribute`, that lists which fields of a post are indexed), `switch` (the name of the configuration setting that, when empty, turns indexing off).",
+          "checkSeconds": 0.1
+        }
+      ]
+    },
+    {
+      "id": "MB04",
+      "title": "Unread-messages badge",
+      "tasks": [
+        {
+          "id": "mb04",
+          "type": "I",
+          "kind": "investigation",
+          "prompt": "Logged-in users see a number next to \"Messages\" in the navigation bar. Where does it come from and when does it go back to zero? Do not change any files. End your reply with a block that starts with a line `ANSWER:` followed by one `key: value` line per key: `count` (the method, as `Class.method`, that computes the number), `cutoff` (the attribute, as `Class.attribute`, whose value decides which messages still count), `fallback` (the date, as `YYYY-MM-DD`, used for that decision when the user has never opened their messages), `reset` (the view, as `blueprint.function` like in `url_for`, whose request sets the number back to zero), `poll` (the view, as `blueprint.function`, that the page's script requests periodically to update the number without reloading the page).",
+          "checkSeconds": 0.1
+        }
+      ]
+    },
+    {
+      "id": "MB05",
+      "title": "Pin down API token behavior",
+      "tasks": [
+        {
+          "id": "mb05",
+          "type": "T",
+          "kind": "tests",
+          "allowedPaths": [
+            "tests.py",
+            "test_*.py"
+          ],
+          "testCommand": "python -B -X pycache_prefix=.nopyc -m unittest discover -s . -t . -p 'test*.py'",
+          "mutants": [
+            "1-no-renewal-margin.patch",
+            "2-expiry-ignored.patch",
+            "3-revoke-in-future.patch",
+            "4-lifetime-one-day.patch",
+            "5-password-not-checked.patch"
+          ],
+          "prompt": "Add automated tests that pin down how the token authentication of the JSON API behaves today. Do not change any application code: only add tests, in `tests.py` or in new `test_*.py` files in the repository root, using the project's `unittest` style. The behavior to pin down: `POST /api/tokens` with the HTTP Basic credentials of a user returns status `200` and a JSON object with a `token`; a wrong password or an unknown user gets `401`. A new token is valid for one hour. Asking for a token again while the current one has more than a minute left returns the same token; with a minute or less left, a new token is issued. Token-protected endpoints such as `GET /api/users/<id>` accept a valid token (`Authorization: Bearer <token>`) and answer `401` for a missing, unknown or expired token. `DELETE /api/tokens` with a valid token returns `204`, after which that token is rejected with `401`. All tests must pass on the current code.",
+          "checkSeconds": 13.9
+        }
+      ]
+    },
+    {
+      "id": "MB06",
+      "title": "Split app/models.py into a package",
+      "tasks": [
+        {
+          "id": "mb06",
+          "type": "R",
+          "kind": "code",
+          "hidden": [
+            "test_bench_mb06.py"
+          ],
+          "prompt": "Split the models module `app/models.py` into a package `app/models/` without changing any behavior. `app/models/mixins.py` defines `SearchableMixin` and `PaginatedAPIMixin`; `app/models/user.py` defines the `followers` association table, `User` and the Flask-Login user loader `load_user`; `app/models/post.py` defines `Post`; `app/models/message.py` defines `Message`; `app/models/notification.py` defines `Notification`; `app/models/task.py` defines `Task`. Every class, table and function is defined in its new module, and `app/models/__init__.py` re-exports all of these names, so every existing `from app.models import ...` keeps working. `app/models.py` no longer exists. The application and the project's tests must keep working.",
+          "checkSeconds": 1.0
+        }
+      ]
+    },
+    {
+      "id": "MB07",
+      "title": "Send a private message through the API",
+      "tasks": [
+        {
+          "id": "mb07",
+          "type": "F",
+          "kind": "code",
+          "hidden": [
+            "test_bench_mb07.py"
+          ],
+          "prompt": "Add a JSON API endpoint for sending a private message: `POST /api/messages`. It uses the same token authentication as the existing `GET /api/users/<id>` endpoint (no or an invalid token: status `401`); the sender is the user who owns the token. The request body is a JSON object with `recipient` (the recipient's username, a string) and `body` (the message text, a string of 1 to 140 characters). On success it returns status `201` with a JSON object with the fields `id` (number), `body` (string), `timestamp` (the message time in UTC as an ISO 8601 string with an explicit `+00:00` offset, e.g. `2024-05-01T10:30:00+00:00`), `sender` and `recipient` (each an object with exactly the fields `id` (number) and `username` (string)). A request whose body is not such a JSON object, lacks a field, has a field of the wrong type, or has an empty text or a text longer than 140 characters gets status `400` with a JSON error object like the API's other validation errors; an unknown recipient gets status `404` with a JSON error object. Nothing is stored for a rejected request. Sending through the API must have the same effects for the recipient as sending a message from the web interface. The existing endpoints and pages must keep working unchanged. Make sure the project's tests still pass.",
+          "checkSeconds": 1.0,
+          "probe": [
+            "test_bench_mb07_convention.py"
+          ]
+        }
+      ]
+    }
+  ]
+}

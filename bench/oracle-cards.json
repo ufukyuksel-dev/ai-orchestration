@@ -1,0 +1,417 @@
+{
+ "cards": [
+  {
+   "source_task": "h1t1",
+   "for_positives": [
+    "h1t2",
+    "h1t3"
+   ],
+   "candidate": {
+    "kind": "change_point",
+    "summary": "Adding a read-only JSON endpoint (/api/...) to spring-petclinic owners, vets, pets or visits",
+    "content": "Put JSON APIs in a standalone @RestController (e.g. owner/OwnerRestController), not in OwnerController/PetController/VisitController: their @ModelAttribute methods run before every handler and throw IllegalArgumentException for unknown ids, which surfaces as 500 instead of 404. Look the entity up via the repository (OwnerRepository.findById) and throw ResponseStatusException(HttpStatus.NOT_FOUND). Do not serialize entities directly (Pet.type becomes {id,name,new}); map to nested record DTOs (OwnerJson/PetJson with type as its name string, Lists via stream().map(...).toList()). Format with ./mvnw spring-javaformat:apply.",
+    "locators": [
+     {
+      "kind": "symbol",
+      "ref": "org.springframework.samples.petclinic.owner.OwnerRestController",
+      "path": "src/main/java/org/springframework/samples/petclinic/owner/OwnerRestController.java",
+      "role": "primary_change_point"
+     }
+    ],
+    "appliesWhen": [
+     "new JSON endpoint in petclinic",
+     "404 for unknown ids"
+    ]
+   }
+  },
+  {
+   "source_task": "h1t2",
+   "for_positives": [
+    "h1t3"
+   ],
+   "candidate": {
+    "kind": "change_point",
+    "summary": "Adding a read-only JSON endpoint (/api/...) to spring-petclinic; pattern used for owners and vets",
+    "content": "JSON APIs live in standalone @RestController classes with record DTOs (owner/OwnerRestController, vet/VetRestController), not inside the HTML controllers: OwnerController/PetController/VisitController @ModelAttribute methods throw IllegalArgumentException (500) for unknown ids, so 404 must come from ResponseStatusException(NOT_FOUND) after a repository lookup. Map entities to records (names as strings, e.g. specialties via NamedEntity::getName; Vet#getSpecialties() is already name-sorted). The existing /vets resource wraps vets in {\"vetList\":[...]} with specialty objects, so a top-level array needs its own DTO list. Sort explicitly when order matters.",
+    "locators": [
+     {
+      "kind": "symbol",
+      "ref": "org.springframework.samples.petclinic.vet.VetRestController",
+      "path": "src/main/java/org/springframework/samples/petclinic/vet/VetRestController.java",
+      "role": "primary_change_point"
+     },
+     {
+      "kind": "symbol",
+      "ref": "org.springframework.samples.petclinic.owner.OwnerRestController",
+      "path": "src/main/java/org/springframework/samples/petclinic/owner/OwnerRestController.java",
+      "role": "supporting"
+     }
+    ]
+   }
+  },
+  {
+   "source_task": "h2t1",
+   "for_positives": [
+    "h2t2",
+    "h2t3"
+   ],
+   "candidate": {
+    "kind": "change_point",
+    "summary": "Adding a CSV export endpoint (text/csv) to spring-petclinic",
+    "content": "Reusable RFC 4180 writer: system/Csv (Csv.TEXT_CSV = \"text/csv\"; Csv.line(Object...) joins fields with ',' and ends with CRLF; Csv.field quotes a value containing , \" CR or LF and doubles inner quotes; null -> empty). Endpoints go in their own @RestController (e.g. owner/OwnerCsvController) with @GetMapping(value=\"/owners.csv\", produces=Csv.TEXT_CSV) returning a String built from Csv.line(header) + rows; a plain @Controller returning String would resolve a template. All owners: OwnerRepository.findAll(Sort.by(\"id\")) (JpaRepository) since the custom finder is paged. Keep exports out of OwnerController: its @ModelAttribute throws IllegalArgumentException (500) for unknown {ownerId}.",
+    "locators": [
+     {
+      "kind": "symbol",
+      "ref": "org.springframework.samples.petclinic.system.Csv",
+      "path": "src/main/java/org/springframework/samples/petclinic/system/Csv.java",
+      "role": "primary_change_point"
+     },
+     {
+      "kind": "symbol",
+      "ref": "org.springframework.samples.petclinic.owner.OwnerCsvController",
+      "path": "src/main/java/org/springframework/samples/petclinic/owner/OwnerCsvController.java",
+      "role": "supporting"
+     }
+    ]
+   }
+  },
+  {
+   "source_task": "h2t2",
+   "for_positives": [
+    "h2t3"
+   ],
+   "candidate": {
+    "kind": "change_point",
+    "summary": "Adding a CSV export endpoint (text/csv) to spring-petclinic; Csv helper and per-entity CSV controllers",
+    "content": "CSV pattern: system/Csv RFC 4180 helper (Csv.line(...) -> fields joined by ',', CRLF terminated; Csv.field quotes on , \" CR LF and doubles quotes; Csv.TEXT_CSV) used from a standalone @RestController with @GetMapping(value=\"/x.csv\", produces=Csv.TEXT_CSV) returning String (e.g. vet/VetCsvController). VetRepository.findAll() is @Cacheable(\"vets\") and returns an unordered Collection: sort explicitly (Comparator.comparing(Vet::getId)). Multi-value cells joined with ';' (specialties). Avoid putting /owners/{ownerId}/... handlers in OwnerController: its @ModelAttribute gives 500 (IllegalArgumentException) instead of 404 for unknown owners.",
+    "locators": [
+     {
+      "kind": "symbol",
+      "ref": "org.springframework.samples.petclinic.system.Csv",
+      "path": "src/main/java/org/springframework/samples/petclinic/system/Csv.java",
+      "role": "primary_change_point"
+     },
+     {
+      "kind": "symbol",
+      "ref": "org.springframework.samples.petclinic.vet.VetCsvController",
+      "path": "src/main/java/org/springframework/samples/petclinic/vet/VetCsvController.java",
+      "role": "supporting"
+     }
+    ]
+   }
+  },
+  {
+   "source_task": "p1t1",
+   "for_positives": [
+    "p1t2",
+    "p1t3"
+   ],
+   "candidate": {
+    "kind": "change_point",
+    "summary": "Adding a token-authenticated JSON API route to microblog (app/api blueprint)",
+    "content": "New API module app/api/<name>.py using `from app.api import bp` and `@token_auth.login_required` (app/api/auth.py; Flask-Login's login_required gives 302, not 401). Import the module in app/api/__init__.py (`from app.api import users, errors, tokens, posts`) or routes never register. db.get_or_404 inside the api blueprint yields JSON {\"error\": ...} via app/api/errors.py. SQLite returns naive datetimes: serialize as .replace(tzinfo=timezone.utc).isoformat() (+00:00), not isoformat() or +'Z'. Serializer helper post_to_dict(post): id, body, timestamp, language or None, author {id, username}. Post has no to_dict.",
+    "locators": [
+     {
+      "kind": "symbol",
+      "ref": "post_to_dict",
+      "path": "app/api/posts.py",
+      "role": "primary_change_point"
+     },
+     {
+      "kind": "symbol",
+      "ref": "get_post",
+      "path": "app/api/posts.py",
+      "role": "supporting"
+     }
+    ]
+   }
+  },
+  {
+   "source_task": "p1t2",
+   "for_positives": [
+    "p1t3"
+   ],
+   "candidate": {
+    "kind": "change_point",
+    "summary": "Adding a paginated, token-authenticated JSON list endpoint to microblog's api blueprint",
+    "content": "Pattern (app/api/posts.py get_user_posts): @bp.route + @token_auth.login_required; module imported in app/api/__init__.py. WriteOnlyMapped relations (user.posts, messages_received) need .select(); order newest first with id tie-break (Post.timestamp.desc(), Post.id.desc()); db.paginate(query, page=, per_page=, error_out=False); per_page = min(request.args per_page default 10, 100). Response: items (via a *_to_dict helper, timestamps .replace(tzinfo=timezone.utc).isoformat()), _meta {page, per_page, total_pages, total_items}, _links self/next/prev via url_for('api.<endpoint>', ...) with None when absent. Token user is token_auth.current_user(), not Flask-Login current_user.",
+    "locators": [
+     {
+      "kind": "symbol",
+      "ref": "get_user_posts",
+      "path": "app/api/posts.py",
+      "role": "primary_change_point"
+     },
+     {
+      "kind": "symbol",
+      "ref": "post_to_dict",
+      "path": "app/api/posts.py",
+      "role": "supporting"
+     }
+    ]
+   }
+  },
+  {
+   "source_task": "p2t1",
+   "for_positives": [
+    "p2t2",
+    "p2t3"
+   ],
+   "candidate": {
+    "kind": "change_point",
+    "summary": "Adding a CSV export page for logged-in users to microblog (app/main routes)",
+    "content": "Helper csv_response(rows, filename) in app/main/routes.py: csv.writer over io.StringIO (correct RFC 4180 quoting, unlike ','.join) and Response(..., mimetype='text/csv', headers Content-Disposition 'attachment; filename=...'); returning a str gives text/html. Routes use @bp.route + flask_login @login_required (anonymous -> 302 /auth/login; token_auth would give 401). WriteOnlyMapped relations need .select() + db.session.scalars. Timestamps: strftime('%Y-%m-%d %H:%M:%S'), not isoformat. Order with explicit tie-break (timestamp asc, id asc). The existing /export_posts is an rq/Redis email job, not reusable.",
+    "locators": [
+     {
+      "kind": "symbol",
+      "ref": "csv_response",
+      "path": "app/main/routes.py",
+      "role": "primary_change_point"
+     },
+     {
+      "kind": "symbol",
+      "ref": "export_posts_csv",
+      "path": "app/main/routes.py",
+      "role": "supporting"
+     }
+    ]
+   }
+  },
+  {
+   "source_task": "p2t2",
+   "for_positives": [
+    "p2t3"
+   ],
+   "candidate": {
+    "kind": "change_point",
+    "summary": "Adding a CSV export page for logged-in users to microblog (app/main routes)",
+    "content": "Reusable csv_response(rows, filename) in app/main/routes.py (csv.writer into io.StringIO, Response mimetype='text/csv', Content-Disposition attachment). Routes: @bp.route('/...csv') + flask_login @login_required (302 for anonymous). Unknown user -> db.first_or_404(sa.select(User).where(User.username == username)). WriteOnlyMapped relations (followers, posts, messages_sent/received) need .select() and db.session.scalars; followers vs following are easy to swap; User.posts_count() for counts; write about_me or '' (not None). Times via strftime('%Y-%m-%d %H:%M:%S'). Do not reuse views that write state (the /messages view sets last_message_read_time).",
+    "locators": [
+     {
+      "kind": "symbol",
+      "ref": "csv_response",
+      "path": "app/main/routes.py",
+      "role": "primary_change_point"
+     },
+     {
+      "kind": "symbol",
+      "ref": "followers_csv",
+      "path": "app/main/routes.py",
+      "role": "supporting"
+     }
+    ]
+   }
+  },
+  {
+   "source_task": "g1t1",
+   "for_positives": [
+    "g1t2",
+    "g1t3"
+   ],
+   "candidate": {
+    "kind": "behavior",
+    "summary": "Adding anonymous read-only stats/count endpoints in golang-gin-realworld (articles package, route wiring, author ids)",
+    "content": "In hello.go, routes wired before v1.Use(users.AuthMiddleware(true)) are anonymous; anything after (or in ArticlesRegister/ProfileRegister) gives 401. Put handlers needing article data in package articles (articles imports users; reverse is a cycle) with an *AnonymousRegister func (ProfileStatsAnonymousRegister wired after users.ProfileRetrieveRegister) or in ArticlesAnonymousRegister/TagsAnonymousRegister. ArticleModel.AuthorID, CommentModel.AuthorID, FavoriteModel.FavoriteByID are ArticleUserModel ids (lazy row per user, user_model_id); FollowModel uses UserModel ids. Soft deletes: db.Model queries skip deleted_at, db.Table/raw joins (article_tags) do not. Nil []string -> null.",
+    "locators": [
+     {
+      "kind": "symbol",
+      "ref": "ProfileStats",
+      "path": "articles/profile_stats.go",
+      "role": "primary_change_point"
+     },
+     {
+      "kind": "symbol",
+      "ref": "ProfileStatsAnonymousRegister",
+      "path": "articles/profile_stats.go",
+      "role": "supporting"
+     },
+     {
+      "kind": "symbol",
+      "ref": "ArticleUserModel",
+      "path": "articles/models.go",
+      "role": "supporting"
+     }
+    ]
+   }
+  },
+  {
+   "source_task": "g1t2",
+   "for_positives": [
+    "g1t3"
+   ],
+   "candidate": {
+    "kind": "change_point",
+    "summary": "Adding anonymous read-only stats endpoints in golang-gin-realworld (route group, soft deletes, user ids)",
+    "content": "Anonymous GETs go in articles.ArticlesAnonymousRegister / TagsAnonymousRegister (wired in hello.go between v1.Use(AuthMiddleware(false)) and v1.Use(AuthMiddleware(true))); ArticlesRegister is authed (401). Handler pattern (articles/article_stats.go ArticleStats): FindOneArticle by slug -> 404 common.NewError; GORM model queries with Preload(\"Author.UserModel\")/Preload(\"FavoriteBy.UserModel\") since Author/FavoriteBy are ArticleUserModel rows, not UserModel. Model queries exclude soft-deleted rows; db.Table/raw SQL and article_tags joins do not (add deleted_at IS NULL). Start slices as []string{} (nil encodes null); sort with a tie-break.",
+    "locators": [
+     {
+      "kind": "symbol",
+      "ref": "ArticleStats",
+      "path": "articles/article_stats.go",
+      "role": "primary_change_point"
+     },
+     {
+      "kind": "symbol",
+      "ref": "ArticleUserModel",
+      "path": "articles/models.go",
+      "role": "supporting"
+     }
+    ]
+   }
+  },
+  {
+   "source_task": "g2t1",
+   "for_positives": [
+    "g2t2",
+    "g2t3"
+   ],
+   "candidate": {
+    "kind": "change_point",
+    "summary": "Adding a CSV export endpoint to golang-gin-realworld (articles package)",
+    "content": "articles/csv.go writeCSV(c, [][]string): encoding/csv WriteAll into a buffer, c.Data(200, \"text/csv; charset=utf-8\", ...) (encoding/csv handles RFC 4180 quoting; not c.String/strings.Join). csvDateFormat = \"2006-01-02T15:04:05.999Z\" with .UTC() matches the JSON API (RFC3339 does not). Query GORM directly (Preload(\"Author.UserModel\"), Order(\"created_at ASC, id ASC\")); FindManyArticle silently caps at 20. /api/articles.csv is registered with v1.GET right after v1.Use(users.AuthMiddleware(false)) (a Group(\"/articles\") gives /articles/.csv). Author/FavoriteBy are ArticleUserModel rows: AuthorID and FavoriteByID are ArticleUserModel ids, not UserModel ids.",
+    "locators": [
+     {
+      "kind": "symbol",
+      "ref": "writeCSV",
+      "path": "articles/csv.go",
+      "role": "primary_change_point"
+     },
+     {
+      "kind": "symbol",
+      "ref": "ArticlesCSV",
+      "path": "articles/articles_csv.go",
+      "role": "supporting"
+     },
+     {
+      "kind": "symbol",
+      "ref": "ArticleUserModel",
+      "path": "articles/models.go",
+      "role": "supporting"
+     }
+    ]
+   }
+  },
+  {
+   "source_task": "g2t2",
+   "for_positives": [
+    "g2t3"
+   ],
+   "candidate": {
+    "kind": "change_point",
+    "summary": "Adding a CSV export endpoint to golang-gin-realworld (articles package)",
+    "content": "Use articles/csv.go writeCSV(c, records) (encoding/csv, c.Data 200 \"text/csv; charset=utf-8\") and csvDateFormat \"2006-01-02T15:04:05.999Z\" (.UTC()). Per-article route: router.GET(\"/:slug/comments.csv\", ArticleCommentsCSV) in ArticlesAnonymousRegister (anonymous; authed groups 401); other anonymous groups need their own *AnonymousRegister wired in hello.go before v1.Use(AuthMiddleware(true)). Unknown/deleted slug: FindOneArticle error -> 404. Usernames via Author.UserModel: CommentModel.AuthorID / FavoriteModel.FavoriteByID are ArticleUserModel ids; map a UserModel by user_model_id first. FindManyArticle pages at 20; sort with id tie-break.",
+    "locators": [
+     {
+      "kind": "symbol",
+      "ref": "writeCSV",
+      "path": "articles/csv.go",
+      "role": "primary_change_point"
+     },
+     {
+      "kind": "symbol",
+      "ref": "ArticleCommentsCSV",
+      "path": "articles/comments_csv.go",
+      "role": "supporting"
+     },
+     {
+      "kind": "symbol",
+      "ref": "ArticleUserModel",
+      "path": "articles/models.go",
+      "role": "supporting"
+     }
+    ]
+   }
+  },
+  {
+   "source_task": "gn01",
+   "for_positives": [
+    "gn02"
+   ],
+   "candidate": {
+    "kind": "behavior",
+    "summary": "Filtering or changing a user's articles, comments or favorites in golang-gin-realworld (two user id spaces)",
+    "content": "Articles, comments and favorites do not store UserModel ids: ArticleModel.AuthorID, CommentModel.AuthorID and FavoriteModel.FavoriteByID point to article_user_models (ArticleUserModel), a per-user row created lazily by articles.GetArticleUserModel(user) and keyed by user_model_id. The two id spaces diverge when users act in a different order than they registered. FollowModel uses UserModel ids. Map the UserModel first (GetArticleUserModel(u).ID, or lookup by user_model_id; a user may have none) then filter. Bug seen: ArticlesSerializer.Response passed myUserModel.ID to BatchGetFavoriteStatus (filters favorite_by_id), giving wrong favorited flags.",
+    "locators": [
+     {
+      "kind": "symbol",
+      "ref": "GetArticleUserModel",
+      "path": "articles/models.go",
+      "role": "primary_change_point"
+     },
+     {
+      "kind": "symbol",
+      "ref": "ArticleUserModel",
+      "path": "articles/models.go",
+      "role": "supporting"
+     },
+     {
+      "kind": "symbol",
+      "ref": "BatchGetFavoriteStatus",
+      "path": "articles/models.go",
+      "role": "supporting"
+     },
+     {
+      "kind": "symbol",
+      "ref": "ArticlesSerializer#Response",
+      "path": "articles/serializers.go",
+      "role": "supporting"
+     }
+    ]
+   }
+  }
+ ],
+ "k_checks": [
+  {
+   "task": "h1t2",
+   "k_check": "JSON APIs go in a standalone @RestController returning record DTOs (names as strings), not entities serialized directly"
+  },
+  {
+   "task": "h1t3",
+   "k_check": "JSON API in a standalone @RestController with record DTOs and ResponseStatusException(NOT_FOUND); Owner/Pet/VisitController @ModelAttribute throws IllegalArgumentException -> 500 for unknown ids"
+  },
+  {
+   "task": "h2t2",
+   "k_check": "reuse system/Csv RFC 4180 helper (quote on , \" CR LF, double quotes, CRLF lines) in a @RestController with produces=text/csv"
+  },
+  {
+   "task": "h2t3",
+   "k_check": "system/Csv RFC 4180 helper + standalone @RestController produces=text/csv (OwnerController's @ModelAttribute gives 500 for unknown owner)"
+  },
+  {
+   "task": "p1t2",
+   "k_check": "api route in app/api module imported in app/api/__init__.py with @token_auth.login_required and UTC timestamps via .replace(tzinfo=timezone.utc).isoformat()"
+  },
+  {
+   "task": "p1t3",
+   "k_check": "api blueprint + token_auth route pattern with *_to_dict UTC timestamps and db.paginate pagination (per_page capped at 100, _meta/_links via url_for)"
+  },
+  {
+   "task": "p2t2",
+   "k_check": "csv_response helper (csv.writer -> Response mimetype text/csv, attachment) on a flask_login @login_required route"
+  },
+  {
+   "task": "p2t3",
+   "k_check": "csv_response helper (csv.writer, text/csv, attachment) + @login_required route; WriteOnlyMapped needs .select()"
+  },
+  {
+   "task": "g1t2",
+   "k_check": "article/comment/favorite rows hold ArticleUserModel ids (resolve usernames via FavoriteBy/Author.UserModel), and anonymous routes go in ArticlesAnonymousRegister before AuthMiddleware(true)"
+  },
+  {
+   "task": "g1t3",
+   "k_check": "anonymous stats routes go in *AnonymousRegister groups wired before v1.Use(users.AuthMiddleware(true)) in hello.go (handler in package articles)"
+  },
+  {
+   "task": "g2t2",
+   "k_check": "writeCSV helper (encoding/csv + c.Data text/csv) with csvDateFormat 2006-01-02T15:04:05.999Z, route in an anonymous register"
+  },
+  {
+   "task": "g2t3",
+   "k_check": "writeCSV CSV pattern + FavoriteModel.FavoriteByID is an ArticleUserModel id (map the UserModel via user_model_id before filtering)"
+  },
+  {
+   "task": "gn02",
+   "k_check": "articles/comments/favorites store ArticleUserModel ids; map a UserModel via GetArticleUserModel before filtering"
+  }
+ ]
+}

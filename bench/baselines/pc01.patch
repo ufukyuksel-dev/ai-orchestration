@@ -1,0 +1,20 @@
+diff --git a/src/main/java/org/springframework/samples/petclinic/owner/OwnerRepository.java b/src/main/java/org/springframework/samples/petclinic/owner/OwnerRepository.java
+index d2b3dde..33ca61d 100644
+--- a/src/main/java/org/springframework/samples/petclinic/owner/OwnerRepository.java
++++ b/src/main/java/org/springframework/samples/petclinic/owner/OwnerRepository.java
+@@ -20,6 +20,7 @@ import java.util.Optional;
+ import org.springframework.data.domain.Page;
+ import org.springframework.data.domain.Pageable;
+ import org.springframework.data.jpa.repository.JpaRepository;
++import org.springframework.data.jpa.repository.Query;
+ 
+ /**
+  * Repository class for <code>Owner</code> domain objects. All method names are compliant
+@@ -42,6 +43,7 @@ public interface OwnerRepository extends JpaRepository<Owner, Integer> {
+ 	 * @return a Collection of matching {@link Owner}s (or an empty Collection if none
+ 	 * found)
+ 	 */
++	@Query("SELECT owner FROM Owner owner LEFT JOIN owner.pets pet WHERE owner.lastName LIKE :lastName%")
+ 	Page<Owner> findByLastNameStartingWith(String lastName, Pageable pageable);
+ 
+ 	/**

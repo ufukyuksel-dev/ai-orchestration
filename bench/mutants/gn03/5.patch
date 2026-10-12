@@ -1,0 +1,29 @@
+diff --git a/users/middlewares.go b/users/middlewares.go
+index 1ad59dd..5aff075 100644
+--- a/users/middlewares.go
++++ b/users/middlewares.go
+@@ -1,6 +1,7 @@
+ package users
+ 
+ import (
++	"errors"
+ 	"net/http"
+ 	"strings"
+ 
+@@ -60,14 +61,14 @@ func AuthMiddleware(auto401 bool) gin.HandlerFunc {
+ 			return []byte(common.JWTSecret), nil
+ 		})
+ 
+-		if err != nil {
++		if err != nil && !errors.Is(err, jwt.ErrTokenSignatureInvalid) {
+ 			if auto401 {
+ 				c.AbortWithStatus(http.StatusUnauthorized)
+ 			}
+ 			return
+ 		}
+ 
+-		if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
++		if claims, ok := token.Claims.(jwt.MapClaims); ok {
+ 			my_user_id := uint(claims["id"].(float64))
+ 			UpdateContextUserModel(c, my_user_id)
+ 		}

@@ -6,8 +6,12 @@ its instruction surface is <repo>/.github/copilot-instructions.md and its skill
 surface is <repo>/.github/skills/ (global skills are not detected). So this
 installer owns two things inside the target repository:
 
-* one marked block in .github/copilot-instructions.md, and
-* checkout-linked symlinks under .github/skills/ for every Copilot skill.
+* one marked block in .github/copilot-instructions.md,
+* checkout-linked symlinks under .github/skills/ for every Copilot skill,
+* the Copilot hooks in .github/hooks/ai-orchestration.json (memory cards and rules with each prompt, memory at
+  the failing check, the learning saved from the final answer; scripts of this checkout), and
+* the compact custom agent .github/agents/ai-orchestration.agent.md (start it with
+  `copilot --agent ai-orchestration`).
 
 Run it with no arguments from inside the target repository; it installs into the
 nearest .git root of the working directory. --target is only for driving other
@@ -23,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import json
 from pathlib import Path
 import sys
 
@@ -30,6 +35,8 @@ BEGIN = '<!-- ai-orchestration:copilot-project:begin -->'
 END = '<!-- ai-orchestration:copilot-project:end -->'
 INSTRUCTIONS = Path('.github') / 'copilot-instructions.md'
 SKILLS = Path('.github') / 'skills'
+HOOKS = Path('.github') / 'hooks' / 'ai-orchestration.json'
+AGENT = Path('.github') / 'agents' / 'ai-orchestration.agent.md'
 
 
 class Conflict(Exception):
@@ -94,7 +101,7 @@ def resolve_root(raw: Path, allow_non_git: bool) -> Path:
     if not allow_non_git and not exists(root / '.git'):
         raise Conflict(f'target is not a git repository (use --allow-non-git): {root}')
     # Do not follow a redirected configuration directory while mutating it.
-    for relative in (INSTRUCTIONS, SKILLS):
+    for relative in (INSTRUCTIONS, SKILLS, HOOKS, AGENT):
         for parent in list((root / relative).parents)[:len(relative.parts) - 1]:
             if parent.is_symlink():
                 raise Conflict(f'configuration parent is a symlink: {parent}')
@@ -169,6 +176,53 @@ def plan_skills(root: Path, repo: Path, uninstall: bool) -> list[tuple]:
     return actions
 
 
+def user_integration(repo: Path):
+    """The Copilot user installer of this checkout: its hook file and custom agent are the ones placed here."""
+    own = Path(__file__).resolve().parents[1] / 'skills' / 'copilot' / 'ai-orchestration-memory' / 'scripts'
+    if str(own) not in sys.path:
+        sys.path.insert(0, str(own))
+    import install_user_integration  # the shapes; the hook paths point at `repo`
+    return install_user_integration, repo / 'skills' / 'copilot' / 'ai-orchestration-memory' / 'scripts' / \
+        'copilot_memory_gate.py'
+
+
+def plan_runtime(root: Path, repo: Path, uninstall: bool) -> list[tuple]:
+    """The hook file and the custom agent: written when missing or ours (an earlier shape included), refused when
+    another file sits there, removed on uninstall only when ours."""
+    if root.resolve() == repo.resolve():
+        return []  # this checkout's own .github ships no machine-bound hook paths
+    installer, gate = user_integration(repo)
+    hook_text = json.dumps(installer.expected_hook(gate), indent=2) + '\n'
+    actions: list[tuple] = []
+    for target, desired, owned in (
+            (root / HOOKS, hook_text, lambda text: _owned_hook_text(installer, text)),
+            (root / AGENT, installer.agent_text(), lambda text: text.startswith(AGENT_MARK))):
+        current = text_file(target)
+        if uninstall:
+            if current and owned(current):
+                actions.append(('remove', target, None))
+            continue
+        if current == desired:
+            print(f'in sync: {target}')
+            continue
+        if current and not owned(current):
+            raise Conflict(f'file exists and is not owned by AI Orchestration: {target}')
+        if exists(target.with_name(target.name + '.ai-orch-tmp')):
+            raise Conflict(f'temporary file already exists for {target}')
+        actions.append(('write', target, desired))
+    return actions
+
+
+AGENT_MARK = '---\nname: ai-orchestration\ndescription: Coding agent for repositories with AI Orchestration memory'
+
+
+def _owned_hook_text(installer, text: str) -> bool:
+    try:
+        return installer.owned_hook_value(json.loads(text))
+    except ValueError:
+        return False
+
+
 def plan(args) -> list[tuple]:
     repo = args.repo.resolve()
     if not (repo / 'skills/copilot/session-instructions.md').is_file():
@@ -186,6 +240,8 @@ def plan(args) -> list[tuple]:
         actions += plan_instructions(root, repo, args.uninstall)
         if not args.no_skills:
             actions += plan_skills(root, repo, args.uninstall)
+        if not args.no_runtime:
+            actions += plan_runtime(root, repo, args.uninstall)
     return actions
 
 
@@ -221,6 +277,10 @@ def apply(actions: list[tuple]) -> None:
                 source = target.resolve()
                 target.unlink()
                 done.append(('link', target, source))
+            elif kind == 'remove':
+                previous = text_file(target)
+                target.unlink()
+                done.append(('write', target, previous))
     except (OSError, Conflict):
         # Restore completed mutations; untouched files stay untouched.
         for kind, target, previous in reversed(done):
@@ -246,7 +306,9 @@ def main() -> int:
                         help='AI Orchestration checkout the block and skills point at')
     parser.add_argument('--allow-non-git', action='store_true')
     parser.add_argument('--no-skills', action='store_true',
-                        help='install only the instruction block')
+                        help='do not link the Copilot skills')
+    parser.add_argument('--no-runtime', action='store_true',
+                        help='do not install the Copilot hooks and the compact custom agent')
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument('--check', action='store_true')
     mode.add_argument('--dry-run', action='store_true')
@@ -260,10 +322,13 @@ def main() -> int:
             return 1 if args.check and actions else 0
         apply(actions)
         if actions and not args.uninstall:
-            print('note: .github/copilot-instructions.md and .github/skills are inside the target '
-                  'repository, so git sees them; the skills are symlinks into this checkout. '
-                  'Enable Settings > GitHub Copilot > Chat > Agent > Agent Skills in the IDE. '
-                  'A written file is not proof the plugin loaded it; verify in a real session.')
+            print('note: .github/copilot-instructions.md, .github/skills, .github/hooks/ai-orchestration.json and '
+                  '.github/agents/ai-orchestration.agent.md are inside the target repository, so git sees them; '
+                  'the skills and hook commands point into this checkout (keep them out of shared commits if '
+                  'others use the repository). Copilot CLI loads the hooks once you trust the folder; start it '
+                  'with `copilot --agent ai-orchestration` for the compact tool set. In the IDE enable Settings > '
+                  'GitHub Copilot > Chat > Agent > Agent Skills. A written file is not proof the plugin loaded '
+                  'it; verify in a real session.')
         return 0
     except (Conflict, OSError) as exc:
         print(f'CONFLICT: {exc}', file=sys.stderr)

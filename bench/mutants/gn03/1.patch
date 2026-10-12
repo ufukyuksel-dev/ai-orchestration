@@ -1,0 +1,13 @@
+diff --git a/users/middlewares.go b/users/middlewares.go
+index 1ad59dd..1df3e20 100644
+--- a/users/middlewares.go
++++ b/users/middlewares.go
+@@ -13,7 +13,7 @@ import (
+ func extractToken(c *gin.Context) string {
+ 	// Check Authorization header first
+ 	bearerToken := c.GetHeader("Authorization")
+-	if len(bearerToken) > 6 && strings.ToUpper(bearerToken[0:6]) == "TOKEN " {
++	if len(bearerToken) > 6 && strings.HasPrefix(bearerToken, "Token ") {
+ 		return bearerToken[6:]
+ 	}
+ 

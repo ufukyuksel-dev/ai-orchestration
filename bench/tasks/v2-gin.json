@@ -1,0 +1,99 @@
+{
+  "suite": "v2-gin",
+  "note": "v2 scored suite on golang-gin-realworld-example-app (Go/gin/GORM/SQLite, RealWorld API). 7 tasks: B x2, I x2, R x1, T x1, X x1. Family GN-K is a memory chain (discovery gn01 -> dependent gn02 -> unrelated control gn03); the other four are independent families. Hidden checks of code tasks are black-box HTTP tests in package main (start main() on a free port with a throw-away DB_PATH) except gn07 (refactor: API-shape + source-scope test in package users). K, pitfalls and the reason for every check: bench/v2-gin-notes.md. Needs `go` with cgo on PATH; setup: bench/setup/golang-gin-realworld-example-app.sh.",
+  "repo": "golang-gin-realworld-example-app",
+  "url": "https://github.com/gothinkster/golang-gin-realworld-example-app.git",
+  "sha": "626c372d259472148d93303f74aa9b9a1cdcef24",
+  "hiddenTarget": ".",
+  "qualityCommand": "go vet ./... && test -z \"$(gofmt -l .)\"",
+  "hiddenTestCommand": "go test -count=1 -run '^TestBenchGN' .",
+  "ownTestCommand": "go test -count=1 ./...",
+  "families": [
+    {
+      "id": "GN-K",
+      "title": "Memory chain: author/favoriter ids (discovery B, dependent X, unrelated control T)",
+      "chain": true,
+      "tasks": [
+        {
+          "id": "gn01",
+          "type": "B",
+          "kind": "code",
+          "role": "discovery",
+          "prompt": "Signed-in users see wrong `favorited` flags in article lists. In `GET /api/articles` (with or without the `tag`, `author` or `favorited` filters) and in `GET /api/articles/feed`, an article the signed-in user has favorited often shows `\"favorited\": false`, and an article the user never favorited can show `\"favorited\": true`, while `GET /api/articles/{slug}` shows the correct value to the same user. For a signed-in user, every article in these lists must carry the same `favorited` value that `GET /api/articles/{slug}` gives that user; anonymous callers keep seeing `false` in the lists. `favoritesCount` and all other fields and endpoints must keep working unchanged. Make sure the project's build, vet and tests still pass.",
+          "hidden": ["bench_gn01_test.go"],
+          "baseline": {"patch": "baselines/gn01.patch"}
+        },
+        {
+          "id": "gn02",
+          "type": "X",
+          "kind": "code",
+          "role": "dependent",
+          "prompt": "Add account deletion to the API (as started with `go run .`). `DELETE /api/user` deletes the account of the signed-in user and answers `200` or `204`; without a valid token it answers `401` and deletes nothing. After an account is deleted:\n- `GET /api/profiles/{username}` for it answers `404`, logging in with its email and password answers `401`, and `GET /api/user` with a token issued to it answers `401`;\n- the articles it wrote are gone: `GET /api/articles/{slug}` answers `404` for them, and they no longer appear in `GET /api/articles` (with or without filters) or in anybody's feed;\n- the comments it wrote no longer appear in `GET /api/articles/{slug}/comments` of any article;\n- its favorites are gone: they no longer count in any article's `favoritesCount`;\n- the same username and email can be registered again, and the new account starts with no articles and no favorites;\n- the data of every other account (its articles, comments, favorites, follows and profile) is unchanged.\nAll existing endpoints must keep working unchanged. Make sure the project's build, vet and tests still pass.",
+          "hidden": ["bench_gn02_test.go"]
+        },
+        {
+          "id": "gn03",
+          "type": "T",
+          "kind": "tests",
+          "role": "control",
+          "prompt": "Add Go tests that pin down how the API authenticates requests, so that a later change to this behavior cannot go unnoticed:\n- A request carries its JWT either in the `Authorization` header as `Token <jwt>` (the word `Token` in any letter case) or in the `access_token` query parameter; when the header carries a token, the query parameter is not used.\n- On endpoints that allow anonymous access (for example `GET /api/profiles/{username}`), a request without a token or with an invalid token (malformed, not signed with the application's secret, or expired) is served as an anonymous request.\n- On endpoints that require authentication (for example `GET /api/user`), a request without a token or with an invalid token (malformed, not signed with the application's secret, or expired) gets `401`.\n- A valid token identifies the user whose id is in its `id` claim.\nOnly add or change test files (`*_test.go`); do not change production code. The new tests must pass on the current code together with the existing ones (`go test ./...`), and `go vet ./...` and `gofmt -l .` must stay clean.",
+          "allowedPaths": ["*_test.go"],
+          "testCommand": "go test -count=1 ./...",
+          "mutants": ["1.patch", "2.patch", "3.patch", "4.patch", "5.patch"]
+        }
+      ]
+    },
+    {
+      "id": "GN-B2",
+      "title": "Password lost after a profile update",
+      "tasks": [
+        {
+          "id": "gn04",
+          "type": "B",
+          "kind": "code",
+          "prompt": "Users get locked out after editing their profile. When a signed-in user updates their profile without changing the password (for example `PUT /api/user` with only a new `bio`), the update answers `200`, but afterwards `POST /api/users/login` with their unchanged email and password answers `401`. Updating the profile without a `password` field must leave the password as it was; updating it with a `password` must still change it (the new password works, the old one no longer does). All other endpoints must keep working unchanged. Make sure the project's build, vet and tests still pass.",
+          "hidden": ["bench_gn04_test.go"],
+          "baseline": {"patch": "baselines/gn04.patch"}
+        }
+      ]
+    },
+    {
+      "id": "GN-I1",
+      "title": "Anonymous feed request",
+      "tasks": [
+        {
+          "id": "gn05",
+          "type": "I",
+          "kind": "investigation",
+          "prompt": "An anonymous client (no token at all) calls `GET /api/articles/feed` on the application as started with `go run .`. Which HTTP status does it get, which function of this repository contains the code that produces that status, and does the request reach the feed's handler function at all? Answer from the code. Do not change any files. End your reply with a block that starts with a line `ANSWER:` followed by one `key: value` line per key: `status` (the number only), `function` (the function's name, optionally with its package), `reachesHandler` (`yes` or `no`)."
+        }
+      ]
+    },
+    {
+      "id": "GN-I2",
+      "title": "Re-creating the title of a deleted article",
+      "tasks": [
+        {
+          "id": "gn06",
+          "type": "I",
+          "kind": "investigation",
+          "prompt": "On a fresh database of the application (as started with `go run .`), a signed-in user creates an article titled `Hello World` (`POST /api/articles`, answered `201`), deletes it (`DELETE /api/articles/hello-world`, answered `200`) and then creates another article with exactly the same title. Which HTTP status does the second create request get, under which key of the response's `errors` object is the reason reported (`none` if the request succeeds), and does the deleted article's row still exist in the database table that stores articles after the delete? Answer from the code. Do not change any files. End your reply with a block that starts with a line `ANSWER:` followed by one `key: value` line per key: `status` (the number only), `errorKey` (the key, or `none`), `rowKept` (`yes` or `no`)."
+        }
+      ]
+    },
+    {
+      "id": "GN-R1",
+      "title": "One accessor for the signed-in user",
+      "tasks": [
+        {
+          "id": "gn07",
+          "type": "R",
+          "kind": "code",
+          "prompt": "Refactor how code gets the signed-in user of a request. Today many handlers, serializers and validators read it from the gin context with a string key and a type assertion. Add an exported function `CurrentUser(c *gin.Context) UserModel` to package `users` that returns the user the authentication middleware stored for the request (the zero `UserModel` for an anonymous request), and use it everywhere the signed-in user is read. When you are done, the string literals `\"my_user_model\"` and `\"my_user_id\"` each appear in exactly one non-test `.go` file of the repository, and no non-test code outside package `users` calls `Get` or `MustGet` on a gin context. The context keys and the values stored under them stay as they are (the existing tests read them). This is a refactor: every endpoint must answer exactly as before. Make sure the project's build, vet and tests still pass.",
+          "hidden": ["users/bench_gn07_test.go"],
+          "hiddenTestCommand": "go test -count=1 -run '^TestBenchGN07' ./users/"
+        }
+      ]
+    }
+  ]
+}

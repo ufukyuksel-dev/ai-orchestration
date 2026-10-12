@@ -1,0 +1,67 @@
+{
+  "suite": "go-holdout",
+  "note": "Held-out Go suite on a gin + GORM + SQLite web API (RealWorld). Authored before any agent run on it; never used to tune levers. Prompts state WHAT is required (paths, fields, JSON shape, ordering, status codes, content types); project pitfalls (route groups vs. auth middleware order, the users->articles import direction, ArticleUserModel ids vs. user ids, GORM soft deletes, nil slices as null, the FindManyArticle default limit, the API time format) are left for the agent to discover. Hidden tests are black-box: they start main() on a free port with a throw-away SQLite DB_PATH and use only HTTP. Reference solutions: bench/reference/<taskId>.patch; details in bench/go-holdout-notes.md. Needs `go` (with cgo, for go-sqlite3) on PATH; setup: bench/setup/golang-gin-realworld-example-app.sh.",
+  "repo": "golang-gin-realworld-example-app",
+  "url": "https://github.com/gothinkster/golang-gin-realworld-example-app.git",
+  "sha": "626c372d259472148d93303f74aa9b9a1cdcef24",
+  "hiddenTarget": ".",
+  "qualityCommand": "go vet ./... && test -z \"$(gofmt -l .)\"",
+  "hiddenTestCommand": "go test -count=1 -run '^TestBenchG' .",
+  "ownTestCommand": "go test -count=1 ./...",
+  "families": [
+    {
+      "id": "G1",
+      "title": "Read-only JSON statistics endpoints",
+      "tasks": [
+        {
+          "id": "g1t1",
+          "prompt": "Add a read-only JSON endpoint with statistics about a user profile: `GET /api/profiles/{username}/stats` must be served by the application (as started with `go run .`), work without authentication and give the same result when a valid `Authorization: Token ...` header is sent. It returns status `200` with content type `application/json` and the body `{\"stats\": {\"username\": ..., \"articlesCount\": ..., \"commentsCount\": ..., \"followersCount\": ..., \"followingCount\": ...}}`, where `username` is the user's username (string) and the four counts are JSON numbers: `articlesCount` is the number of articles written by the user that have not been deleted, `commentsCount` the number of comments written by the user (on any article) that have not been deleted, `followersCount` the number of users currently following this user and `followingCount` the number of users this user currently follows (an unfollow ends a follow). For an unknown username it must return status `404`. All existing endpoints must keep working unchanged. Make sure the project's build, vet and tests still pass.",
+          "hidden": [
+            "bench_g1t1_test.go"
+          ]
+        },
+        {
+          "id": "g1t2",
+          "prompt": "Add a read-only JSON endpoint with statistics about an article: `GET /api/articles/{slug}/stats` must be served by the application (as started with `go run .`), work without authentication and give the same result when a valid `Authorization: Token ...` header is sent. It returns status `200` with content type `application/json` and the body `{\"stats\": {\"slug\": ..., \"commentsCount\": ..., \"favoritesCount\": ..., \"commenters\": [...], \"favoritedBy\": [...]}}`, where `slug` is the article's slug (string), `commentsCount` (JSON number) is the number of comments on the article that have not been deleted, `favoritesCount` (JSON number) the number of users currently favoriting the article (an unfavorite ends a favorite), `commenters` the usernames of the authors of those comments, each username once, sorted alphabetically, and `favoritedBy` the usernames of the users currently favoriting the article, sorted alphabetically. Both arrays are empty JSON arrays `[]` (never `null`) when there is nobody to list. For an unknown slug or a deleted article it must return status `404`. All existing endpoints must keep working unchanged. Make sure the project's build, vet and tests still pass.",
+          "hidden": [
+            "bench_g1t2_test.go"
+          ]
+        },
+        {
+          "id": "g1t3",
+          "prompt": "Add a read-only JSON endpoint with tag statistics: `GET /api/tags/stats` must be served by the application (as started with `go run .`), work without authentication and give the same result when a valid `Authorization: Token ...` header is sent. It returns status `200` with content type `application/json` and the body `{\"tags\": [{\"tag\": \"go\", \"articlesCount\": 3}, ...]}`: one object per tag that is carried by at least one article that has not been deleted, where `tag` is the tag name (string) and `articlesCount` (JSON number) is the number of articles that have not been deleted and carry the tag. Tags carried only by deleted articles (or by no article) are not listed. The entries are sorted by `articlesCount` descending, then by `tag` ascending. When there is no such tag, `tags` is an empty JSON array `[]`. The existing `GET /api/tags` must keep returning all tags. All existing endpoints must keep working unchanged. Make sure the project's build, vet and tests still pass.",
+          "hidden": [
+            "bench_g1t3_test.go"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "G2",
+      "title": "CSV export",
+      "tasks": [
+        {
+          "id": "g2t1",
+          "prompt": "Add a CSV export of all articles: `GET /api/articles.csv` must be served by the application (as started with `go run .`), work without authentication and give the same result when a valid `Authorization: Token ...` header is sent. It returns status `200` with content type `text/csv`. The first line is exactly the header `slug,title,author,tagList,favoritesCount,createdAt`, followed by one line per article that has not been deleted (all of them, no paging), ordered by creation time, oldest first. `author` is the author's username, `tagList` the article's tag names sorted alphabetically and joined with `;` (an empty value when the article has no tags), `favoritesCount` the number of users currently favoriting the article (an unfavorite ends a favorite) and `createdAt` exactly the same string as the `createdAt` field that the existing `GET /api/articles/{slug}` returns for that article. Every line ends with a line break (`\\r\\n` or `\\n`). A value that contains a comma, a double quote or a line break must be enclosed in double quotes, with every double quote inside it doubled (RFC 4180); other values may be written as they are. All existing endpoints must keep working unchanged. Make sure the project's build, vet and tests still pass.",
+          "hidden": [
+            "bench_g2t1_test.go"
+          ]
+        },
+        {
+          "id": "g2t2",
+          "prompt": "Add a CSV export of the comments of an article: `GET /api/articles/{slug}/comments.csv` must be served by the application (as started with `go run .`), work without authentication and give the same result when a valid `Authorization: Token ...` header is sent. It returns status `200` with content type `text/csv`. The first line is exactly the header `id,author,body,createdAt`, followed by one line per comment on that article that has not been deleted, ordered by creation time, oldest first. `id` is the comment id and `createdAt` exactly the same string, both as the existing `GET /api/articles/{slug}/comments` returns them for that comment; `author` is the comment author's username and `body` the comment body. An article without comments gets only the header line. For an unknown slug or a deleted article it must return status `404`. Every line ends with a line break (`\\r\\n` or `\\n`). A value that contains a comma, a double quote or a line break must be enclosed in double quotes, with every double quote inside it doubled (RFC 4180); other values may be written as they are. All existing endpoints must keep working unchanged. Make sure the project's build, vet and tests still pass.",
+          "hidden": [
+            "bench_g2t2_test.go"
+          ]
+        },
+        {
+          "id": "g2t3",
+          "prompt": "Add a CSV export of the articles a user has favorited: `GET /api/profiles/{username}/favorites.csv` must be served by the application (as started with `go run .`), work without authentication and give the same result when a valid `Authorization: Token ...` header is sent. It returns status `200` with content type `text/csv`. The first line is exactly the header `slug,title,author`, followed by one line per article that the user currently favorites (an unfavorite ends a favorite) and that has not been deleted (all of them, no paging), ordered by slug ascending. `author` is the article author's username. A user without favorites gets only the header line. For an unknown username it must return status `404`. Every line ends with a line break (`\\r\\n` or `\\n`). A value that contains a comma, a double quote or a line break must be enclosed in double quotes, with every double quote inside it doubled (RFC 4180); other values may be written as they are. All existing endpoints must keep working unchanged. Make sure the project's build, vet and tests still pass.",
+          "hidden": [
+            "bench_g2t3_test.go"
+          ]
+        }
+      ]
+    }
+  ]
+}

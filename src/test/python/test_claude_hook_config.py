@@ -45,3 +45,37 @@ class ClaudeHookConfigTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TokenLeverHooksTest(unittest.TestCase):
+    def test_command_and_stop_hooks_get_their_event_matcher_timeout_and_lean_is_reversible(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            path.write_text(json.dumps({"permissions": {"deny": ["Bash(rm -rf:*)", "NotebookEdit"]}}))
+            commands = ["python3 /opt/ai/scripts/hooks/ai_orch_prompt_context.py",
+                        "python3 /opt/ai/scripts/hooks/ai_orch_command_hook.py",
+                        "python3 /opt/ai/scripts/hooks/ai_orch_stop.py"]
+            self.assertEqual(0, run("set", str(path), *commands, "--lean").returncode)
+            data = json.loads(path.read_text())
+            self.assertEqual("Bash", data["hooks"]["PreToolUse"][0]["matcher"])
+            self.assertEqual(960, data["hooks"]["Stop"][0]["hooks"][0]["timeout"])
+            self.assertIn("Workflow", data["permissions"]["deny"])
+            self.assertEqual(1, data["permissions"]["deny"].count("NotebookEdit"))
+            self.assertEqual(0, run("remove", str(path)).returncode)
+            self.assertEqual({"permissions": {"deny": ["Bash(rm -rf:*)"]}}, json.loads(path.read_text()))
+
+
+class MemoryGateHookTest(unittest.TestCase):
+    def test_the_memory_gate_sits_on_pre_and_post_for_the_memory_search_tools_and_is_removed_again(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            gate = "python3 /opt/ai/scripts/hooks/ai_orch_memory_gate.py"
+            self.assertEqual(0, run("set", str(path), gate + " pre", gate + " post").returncode)
+            data = json.loads(path.read_text())
+            for event, arg in (("PreToolUse", "pre"), ("PostToolUse", "post")):
+                [group] = data["hooks"][event]
+                self.assertEqual("mcp__ai-orchestration__memory_search|mcp__ai-orchestration__extras",
+                                 group["matcher"])
+                self.assertEqual(f"{gate} {arg}", group["hooks"][0]["command"])
+            self.assertEqual(0, run("remove", str(path)).returncode)
+            self.assertEqual({}, json.loads(path.read_text()))

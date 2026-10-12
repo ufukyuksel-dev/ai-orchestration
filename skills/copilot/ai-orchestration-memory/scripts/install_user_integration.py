@@ -8,11 +8,15 @@ Owned artifacts only:
   written by ``install.sh`` is left as it is),
 * one marked managed block inside the Copilot user instructions file,
 * checkout-linked Copilot skill directories (every ``skills/copilot/*`` skill),
+* the dedicated hook JSON (userPromptSubmitted memory gate + cards; postToolUse step memory; agentStop learning),
+* the ``ai-orchestration`` custom agent (``agents/ai-orchestration.agent.md``): Copilot with a compact tool set
+  and no subagents, started with ``copilot --agent ai-orchestration`` (Copilot has no setting that makes an agent
+  the default; plain ``copilot`` keeps its full tool set and still gets the hooks),
 * a private request-staging directory,
 * an ownership manifest describing exactly the above.
 
-Upgrades from older installs: the retired preToolUse hook file this integration
-wrote is removed, skill and launcher links that point to another checkout of this
+Upgrades from older installs: a hook file this integration wrote earlier (with the
+retired preToolUse guard, or from another checkout) is replaced, skill and launcher links that point to another checkout of this
 project are relinked to this checkout, and a ``skillDirectories`` entry in
 ``settings.json`` that points to another checkout's ``skills/copilot`` is removed.
 
@@ -35,7 +39,7 @@ from pathlib import Path
 from typing import Any
 
 
-HOOK_FILENAME = "ai-orchestration-safety.json"  # retired; removed on install
+HOOK_FILENAME = "ai-orchestration-safety.json"
 LAUNCHER_NAME = "ai-orch-memory"
 AI_ORCH_LAUNCHER_NAME = "ai_orch"
 BOOTSTRAP_FILENAME = "copilot-instructions.md"
@@ -49,7 +53,17 @@ STAGING_DIRNAME = "copilot-staging"
 DEFAULT_MCP_URL = "http://127.0.0.1:18080/mcp"
 # The `ai_orch` command install.sh writes; it already points to this checkout's bridge.
 INSTALL_SH_SHIM_MARKER = "# AI Orchestration command (installed by"
-LEGACY_GUARD_SUFFIX = ("skills", "copilot", "ai-orchestration-memory", "scripts", "copilot_pre_tool_guard.py")
+HOOK_SCRIPTS_SUFFIX = ("skills", "copilot", "ai-orchestration-memory", "scripts")
+# Hook scripts this integration has written into the hook file (the preToolUse guard is retired).
+OWNED_HOOK_SCRIPTS = ("copilot_pre_tool_guard.py", "copilot_memory_gate.py")
+OWNED_HOOK_EVENTS = {"preToolUse", "userPromptSubmitted", "agentStop", "postToolUse"}
+AGENT_NAME = "ai-orchestration"
+AGENT_FILENAME = f"{AGENT_NAME}.agent.md"
+# Copilot's own tools the agent keeps: edit, search and shell (with background shells), skills, web fetch and the
+# question tool. Left out: subagents (task, read/list/write_agent; ~4.9k input tokens per model call on their own),
+# session SQL, the CLI documentation and code-search subagent tools.
+AGENT_TOOLS = ("bash", "read_bash", "write_bash", "stop_bash", "list_bash", "view", "edit", "create", "grep", "glob",
+               "skill", "web_fetch", "ask_user")
 
 
 class InstallError(RuntimeError):
@@ -61,11 +75,12 @@ class InstallError(RuntimeError):
 # --------------------------------------------------------------------------
 
 
-def integration_paths() -> tuple[Path, Path]:
+def integration_paths() -> tuple[Path, Path, Path]:
     scripts = Path(__file__).resolve(strict=True).parent
+    gate = (scripts / "copilot_memory_gate.py").resolve(strict=True)
     memory_bridge = (scripts / "memory_bridge.py").resolve(strict=True)
     ai_orch = (scripts / "ai_orch.py").resolve(strict=True)
-    return memory_bridge, ai_orch
+    return gate, memory_bridge, ai_orch
 
 
 def repository_root() -> Path:
@@ -100,12 +115,32 @@ def mcp_config_module() -> Any:
     return module
 
 
+def _hook_entry(command: str, timeout: int) -> list[dict]:
+    return [{"type": "command", "bash": command, "timeoutSec": timeout}]
+
+
+def expected_hook(gate: Path) -> dict:
+    """At every prompt the memory gate starts a new request and delivers the prompt's memory cards; after a shell
+    command it delivers memory for that step (first check, new failure); at agent stop it saves the final answer's
+    hidden learning comment, or asks once for it when the task left a learning signal and saved nothing."""
+    return {
+        "version": 1,
+        "hooks": {
+            "userPromptSubmitted": _hook_entry(str(gate), 5),
+            "agentStop": _hook_entry(f"{gate} stop", 15),
+            "postToolUse": _hook_entry(f"{gate} post", 5),
+        },
+    }
+
+
 def bootstrap_block() -> str:
     workflow = bootstrap_source()
     body = (
         "## AI Orchestration (Copilot runtime)\n"
         "\n"
-        "At the first request of every new session, use Copilot's built-in "
+        "The AI Orchestration prompt hook applies the saved rules preference: approved rules arrive with "
+        "your prompt, or the prompt says they were skipped. Only when the prompt says no rules preference is "
+        "saved (and the session is not unattended), at the first request use Copilot's built-in "
         "`ask_user` tool to ask `Bu oturum için AI Orchestration global ve proje "
         "kurallarını yükleyeyim mi?` with choices `Evet, yükle (Recommended)` and "
         "`Hayır, bu oturumda atla`. On yes, load them as stated below; on no, skip rule "
@@ -127,6 +162,23 @@ def bootstrap_block() -> str:
         "without the user's confirmation.\n"
     )
     return f"{BEGIN}\n{body}{END}"
+
+
+def agent_text() -> str:
+    """The custom agent: a compact tool set (each tool's schema is sent with every model call), nothing else."""
+    return ("---\n"
+            f"name: {AGENT_NAME}\n"
+            "description: Coding agent for repositories with AI Orchestration memory; compact tool set, no subagents\n"
+            f"tools: {json.dumps(list(AGENT_TOOLS))}\n"
+            "---\n"
+            "You are a coding agent working in the user's repository.\n"
+            "\n"
+            "Work in few model turns. When reads or searches do not depend on each other, request them together in "
+            "one turn. Once you know the current text, make edits to different files that do not depend on each "
+            "other together in one turn. Keep dependent steps in order: create a file before you run it, and make "
+            "edits to the same file one after another.\n"
+            "Run the tests and checks the task needs. Do not repeat a check that already passed when the files it "
+            "covers have not changed since.\n")
 
 
 # --------------------------------------------------------------------------
@@ -194,8 +246,12 @@ def _atomic_write(path: Path, content: str, mode: int) -> None:
             temporary.unlink()
 
 
+def _hook_text(value: dict) -> str:
+    return json.dumps(value, indent=2, ensure_ascii=True) + "\n"
+
+
 def _atomic_private_json(path: Path, value: dict) -> None:
-    _atomic_write(path, json.dumps(value, indent=2, ensure_ascii=True) + "\n", 0o600)
+    _atomic_write(path, _hook_text(value), 0o600)
 
 
 def _link_target(link: Path) -> Path:
@@ -244,26 +300,31 @@ def _install_sh_shim(path: Path) -> bool:
         return False
 
 
-def _legacy_owned_hook(path: Path) -> bool:
-    """The retired preToolUse hook file this integration wrote (any checkout)."""
+def owned_hook_value(value: object) -> bool:
+    """A hook this integration wrote, from any checkout and any earlier shape (guard only, guard + gate, gate)."""
+    try:
+        hooks = value["hooks"]  # type: ignore[index]
+        if value.get("version") != 1 or set(value) != {"version", "hooks"} or not hooks \
+                or not set(hooks) <= OWNED_HOOK_EVENTS:  # type: ignore[union-attr]
+            return False
+        for entries in hooks.values():
+            if len(entries) != 1 or entries[0].get("type") != "command":
+                return False
+            script = Path(str(entries[0].get("bash", "")).split(" ")[0])
+            if script.name not in OWNED_HOOK_SCRIPTS or tuple(script.parts[-5:-1]) != HOOK_SCRIPTS_SUFFIX:
+                return False
+    except (AttributeError, KeyError, TypeError, IndexError):
+        return False
+    return True
+
+
+def _owned_hook_file(path: Path) -> bool:
     if path.is_symlink() or not path.is_file():
         return False
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        return owned_hook_value(json.loads(path.read_text(encoding="utf-8")))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return False
-    try:
-        entries = value["hooks"]["preToolUse"]
-        if value.get("version") != 1 or set(value) != {"version", "hooks"} or set(value["hooks"]) != {"preToolUse"}:
-            return False
-        if len(entries) != 1 or entries[0].get("type") != "command":
-            return False
-        command = Path(str(entries[0].get("bash", "")))
-    except (AttributeError, KeyError, TypeError, IndexError):
-        return False
-    return len(command.parts) > len(LEGACY_GUARD_SUFFIX) and tuple(
-        command.parts[-len(LEGACY_GUARD_SUFFIX):]
-    ) == LEGACY_GUARD_SUFFIX
 
 
 def _reject_redirected_directory(path: Path) -> None:
@@ -396,7 +457,7 @@ def install(
     plan: Plan | None = None,
 ) -> tuple[Path, Path, Path]:
     """Returns (mcp-config.json, ai-orch-memory launcher, ai_orch launcher)."""
-    memory_bridge, ai_orch = integration_paths()
+    gate, memory_bridge, ai_orch = integration_paths()
     repo = repository_root()
     # Check for redirected configuration directories on the *unresolved* path:
     # resolve() would silently follow a symlinked parent.
@@ -417,6 +478,7 @@ def install(
     )
     result = (mcp_path, memory_launcher_path, ai_orch_launcher_path)
     bootstrap_path = home / BOOTSTRAP_FILENAME
+    agent_path = home / "agents" / AGENT_FILENAME
     skills_dir = home / "skills"
     sources = skill_sources() if with_skills else []
     prior_manifest = load_manifest(home)
@@ -426,7 +488,7 @@ def install(
 
     if uninstall:
         _uninstall(home, hook_path, mcp_path, launchers, bootstrap_path, skills_dir, sources,
-                   prior_manifest, mcp, plan, dry_run=dry_run)
+                   prior_manifest, mcp, plan, dry_run=dry_run, agent_path=agent_path)
         return result
 
     desired_skill_targets = {str(skills_dir / source.name) for source in sources}
@@ -476,7 +538,18 @@ def install(
         else:
             skill_actions.append(("create", link, source))
 
-    legacy_hook = _legacy_owned_hook(hook_path)
+    hook_value = expected_hook(gate)
+    if hook_path.is_symlink():
+        raise InstallError(f"refusing to replace a symlinked hook file: {hook_path}")
+    hook_current = _exists(hook_path) and _read_text(hook_path) == _hook_text(hook_value) \
+        and not hook_path.stat().st_mode & 0o077
+    if _exists(hook_path) and not hook_current and not _owned_hook_file(hook_path):
+        raise InstallError(f"refusing to replace a hook not owned by this integration: {hook_path}")
+    if agent_path.is_symlink():
+        raise InstallError(f"refusing to replace a symlinked agent file: {agent_path}")
+    if (_exists(agent_path) and _read_text(agent_path) != agent_text()
+            and prior_manifest.get("agent") != str(agent_path)):
+        raise InstallError(f"refusing to replace a custom agent not owned by this integration: {agent_path}")
     bootstrap_before = _read_text(bootstrap_path) if with_bootstrap else ""
     bootstrap_after = _apply_block(bootstrap_before, bootstrap_block()) if with_bootstrap else ""
     settings_before, settings_after = _settings_plan(settings_path, repo, prior_checkout)
@@ -509,8 +582,10 @@ def install(
                 problems.append("the managed Copilot bootstrap block has drifted from this checkout")
         if with_mcp and mcp_before != mcp_after:
             problems.append(f"the ai-orchestration MCP server is not registered in {mcp_path}")
-        if legacy_hook:
-            problems.append(f"the retired Copilot preToolUse hook is still installed: {hook_path}")
+        if not hook_current:
+            problems.append(f"the Copilot memory hook is missing or does not point to this checkout: {hook_path}")
+        if agent_path.is_symlink() or _read_text(agent_path) != agent_text():
+            problems.append(f"the {AGENT_NAME} custom agent is missing or has drifted: {agent_path}")
         if settings_before != settings_after:
             problems.append(f"{settings_path} still lists another checkout's skills/copilot")
         if problems:
@@ -530,11 +605,13 @@ def install(
                 plan.record(f"{'relink' if action == 'relink' else 'link'} skill: {link} -> {source}")
         for link in stale_owned_skill_links:
             plan.record(f"remove retired skill: {link}")
-        if legacy_hook:
-            plan.record(f"remove retired hook: {hook_path}")
+        if not hook_current:
+            plan.record(f"write hook: {hook_path}")
         if with_mcp and mcp_before != mcp_after:
             plan.record(f"register MCP server: {mcp_path} -> {mcp_url}")
         plan.diff(str(settings_path), settings_before, settings_after)
+        if _read_text(agent_path) != agent_text():
+            plan.record(f"write custom agent: {agent_path}")
         plan.record(f"ensure staging directory: {staging_directory()}")
         plan.record(f"write manifest: {home / MANIFEST_FILENAME}")
         return result
@@ -555,9 +632,10 @@ def install(
             owned_launchers.append(str(link))
             plan.record(f"launcher: {link}")
 
-    if legacy_hook:
-        hook_path.unlink()
-        plan.record(f"removed retired hook: {hook_path}")
+    if not hook_current:
+        hook_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        _atomic_private_json(hook_path, hook_value)
+    plan.record(f"hook: {hook_path}")
 
     manifest: dict[str, Any] = {
         "version": MANIFEST_VERSION,
@@ -567,7 +645,12 @@ def install(
         "instructions": [],
         "mcpConfig": str(mcp_path) if with_mcp else None,
         "staging": str(staging_directory()),
+        "agent": str(agent_path),
     }
+    if _read_text(agent_path) != agent_text():
+        agent_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        _atomic_write(agent_path, agent_text(), 0o600)
+    plan.record(f"custom agent: {agent_path} (start with `copilot --agent {AGENT_NAME}`)")
 
     if with_bootstrap and bootstrap_after != bootstrap_before:
         if bootstrap_before:
@@ -631,11 +714,19 @@ def _uninstall(
     plan: Plan,
     *,
     dry_run: bool,
+    agent_path: Path,
 ) -> None:
+    if manifest.get("agent") == str(agent_path) and not agent_path.is_symlink() \
+            and _read_text(agent_path) == agent_text():
+        plan.record(f"remove custom agent: {agent_path}")
+        if not dry_run:
+            agent_path.unlink()
+    elif _exists(agent_path):
+        plan.record(f"kept unowned or changed custom agent: {agent_path}")
     owned_links = {row.get("target") for row in manifest["links"] if isinstance(row, dict)}
 
-    if _legacy_owned_hook(hook_path):
-        plan.record(f"remove retired hook: {hook_path}")
+    if _owned_hook_file(hook_path):
+        plan.record(f"remove hook: {hook_path}")
         if not dry_run:
             hook_path.unlink()
     elif _exists(hook_path):

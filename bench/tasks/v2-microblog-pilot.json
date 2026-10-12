@@ -1,0 +1,48 @@
+{
+  "suite": "v2-microblog-pilot",
+  "repo": "microblog",
+  "url": "https://github.com/miguelgrinberg/microblog.git",
+  "sha": "a975ef64864354867c88e0ed3a17ba7d17dca752",
+  "pathPrepend": [
+    "bench/.work/venvs/microblog/bin"
+  ],
+  "qualityCommand": "python -m compileall -q app",
+  "ownTestCommand": "python -m unittest -v tests",
+  "hiddenTestCommand": "python -m unittest -v {hidden}",
+  "hiddenTarget": ".",
+  "note": "Disposable pilot for v2 on microblog (never scored, never reused): one B code task and one I investigation task, independent. Details in bench/v2-microblog-notes.md.",
+  "families": [
+    {
+      "id": "MBP1",
+      "title": "Follower count shows the following count",
+      "tasks": [
+        {
+          "id": "mbp1",
+          "type": "B",
+          "kind": "code",
+          "hidden": [
+            "test_bench_mbp1.py"
+          ],
+          "baseline": {
+            "patch": "baselines/mbp1.patch"
+          },
+          "prompt": "The follower numbers are wrong. The \"N followers, M following\" line of a user's profile page and the `follower_count` field of `GET /api/users/<id>` show how many users that user follows instead of how many users follow them: a user who is followed by 3 people and follows 1 person shows \"1 followers\". The \"following\" number and `following_count` are correct. Fix the cause. Make sure the project's tests still pass.",
+          "checkSeconds": 1.0
+        }
+      ]
+    },
+    {
+      "id": "MBP2",
+      "title": "404 outside the API",
+      "tasks": [
+        {
+          "id": "mbp2",
+          "type": "I",
+          "kind": "investigation",
+          "prompt": "What does the app send back when a client requests a URL that does not exist and is not under `/api` (e.g. `GET /no-such-page`) without an `Accept` header? Do not change any files. End your reply with a block that starts with a line `ANSWER:` followed by one `key: value` line per key: `handler` (the function, as `module.function`, that produces the response), `decider` (the function that decides between an HTML and a JSON response), `format` (`json` or `html`), `status` (the HTTP status code).",
+          "checkSeconds": 0.1
+        }
+      ]
+    }
+  ]
+}

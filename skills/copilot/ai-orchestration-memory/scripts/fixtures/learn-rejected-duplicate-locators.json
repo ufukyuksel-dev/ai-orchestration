@@ -1,0 +1,24 @@
+{"learningCandidates":[{
+  "kind":"behavior",
+  "summary":"microblog API blueprint: new endpoints need import added in app/api/__init__.py",
+  "content":"New REST endpoint modules under app/api/ (e.g. posts.py) are only wired up if imported at the bottom of app/api/__init__.py (e.g. 'from app.api import users, posts, errors, tokens'). Forgetting this import means the route is never registered on the blueprint despite @bp.route decorators being present.",
+  "locators":[
+    {"kind":"file","ref":"app/api/__init__.py","role":"primary_change_point"},
+    {"kind":"file","ref":"app/api/posts.py","role":"supporting"}
+  ],
+  "appliesWhen":["Adding a new API endpoint module under app/api/"],
+  "limitations":["Specific to this Flask blueprint pattern (app/api)"],
+  "reusableFor":["Adding future REST endpoints in app/api"]
+},
+{
+  "kind":"behavior",
+  "summary":"Post.timestamp from SQLite is naive UTC; must add tzinfo for ISO 8601 +00:00 offset output",
+  "content":"Post.timestamp is stored via datetime.now(timezone.utc) but SQLAlchemy/SQLite strips tzinfo on retrieval, returning a naive datetime. isoformat() on it omits the UTC offset. To produce ISO 8601 strings with an explicit +00:00 offset in API responses, call timestamp.replace(tzinfo=timezone.utc) before isoformat(). app/tasks.py works around the same issue by appending 'Z' manually instead.",
+  "locators":[
+    {"kind":"symbol","ref":"app.models.Post","path":"app/models.py","role":"supporting"},
+    {"kind":"file","ref":"app/api/posts.py","role":"primary_change_point"}
+  ],
+  "appliesWhen":["Serializing Post.timestamp (or similar UTC-default datetime columns) to JSON/ISO strings"],
+  "limitations":["Observed with default sqlite:// test DB; other DB backends may preserve tzinfo differently"],
+  "reusableFor":["Any API or export code formatting Post/Message/Notification timestamps"]
+}]}

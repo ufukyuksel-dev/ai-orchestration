@@ -1,0 +1,8 @@
+{
+  "keys": {
+    "status": {"kind": "text", "accept": ["422", "422 unprocessable entity"]},
+    "errorkey": {"kind": "text", "accept": ["database"]},
+    "rowkept": {"kind": "text", "accept": ["yes"]}
+  },
+  "contradict": ["status:\\s*(201|200|409|500)", "rowkept:\\s*no", "errorkey:\\s*none"]
+}

@@ -1,0 +1,39 @@
+diff --git a/app/main/routes.py b/app/main/routes.py
+index 103bbc7..f6c1bbc 100644
+--- a/app/main/routes.py
++++ b/app/main/routes.py
+@@ -1,5 +1,8 @@
++import csv
++import io
+ from datetime import datetime, timezone
+ from flask import render_template, flash, redirect, url_for, request, g, \
++    Response, \
+     current_app
+ from flask_login import current_user, login_required
+ from flask_babel import _, get_locale
+@@ -239,3 +242,25 @@ def notifications():
+         'data': n.get_data(),
+         'timestamp': n.timestamp
+     } for n in notifications]
++
++
++def csv_response(rows, filename):
++    out = io.StringIO()
++    csv.writer(out).writerows(rows)
++    return Response(out.getvalue(), mimetype='text/csv', headers={
++        'Content-Disposition': f'attachment; filename={filename}'})
++
++
++@bp.route('/messages.csv')
++@login_required
++def messages_csv():
++    query = sa.select(Message).where(sa.or_(
++        Message.sender_id == current_user.id,
++        Message.recipient_id == current_user.id)).order_by(
++        Message.timestamp.asc(), Message.id.asc())
++    rows = [['timestamp', 'from', 'to', 'body']]
++    for message in db.session.scalars(query):
++        rows.append([message.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
++                     message.author.username, message.recipient.username,
++                     message.body])
++    return csv_response(rows, 'messages.csv')

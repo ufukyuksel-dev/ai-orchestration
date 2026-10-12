@@ -1,0 +1,54 @@
+{
+  "keys": {
+    "count": {
+      "kind": "symbol",
+      "accept": [
+        "User.unread_message_count",
+        "app.models.User.unread_message_count",
+        "models.User.unread_message_count"
+      ]
+    },
+    "cutoff": {
+      "kind": "symbol",
+      "accept": [
+        "last_message_read_time",
+        "User.last_message_read_time",
+        "app.models.User.last_message_read_time"
+      ]
+    },
+    "fallback": {
+      "kind": "text",
+      "accept": [
+        "1900-01-01",
+        "1900-01-01 00:00:00",
+        "1900-01-01T00:00:00"
+      ]
+    },
+    "reset": {
+      "kind": "symbol",
+      "accept": [
+        "main.messages",
+        "app.main.routes.messages",
+        "routes.messages",
+        "messages",
+        "/messages"
+      ]
+    },
+    "poll": {
+      "kind": "symbol",
+      "accept": [
+        "main.notifications",
+        "app.main.routes.notifications",
+        "routes.notifications",
+        "notifications",
+        "/notifications"
+      ]
+    }
+  },
+  "contradict": [
+    "last_seen",
+    "send_message",
+    "1970-01-01",
+    "0001-01-01"
+  ]
+}

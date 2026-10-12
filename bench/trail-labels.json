@@ -1,0 +1,408 @@
+{
+ "holdout": [
+  {
+   "task": "h1t1",
+   "label": "negative",
+   "why": "first position of H1"
+  },
+  {
+   "task": "h1t2",
+   "label": "positive",
+   "expect": [
+    "h1t1"
+   ],
+   "symbols": [
+    {
+     "path": "src/main/java/org/springframework/samples/petclinic/owner/OwnerRestController.java",
+     "symbol": "OwnerRestController"
+    }
+   ],
+   "why": "JSON API pattern: standalone @RestController with record DTOs and 404"
+  },
+  {
+   "task": "h1t3",
+   "label": "positive",
+   "expect": [
+    "h1t1",
+    "h1t2"
+   ],
+   "symbols": [
+    {
+     "path": "src/main/java/org/springframework/samples/petclinic/owner/OwnerRestController.java",
+     "symbol": "OwnerRestController"
+    },
+    {
+     "path": "src/main/java/org/springframework/samples/petclinic/vet/VetRestController.java",
+     "symbol": "VetRestController"
+    }
+   ],
+   "why": "JSON API pattern outside @ModelAttribute controllers"
+  },
+  {
+   "task": "h2t1",
+   "label": "negative",
+   "why": "first position of H2"
+  },
+  {
+   "task": "h2t2",
+   "label": "positive",
+   "expect": [
+    "h2t1"
+   ],
+   "symbols": [
+    {
+     "path": "src/main/java/org/springframework/samples/petclinic/system/Csv.java",
+     "symbol": "Csv"
+    },
+    {
+     "path": "src/main/java/org/springframework/samples/petclinic/owner/OwnerCsvController.java",
+     "symbol": "OwnerCsvController"
+    }
+   ],
+   "why": "RFC 4180 Csv helper + CSV controller pattern"
+  },
+  {
+   "task": "h2t3",
+   "label": "positive",
+   "expect": [
+    "h2t1",
+    "h2t2"
+   ],
+   "symbols": [
+    {
+     "path": "src/main/java/org/springframework/samples/petclinic/system/Csv.java",
+     "symbol": "Csv"
+    },
+    {
+     "path": "src/main/java/org/springframework/samples/petclinic/owner/OwnerCsvController.java",
+     "symbol": "OwnerCsvController"
+    },
+    {
+     "path": "src/main/java/org/springframework/samples/petclinic/vet/VetCsvController.java",
+     "symbol": "VetCsvController"
+    }
+   ],
+   "why": "RFC 4180 Csv helper + CSV controller pattern"
+  }
+ ],
+ "py-holdout": [
+  {
+   "task": "p1t1",
+   "label": "negative",
+   "why": "first position of P1"
+  },
+  {
+   "task": "p1t2",
+   "label": "positive",
+   "expect": [
+    "p1t1"
+   ],
+   "symbols": [
+    {
+     "path": "app/api/posts.py",
+     "symbol": "post_to_dict"
+    },
+    {
+     "path": "app/api/posts.py",
+     "symbol": "get_post"
+    }
+   ],
+   "why": "token-auth api blueprint route + UTC to_dict pattern"
+  },
+  {
+   "task": "p1t3",
+   "label": "positive",
+   "expect": [
+    "p1t1",
+    "p1t2"
+   ],
+   "symbols": [
+    {
+     "path": "app/api/posts.py",
+     "symbol": "post_to_dict"
+    },
+    {
+     "path": "app/api/posts.py",
+     "symbol": "get_post"
+    },
+    {
+     "path": "app/api/posts.py",
+     "symbol": "get_user_posts"
+    }
+   ],
+   "why": "api route, to_dict and pagination pattern"
+  },
+  {
+   "task": "p2t1",
+   "label": "negative",
+   "why": "first position of P2"
+  },
+  {
+   "task": "p2t2",
+   "label": "positive",
+   "expect": [
+    "p2t1"
+   ],
+   "symbols": [
+    {
+     "path": "app/main/routes.py",
+     "symbol": "csv_response"
+    },
+    {
+     "path": "app/main/routes.py",
+     "symbol": "export_posts_csv"
+    }
+   ],
+   "why": "csv_response helper + login_required CSV route"
+  },
+  {
+   "task": "p2t3",
+   "label": "positive",
+   "expect": [
+    "p2t1",
+    "p2t2"
+   ],
+   "symbols": [
+    {
+     "path": "app/main/routes.py",
+     "symbol": "csv_response"
+    },
+    {
+     "path": "app/main/routes.py",
+     "symbol": "export_posts_csv"
+    },
+    {
+     "path": "app/main/routes.py",
+     "symbol": "followers_csv"
+    }
+   ],
+   "why": "csv_response helper + login_required CSV route"
+  }
+ ],
+ "go-holdout": [
+  {
+   "task": "g1t1",
+   "label": "negative",
+   "why": "first position of G1"
+  },
+  {
+   "task": "g1t2",
+   "label": "positive",
+   "expect": [
+    "g1t1"
+   ],
+   "symbols": [
+    {
+     "path": "articles/profile_stats.go",
+     "symbol": "ProfileStats"
+    },
+    {
+     "path": "articles/profile_stats.go",
+     "symbol": "ProfileStatsAnonymousRegister"
+    },
+    {
+     "path": "articles/models.go",
+     "symbol": "ArticleUserModel"
+    }
+   ],
+   "why": "anonymous stats route wiring in articles + ArticleUserModel ids"
+  },
+  {
+   "task": "g1t3",
+   "label": "positive",
+   "expect": [
+    "g1t1",
+    "g1t2"
+   ],
+   "symbols": [
+    {
+     "path": "articles/profile_stats.go",
+     "symbol": "ProfileStats"
+    },
+    {
+     "path": "articles/article_stats.go",
+     "symbol": "ArticleStats"
+    }
+   ],
+   "why": "anonymous stats handler/route pattern"
+  },
+  {
+   "task": "g2t1",
+   "label": "negative",
+   "why": "first position of G2"
+  },
+  {
+   "task": "g2t2",
+   "label": "positive",
+   "expect": [
+    "g2t1"
+   ],
+   "symbols": [
+    {
+     "path": "articles/csv.go",
+     "symbol": "writeCSV"
+    },
+    {
+     "path": "articles/articles_csv.go",
+     "symbol": "ArticlesCSV"
+    }
+   ],
+   "why": "writeCSV helper + CSV handler pattern"
+  },
+  {
+   "task": "g2t3",
+   "label": "positive",
+   "expect": [
+    "g2t1",
+    "g2t2"
+   ],
+   "symbols": [
+    {
+     "path": "articles/csv.go",
+     "symbol": "writeCSV"
+    },
+    {
+     "path": "articles/articles_csv.go",
+     "symbol": "ArticlesCSV"
+    },
+    {
+     "path": "articles/comments_csv.go",
+     "symbol": "ArticleCommentsCSV"
+    },
+    {
+     "path": "articles/models.go",
+     "symbol": "ArticleUserModel"
+    }
+   ],
+   "why": "writeCSV pattern + favoriter ids are ArticleUserModel ids"
+  }
+ ],
+ "v2-gin": [
+  {
+   "task": "gn01",
+   "label": "negative",
+   "why": "chain discovery (first position)"
+  },
+  {
+   "task": "gn02",
+   "label": "positive",
+   "expect": [
+    "gn01"
+   ],
+   "symbols": [
+    {
+     "path": "articles/models.go",
+     "symbol": "GetArticleUserModel"
+    },
+    {
+     "path": "articles/models.go",
+     "symbol": "ArticleUserModel"
+    },
+    {
+     "path": "articles/models.go",
+     "symbol": "BatchGetFavoriteStatus"
+    }
+   ],
+   "why": "K: article/comment/favorite rows keyed by ArticleUserModel id, not UserModel id"
+  },
+  {
+   "task": "gn03",
+   "label": "negative",
+   "why": "chain control: auth middleware tokens, unrelated to K"
+  },
+  {
+   "task": "gn04",
+   "label": "negative",
+   "why": "independent"
+  },
+  {
+   "task": "gn05",
+   "label": "negative",
+   "why": "independent"
+  },
+  {
+   "task": "gn06",
+   "label": "negative",
+   "why": "independent"
+  },
+  {
+   "task": "gn07",
+   "label": "negative",
+   "why": "independent"
+  }
+ ],
+ "v2-microblog": [
+  {
+   "task": "mb01",
+   "label": "negative",
+   "why": "independent, no memory chains"
+  },
+  {
+   "task": "mb02",
+   "label": "negative",
+   "why": "independent, no memory chains"
+  },
+  {
+   "task": "mb03",
+   "label": "negative",
+   "why": "independent, no memory chains"
+  },
+  {
+   "task": "mb04",
+   "label": "negative",
+   "why": "independent, no memory chains"
+  },
+  {
+   "task": "mb05",
+   "label": "negative",
+   "why": "independent, no memory chains"
+  },
+  {
+   "task": "mb06",
+   "label": "negative",
+   "why": "independent, no memory chains"
+  },
+  {
+   "task": "mb07",
+   "label": "negative",
+   "why": "independent, no memory chains"
+  }
+ ],
+ "v2-petclinic": [
+  {
+   "task": "pc01",
+   "label": "negative",
+   "why": "independent, no memory chains"
+  },
+  {
+   "task": "pc02",
+   "label": "negative",
+   "why": "independent, no memory chains"
+  },
+  {
+   "task": "pc03",
+   "label": "negative",
+   "why": "independent, no memory chains"
+  },
+  {
+   "task": "pc04",
+   "label": "negative",
+   "why": "independent, no memory chains"
+  },
+  {
+   "task": "pc05",
+   "label": "negative",
+   "why": "independent, no memory chains"
+  },
+  {
+   "task": "pc06",
+   "label": "negative",
+   "why": "independent, no memory chains"
+  },
+  {
+   "task": "pc07",
+   "label": "negative",
+   "why": "independent, no memory chains"
+  }
+ ]
+}

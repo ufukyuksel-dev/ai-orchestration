@@ -78,17 +78,86 @@ public class MemoryRetrievalService {
         return retrieveForInjection(query, projectKey, null);
     }
 
+    /**
+     * Injection retrieval restricted to the memories {@code admit} accepts (e.g. one step's card kinds, not yet
+     * shown). The restriction runs before budget packing, and the candidate pool widens (doubling, up to
+     * FILTERED_MAX_TOPK) until enough admitted candidates are found or the index has no more, so stronger memories that
+     * do not qualify cannot crowd out the ones that do.
+     */
+    public MemoryContextResponse retrieveForInjectionWhere(String query, String projectKey,
+            java.util.function.Predicate<MemoryItem> admit) {
+        if (properties == null || admit == null) {
+            return retrieveForInjection(query, projectKey, (String) null);
+        }
+        if (!properties.memory().injectionEnabled() || query == null || query.isBlank()) {
+            return MemoryContextResponse.empty();
+        }
+        return retrieve(query, projectKey, null, ranking.minInjectionSimilarity(), admit,
+                injectionOversample() * FILTERED_OVERSAMPLE);
+    }
+
+    /** One step lookup: the packed cards, and whether any memory matched at all before packing (see below). */
+    public record StepRetrieval(MemoryContextResponse response, boolean matched) {
+    }
+
+    /**
+     * Injection retrieval for one step of a task: memories {@code admit} accepts (the step's kinds). {@code matched}
+     * tells whether any of them is relevant with a similarity of at least {@code floor}, decided before packing and
+     * before {@code show}; only the ones {@code show} accepts (not shown before) then compete for the budget. So a
+     * match that does not fit the budget, or that was already shown, still counts as found.
+     */
+    public StepRetrieval retrieveForStep(String query, String projectKey,
+            java.util.function.Predicate<MemoryItem> admit, java.util.function.Predicate<MemoryItem> show,
+            double floor) {
+        if (properties == null || !properties.memory().injectionEnabled() || query == null || query.isBlank()) {
+            return new StepRetrieval(MemoryContextResponse.empty(), false);
+        }
+        boolean[] matched = {false};
+        MemoryContextResponse response = retrieve(query, projectKey, null, ranking.minInjectionSimilarity(), admit,
+                injectionOversample() * FILTERED_OVERSAMPLE, relevant -> {
+                    matched[0] = relevant.stream().anyMatch(r -> r.similarityScore() >= floor);
+                    return relevant.stream().filter(r -> show.test(r.item)).toList();
+                });
+        return new StepRetrieval(response, matched[0]);
+    }
+
+    static final int FILTERED_OVERSAMPLE = 3;
+    static final int FILTERED_MAX_TOPK = 200;
+    static final int FILTERED_WANTED = 3;
+
     public boolean injectionEnabled() {
         return properties == null || properties.memory().injectionEnabled();
     }
 
     private MemoryContextResponse retrieve(String query, String projectKey, String userId, double minSimilarity) {
+        return retrieve(query, projectKey, userId, minSimilarity, null, injectionOversample());
+    }
+
+    private MemoryContextResponse retrieve(String query, String projectKey, String userId, double minSimilarity,
+            java.util.function.Predicate<MemoryItem> admit, int topK) {
+        return retrieve(query, projectKey, userId, minSimilarity, admit, topK, relevant -> relevant);
+    }
+
+    /** {@code beforePacking} sees the relevant candidates and returns the ones that compete for the budget. */
+    private MemoryContextResponse retrieve(String query, String projectKey, String userId, double minSimilarity,
+            java.util.function.Predicate<MemoryItem> admit, int topK,
+            java.util.function.UnaryOperator<List<RankedItem>> beforePacking) {
         if (query == null || query.isBlank()) {
             return MemoryContextResponse.empty();
         }
         Instant started = Instant.now();
         List<RankedItem> ranked = rankedItems(
-                query, projectKey, userId, injectionOversample(), minSimilarity, true, MemoryRetrievalArm.DENSE);
+                query, projectKey, userId, topK, minSimilarity, true, MemoryRetrievalArm.DENSE);
+        if (admit != null) {
+            List<RankedItem> admitted = ranked.stream().filter(r -> admit.test(r.item)).toList();
+            // bounded widening: the admitted ones may rank below many stronger memories that do not qualify
+            while (admitted.size() < FILTERED_WANTED && ranked.size() >= topK && topK < FILTERED_MAX_TOPK) {
+                topK = Math.min(FILTERED_MAX_TOPK, topK * 2);
+                ranked = rankedItems(query, projectKey, userId, topK, minSimilarity, true, MemoryRetrievalArm.DENSE);
+                admitted = ranked.stream().filter(r -> admit.test(r.item)).toList();
+            }
+            ranked = admitted;
+        }
 
         // Injection-only relevance gate: drop weakly-related memories on raw semantic similarity, before
         // budget packing, so confidence/scope alone cannot carry an irrelevant memory into the prompt.
@@ -101,7 +170,7 @@ public class MemoryRetrievalService {
         }
         int relevanceFiltered = ranked.size() - relevant.size();
 
-        List<MemoryContextItem> packed = pack(relevant);
+        List<MemoryContextItem> packed = pack(beforePacking.apply(relevant));
 
         Map<String, Integer> scopes = new LinkedHashMap<>();
         scopes.put("user", countScope(packed, MemoryScope.USER));

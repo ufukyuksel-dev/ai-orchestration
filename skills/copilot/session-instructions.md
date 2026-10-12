@@ -9,7 +9,9 @@ or out of date.
 
 ## Startup rules
 
-At the first request, use Copilot's `ask_user` tool to ask:
+When the AI Orchestration prompt hook is installed it applies the saved rules preference itself: approved rules arrive with your prompt ("AI Orchestration rules for this repository"), or it says that rules were skipped. Ask the question below only when the prompt says no rules preference is saved; never ask when it says the session is unattended.
+
+Otherwise, at the first request, use Copilot's `ask_user` tool to ask:
 
 > Bu oturum için AI Orchestration global ve proje kurallarını yükleyeyim mi?
 
@@ -49,8 +51,10 @@ configuration.
 
 ## One-shot learning
 
-If the completed task produced stable, reusable knowledge, create one bounded
-request and send it once:
+If the completed task produced stable, reusable knowledge, end the final answer
+with the hidden `<!-- ai-orch-learn {...} -->` comment the prompt's learning line
+describes (no tool call; the stop hook submits it). To save at another moment,
+create one bounded request and send it once:
 
 ```bash
 ai_orch memory learn --file memory-learn.json --consume

@@ -1,0 +1,36 @@
+diff --git a/app/main/routes.py b/app/main/routes.py
+index 103bbc7..7b6f371 100644
+--- a/app/main/routes.py
++++ b/app/main/routes.py
+@@ -1,5 +1,8 @@
++import csv
++import io
+ from datetime import datetime, timezone
+ from flask import render_template, flash, redirect, url_for, request, g, \
++    Response, \
+     current_app
+ from flask_login import current_user, login_required
+ from flask_babel import _, get_locale
+@@ -239,3 +242,22 @@ def notifications():
+         'data': n.get_data(),
+         'timestamp': n.timestamp
+     } for n in notifications]
++
++
++def csv_response(rows, filename):
++    out = io.StringIO()
++    csv.writer(out).writerows(rows)
++    return Response(out.getvalue(), mimetype='text/csv', headers={
++        'Content-Disposition': f'attachment; filename={filename}'})
++
++
++@bp.route('/user/<username>/followers.csv')
++@login_required
++def followers_csv(username):
++    user = db.first_or_404(sa.select(User).where(User.username == username))
++    query = user.followers.select().order_by(User.username.asc())
++    rows = [['username', 'about_me', 'posts']]
++    for follower in db.session.scalars(query):
++        rows.append([follower.username, follower.about_me or '',
++                     follower.posts_count()])
++    return csv_response(rows, f'{user.username}-followers.csv')

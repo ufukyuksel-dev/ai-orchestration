@@ -1,5 +1,7 @@
 # Benchmark: the same agent with and without AI Orchestration
 
+GitHub Copilot CLI has its own measurement, results and an explanation of each saving: [bench/copilot-results.md](../bench/copilot-results.md) (37 % fewer tokens over 18 new tasks, 18/18 vs 16/18 passed).
+
 ## Question
 
 When an agent works on a repository it has worked on before, does AI Orchestration make the follow-up tasks cheaper

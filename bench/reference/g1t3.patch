@@ -1,0 +1,50 @@
+diff --git a/articles/routers.go b/articles/routers.go
+index 3aea0b5..3b6a98d 100644
+--- a/articles/routers.go
++++ b/articles/routers.go
+@@ -33,6 +33,7 @@ func ArticlesAnonymousRegister(router *gin.RouterGroup) {
+ func TagsAnonymousRegister(router *gin.RouterGroup) {
+ 	router.GET("", TagList)
+ 	router.GET("/", TagList)
++	router.GET("/stats", TagStats)
+ }
+ 
+ func ArticleCreate(c *gin.Context) {
+diff --git a/articles/tag_stats.go b/articles/tag_stats.go
+new file mode 100644
+index 0000000..7b3df5c
+--- /dev/null
++++ b/articles/tag_stats.go
+@@ -0,0 +1,32 @@
++package articles
++
++import (
++	"errors"
++	"net/http"
++
++	"github.com/gin-gonic/gin"
++	"github.com/gothinkster/golang-gin-realworld-example-app/common"
++)
++
++type tagStatsRow struct {
++	Tag           string `json:"tag"`
++	ArticlesCount int64  `json:"articlesCount"`
++}
++
++// TagStats returns every tag with the number of (not deleted) articles carrying it.
++func TagStats(c *gin.Context) {
++	rows := []tagStatsRow{}
++	err := common.GetDB().Table("tag_models").
++		Select("tag_models.tag AS tag, COUNT(article_models.id) AS articles_count").
++		Joins("JOIN article_tags ON article_tags.tag_model_id = tag_models.id").
++		Joins("JOIN article_models ON article_models.id = article_tags.article_model_id AND article_models.deleted_at IS NULL").
++		Where("tag_models.deleted_at IS NULL").
++		Group("tag_models.tag").
++		Order("articles_count DESC, tag ASC").
++		Scan(&rows).Error
++	if err != nil {
++		c.JSON(http.StatusInternalServerError, common.NewError("tags", errors.New("Database error")))
++		return
++	}
++	c.JSON(http.StatusOK, gin.H{"tags": rows})
++}

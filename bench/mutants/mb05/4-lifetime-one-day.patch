@@ -1,0 +1,13 @@
+diff --git a/app/models.py b/app/models.py
+index db447d8..13699ba 100644
+--- a/app/models.py
++++ b/app/models.py
+@@ -256,7 +256,7 @@ class User(PaginatedAPIMixin, UserMixin, db.Model):
+         if new_user and 'password' in data:
+             self.set_password(data['password'])
+ 
+-    def get_token(self, expires_in=3600):
++    def get_token(self, expires_in=86400):
+         now = datetime.now(timezone.utc)
+         if self.token and self.token_expiration.replace(
+                 tzinfo=timezone.utc) > now + timedelta(seconds=60):

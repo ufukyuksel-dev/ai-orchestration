@@ -1,0 +1,70 @@
+{
+  "suite": "py-holdout",
+  "repo": "microblog",
+  "url": "https://github.com/miguelgrinberg/microblog.git",
+  "sha": "a975ef64864354867c88e0ed3a17ba7d17dca752",
+  "note": "Python held-out suite: Flask app miguelgrinberg/microblog (MIT; Flask 3, SQLAlchemy 2, Flask-Login, Flask-HTTPAuth). Same shape as holdout.json (read-only JSON API, CSV export), different language and stack. Prompts state WHAT is required (paths, fields, formats, ordering, status codes, content types); project gotchas are left to discover. Prepare with `bash bench/setup/microblog.sh` (clone + virtualenv). Reference solutions: bench/reference/<taskId>.patch; details in bench/py-holdout-notes.md.",
+  "pathPrepend": [
+    "bench/.work/venvs/microblog/bin"
+  ],
+  "qualityCommand": "python -m compileall -q app",
+  "ownTestCommand": "python -m unittest -v tests",
+  "hiddenTestCommand": "python -m unittest -v {hidden}",
+  "hiddenTarget": ".",
+  "families": [
+    {
+      "id": "P1",
+      "title": "Read-only JSON API (token-authenticated)",
+      "tasks": [
+        {
+          "id": "p1t1",
+          "hidden": [
+            "test_bench_p1t1.py"
+          ],
+          "prompt": "Add a read-only JSON API endpoint for a single post: `GET /api/posts/<id>`. It must use the same token authentication as the existing `GET /api/users/<id>` endpoint: a request without a valid token gets status `401`. With a valid token it returns status `200` with a JSON object (content type `application/json`) with the fields `id` (number), `body` (string), `timestamp` (the post's time in UTC as an ISO 8601 string with an explicit `+00:00` offset, e.g. `2024-05-01T10:30:00+00:00`), `language` (string, or `null` when the post has no language) and `author`: an object with exactly the fields `id` (number) and `username` (string) of the post's author. For an unknown post id it returns status `404` with a JSON object that has an `error` field, like the existing API errors. The existing API endpoints must keep working unchanged. Make sure the project's tests still pass."
+        },
+        {
+          "id": "p1t2",
+          "hidden": [
+            "test_bench_p1t2.py"
+          ],
+          "prompt": "Add a read-only JSON API endpoint for the posts of a user: `GET /api/users/<id>/posts`. It must use the same token authentication as the existing `GET /api/users/<id>` endpoint: a request without a valid token gets status `401`. With a valid token it returns status `200` with a JSON object (content type `application/json`) in the same paginated collection format as the existing `GET /api/users` endpoint: query parameters `page` (default 1) and `per_page` (default 10; larger values than 100 are capped at 100), and the fields `items`, `_meta` (an object with `page`, `per_page`, `total_pages` and `total_items`, all numbers) and `_links` (an object with `self`, `next` and `prev`: URLs of this, the next and the previous page that can be requested as they are; `next` and `prev` are `null` when there is no such page). `items` contains only the posts written by that user, newest first (posts with the same timestamp: higher id first); each item is an object with the fields `id` (number), `body` (string), `timestamp` (the time in UTC as an ISO 8601 string with an explicit `+00:00` offset, e.g. `2024-05-01T10:30:00+00:00`), `language` (string, or `null` when the post has no language) and `author` (an object with exactly the fields `id` (number) and `username` (string) of the post's author). A user without posts gives an empty `items` array. For an unknown user id it returns status `404` with a JSON object that has an `error` field, like the existing API errors. The existing API endpoints must keep working unchanged. Make sure the project's tests still pass."
+        },
+        {
+          "id": "p1t3",
+          "hidden": [
+            "test_bench_p1t3.py"
+          ],
+          "prompt": "Add a read-only JSON API endpoint for the private messages received by the user who owns the token: `GET /api/messages`. It must use the same token authentication as the existing `GET /api/users/<id>` endpoint: a request without a valid token gets status `401`. With a valid token it returns status `200` with a JSON object (content type `application/json`) in the same paginated collection format as the existing `GET /api/users` endpoint: query parameters `page` (default 1) and `per_page` (default 10; larger values than 100 are capped at 100), and the fields `items`, `_meta` (an object with `page`, `per_page`, `total_pages` and `total_items`, all numbers) and `_links` (an object with `self`, `next` and `prev`: URLs of this, the next and the previous page that can be requested as they are; `next` and `prev` are `null` when there is no such page). `items` contains only the messages received by the token's user (not the messages they sent, not messages between other users), newest first (messages with the same timestamp: higher id first); each item is an object with the fields `id` (number), `body` (string), `timestamp` (the time in UTC as an ISO 8601 string with an explicit `+00:00` offset, e.g. `2024-05-01T10:30:00+00:00`) and `sender` (an object with exactly the fields `id` (number) and `username` (string) of the user who sent the message). A user without received messages gives an empty `items` array. Reading messages through this endpoint must not mark them as read: the user's unread message count and last message read time stay unchanged. The existing API endpoints must keep working unchanged. Make sure the project's tests still pass."
+        }
+      ]
+    },
+    {
+      "id": "P2",
+      "title": "CSV export (logged-in web pages)",
+      "tasks": [
+        {
+          "id": "p2t1",
+          "hidden": [
+            "test_bench_p2t1.py"
+          ],
+          "prompt": "Add a CSV export of the logged-in user's own posts: `GET /export/posts.csv`. Like the other pages of the app it requires a logged-in user: an anonymous request is redirected (status `302`) to the login page. For a logged-in user it returns status `200` with content type `text/csv` and the header `Content-Disposition: attachment; filename=posts.csv`. The first line is exactly the header `id,timestamp,body`, followed by one line per post written by the logged-in user (all of them, no paging; no posts of other users), ordered by timestamp ascending and, for equal timestamps, by id ascending. `timestamp` is the post time in UTC in the format `YYYY-MM-DD HH:MM:SS` (e.g. `2024-02-01 09:05:07`). A user without posts gets only the header line. Every line ends with a line break (`\\r\\n` or `\\n`). A value that contains a comma, a double quote or a line break must be enclosed in double quotes, with every double quote inside it doubled (RFC 4180); other values may be written as they are. The existing pages (including `/user/<username>` and `/explore`) must keep working unchanged. Make sure the project's tests still pass."
+        },
+        {
+          "id": "p2t2",
+          "hidden": [
+            "test_bench_p2t2.py"
+          ],
+          "prompt": "Add a CSV export of a user's followers: `GET /user/<username>/followers.csv`. Like the other pages of the app it requires a logged-in user: an anonymous request is redirected (status `302`) to the login page. Any logged-in user may export the followers of any user. It returns status `200` with content type `text/csv`. The first line is exactly the header `username,about_me,posts`, followed by one line per follower of that user (the users who follow them, not the users they follow; all of them, no paging), ordered by username ascending. `about_me` is the follower's about-me text (an empty value when they have none) and `posts` is the number of posts the follower has written. A user without followers gets only the header line. For an unknown username it returns status `404`. Every line ends with a line break (`\\r\\n` or `\\n`). A value that contains a comma, a double quote or a line break must be enclosed in double quotes, with every double quote inside it doubled (RFC 4180); other values may be written as they are. The existing pages (including `/user/<username>` and `/user/<username>/popup`) must keep working unchanged. Make sure the project's tests still pass."
+        },
+        {
+          "id": "p2t3",
+          "hidden": [
+            "test_bench_p2t3.py"
+          ],
+          "prompt": "Add a CSV export of the logged-in user's private messages: `GET /messages.csv`. Like the other pages of the app it requires a logged-in user: an anonymous request is redirected (status `302`) to the login page. For a logged-in user it returns status `200` with content type `text/csv`. The first line is exactly the header `timestamp,from,to,body`, followed by one line per message the logged-in user has sent or received (all of them, no paging; no messages between other users), ordered by timestamp ascending and, for equal timestamps, by message id ascending. `timestamp` is the message time in UTC in the format `YYYY-MM-DD HH:MM:SS` (e.g. `2024-02-01 09:05:07`); `from` and `to` are the usernames of the sender and the recipient; `body` is the message text. A user without messages gets only the header line. Exporting must not mark messages as read: the user's unread message count and last message read time stay unchanged. Every line ends with a line break (`\\r\\n` or `\\n`). A value that contains a comma, a double quote or a line break must be enclosed in double quotes, with every double quote inside it doubled (RFC 4180); other values may be written as they are. The existing `/messages` page must keep working unchanged (it still marks the messages as read). Make sure the project's tests still pass."
+        }
+      ]
+    }
+  ]
+}

@@ -65,17 +65,22 @@ def fmt(value, spec, suffix=""):
     return "—" if value is None else f"{value:{spec}}{suffix}"
 
 
-def svg(summary: dict, caption: str) -> str:
+HEADLINES = {"followup": ("relatedPerSuccess", "relatedDeltaPct", "on follow-up tasks"),
+             "all": ("allPerSuccess", "allDeltaPct", "over all tasks")}
+
+
+def svg(summary: dict, caption: str, headline: str = "followup") -> str:
+    key, delta_key, scope = HEADLINES[headline]
     agents = list(summary)
     row_h, top, left, width = 150, 96, 250, 1000
     height = top + row_h * len(agents) + 70
-    scale_max = max(max(s["A"]["relatedPerSuccess"] or 0, s["B"]["relatedPerSuccess"] or 0) for s in summary.values())
+    scale_max = max(max(s["A"][key] or 0, s["B"][key] or 0) for s in summary.values())
     bar_w = width - left - 250
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" '
            f'font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">',
            f'<rect width="{width}" height="{height}" rx="18" fill="{BG}"/>',
-           f'<text x="40" y="52" fill="{TEXT}" font-size="26" font-weight="700">Tokens per successful task on '
-           f'follow-up tasks</text>',
+           f'<text x="40" y="52" fill="{TEXT}" font-size="26" font-weight="700">Tokens per successful task '
+           f'{scope}</text>',
            f'<text x="40" y="80" fill="{DIM}" font-size="16">Same agent, same tasks: without (grey) and with '
            f'AI Orchestration (cyan). Lower is better.</text>']
     for i, agent in enumerate(agents):
@@ -85,13 +90,13 @@ def svg(summary: dict, caption: str) -> str:
         out.append(f'<text x="40" y="{y + 70}" fill="{DIM}" font-size="14">success {s["B"]["success"]}/{s["B"]["tasks"]}'
                    f' vs {s["A"]["success"]}/{s["A"]["tasks"]}</text>')
         for j, (arm, color, label) in enumerate((("A", A_COLOR, "without"), ("B", B_COLOR, "with"))):
-            value = s[arm]["relatedPerSuccess"] or 0
+            value = s[arm][key] or 0
             w = max(4, bar_w * value / scale_max) if scale_max else 4
             by = y + j * 48
             out.append(f'<rect x="{left}" y="{by}" width="{w:.1f}" height="36" rx="8" fill="{color}"/>')
             out.append(f'<text x="{left + w + 12:.1f}" y="{by + 25}" fill="{TEXT}" font-size="18">{value:.2f}M'
                        f' <tspan fill="{DIM}" font-size="14">{label}</tspan></text>')
-        delta = s["relatedDeltaPct"]
+        delta = s[delta_key]
         if delta is not None:
             color = GOOD if delta < 0 else "#f87171"
             out.append(f'<text x="{width - 40}" y="{y + 56}" fill="{color}" font-size="34" font-weight="700" '
@@ -138,6 +143,7 @@ def main() -> None:
     ap.add_argument("--caption", default="")
     ap.add_argument("--note", default="", help="appended to the caption, e.g. how the measurement relates to tuning")
     ap.add_argument("--repo-url", default="github.com/<owner>/ai-orchestration")
+    ap.add_argument("--headline", choices=list(HEADLINES), default="followup", help="the chart metric")
     ap.add_argument("--fill", action="append", default=[], help="FILE:NAME, e.g. README.md:BENCHMARK (repeatable)")
     args = ap.parse_args()
     runs = load(args.run)
@@ -155,14 +161,14 @@ def main() -> None:
     suites = sorted({json.loads((Path(spec.split("=", 1)[1]) / "meta.json").read_text()).get("suite", "?")
                      for spec in args.run if (Path(spec.split("=", 1)[1]) / "meta.json").exists()})
     families = len({r["family"] for arms in runs.values() for rows in arms.values() for r in rows})
-    caption = args.caption or (f"Spring Petclinic ({', '.join(suites)} suite), {families} task families × 3 related tasks, "
+    caption = args.caption or (f"Suites: {', '.join(suites)}; {families} task families × 3 related tasks, "
                                f"{reps} repetitions, cumulative "
                                f"learning chain · models: {', '.join(models)} · {date.today().isoformat()}")
     if args.note:
         caption += f" · {args.note}"
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    (out / "benchmark.svg").write_text(svg(summary, caption))
+    (out / "benchmark.svg").write_text(svg(summary, caption, args.headline))
     (out / "benchmark.md").write_text(table(summary, caption))
     for spec in args.fill:
         path, name = spec.rsplit(":", 1)
@@ -170,8 +176,8 @@ def main() -> None:
     promo = {"placeholder": False, "repoUrl": args.repo_url, "caption": caption,
              "recallExample": json.loads((out / "benchmark.json").read_text()).get("recallExample")
              if (out / "benchmark.json").exists() else None,
-             "bars": [{"label": f"{NAMES.get(k, k)} · follow-up tasks", "a": round(v["A"]["relatedPerSuccess"], 2),
-                       "b": round(v["B"]["relatedPerSuccess"], 2), "unit": "M tokens/task"} for k, v in summary.items()],
+             "bars": [{"label": f"{NAMES.get(k, k)} · {HEADLINES[args.headline][2]}",
+                       "a": round(v["A"][HEADLINES[args.headline][0]], 2), "b": round(v["B"][HEADLINES[args.headline][0]], 2), "unit": "M tokens/task"} for k, v in summary.items()],
              "summary": summary}
     (out / "benchmark.json").write_text(json.dumps(promo, indent=2))
     print(json.dumps({k: {"related": round(v["relatedDeltaPct"], 1), "all": round(v["allDeltaPct"], 1),

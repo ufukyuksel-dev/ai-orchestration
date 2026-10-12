@@ -1,0 +1,84 @@
+diff --git a/articles/comments_csv.go b/articles/comments_csv.go
+new file mode 100644
+index 0000000..b64e5f2
+--- /dev/null
++++ b/articles/comments_csv.go
+@@ -0,0 +1,37 @@
++package articles
++
++import (
++	"errors"
++	"net/http"
++	"sort"
++	"strconv"
++
++	"github.com/gin-gonic/gin"
++	"github.com/gothinkster/golang-gin-realworld-example-app/common"
++)
++
++// ArticleCommentsCSV exports the comments of one article, oldest first.
++func ArticleCommentsCSV(c *gin.Context) {
++	articleModel, err := FindOneArticle(&ArticleModel{Slug: c.Param("slug")})
++	if err != nil {
++		c.JSON(http.StatusNotFound, common.NewError("comments", errors.New("Invalid slug")))
++		return
++	}
++	if err := articleModel.getComments(); err != nil {
++		c.JSON(http.StatusInternalServerError, common.NewError("comments", errors.New("Database error")))
++		return
++	}
++	comments := articleModel.Comments
++	sort.SliceStable(comments, func(i, j int) bool {
++		if !comments[i].CreatedAt.Equal(comments[j].CreatedAt) {
++			return comments[i].CreatedAt.Before(comments[j].CreatedAt)
++		}
++		return comments[i].ID < comments[j].ID
++	})
++	records := [][]string{{"id", "author", "body", "createdAt"}}
++	for _, cm := range comments {
++		records = append(records, []string{strconv.FormatUint(uint64(cm.ID), 10), cm.Author.UserModel.Username, cm.Body,
++			cm.CreatedAt.UTC().Format(csvDateFormat)})
++	}
++	writeCSV(c, records)
++}
+diff --git a/articles/csv.go b/articles/csv.go
+new file mode 100644
+index 0000000..752ef7d
+--- /dev/null
++++ b/articles/csv.go
+@@ -0,0 +1,23 @@
++package articles
++
++import (
++	"bytes"
++	"encoding/csv"
++	"net/http"
++
++	"github.com/gin-gonic/gin"
++)
++
++// csvDateFormat is the timestamp format of the JSON API (createdAt/updatedAt).
++const csvDateFormat = "2006-01-02T15:04:05.999Z"
++
++// writeCSV answers with the records as RFC 4180 CSV (encoding/csv quotes commas, quotes and line breaks).
++func writeCSV(c *gin.Context, records [][]string) {
++	var buf bytes.Buffer
++	w := csv.NewWriter(&buf)
++	if err := w.WriteAll(records); err != nil {
++		c.AbortWithStatus(http.StatusInternalServerError)
++		return
++	}
++	c.Data(http.StatusOK, "text/csv; charset=utf-8", buf.Bytes())
++}
+diff --git a/articles/routers.go b/articles/routers.go
+index 3aea0b5..749365c 100644
+--- a/articles/routers.go
++++ b/articles/routers.go
+@@ -28,6 +28,7 @@ func ArticlesAnonymousRegister(router *gin.RouterGroup) {
+ 	router.GET("/", ArticleList)
+ 	router.GET("/:slug", ArticleRetrieve)
+ 	router.GET("/:slug/comments", ArticleCommentList)
++	router.GET("/:slug/comments.csv", ArticleCommentsCSV)
+ }
+ 
+ func TagsAnonymousRegister(router *gin.RouterGroup) {

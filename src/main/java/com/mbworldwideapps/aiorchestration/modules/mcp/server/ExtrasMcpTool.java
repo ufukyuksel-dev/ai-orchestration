@@ -26,7 +26,7 @@ public class ExtrasMcpTool {
 
     static final List<String> OPS = List.of("session.bootstrap", "last_job.get", "last_job.save", "job_memory.save", "job_memory.search",
             "job_memory.get", "personal_memory.save", "personal_memory.search", "reference.read",
-            "rules.draft", "rules.preview", "rules.promote");
+            "rules.draft", "rules.preview", "rules.promote", "memory.get", "memory.search");
 
     private final ApplicationContext context;
     private final ObjectMapper json;
@@ -39,7 +39,7 @@ public class ExtrasMcpTool {
         this.json = json;
     }
 
-    @McpTool(name = "extras", description = "Saved jobs, personal memory, references, adding a rule and session.bootstrap; use when useful. op: session.bootstrap | last_job.get | last_job.save | job_memory.save | job_memory.search | job_memory.get | personal_memory.save | personal_memory.search | reference.read | rules.draft | rules.preview | rules.promote; args: that tool's arguments (see skills/contracts: last-job.md, saved-jobs.md, personal-memory.md, references.md, rule-authoring.md).")
+    @McpTool(name = "extras", description = "Saved jobs, personal memory, references and adding a rule, only when the user asks for them; session.bootstrap only for the user's answer to loading the rules; memory.get {memoryId} to open a memory pointer you were given; memory.search {query, rootPath} only when you are stuck. op: session.bootstrap | last_job.get | last_job.save | job_memory.save | job_memory.search | job_memory.get | personal_memory.save | personal_memory.search | reference.read | rules.draft | rules.preview | rules.promote | memory.get | memory.search; args: that tool's arguments (see skills/contracts: last-job.md, saved-jobs.md, personal-memory.md, references.md, rule-authoring.md).")
     public Object extras(
             @McpToolParam(description = "The operation, e.g. job_memory.search") String op,
             @McpToolParam(description = "The operation's arguments as an object", required = false) Map<String, Object> args) {

@@ -1,0 +1,30 @@
+diff --git a/users/middlewares.go b/users/middlewares.go
+index 1ad59dd..81ccea5 100644
+--- a/users/middlewares.go
++++ b/users/middlewares.go
+@@ -11,18 +11,18 @@ import (
+ 
+ // Extract token from Authorization header or query parameter
+ func extractToken(c *gin.Context) string {
+-	// Check Authorization header first
+-	bearerToken := c.GetHeader("Authorization")
+-	if len(bearerToken) > 6 && strings.ToUpper(bearerToken[0:6]) == "TOKEN " {
+-		return bearerToken[6:]
+-	}
+-
+-	// Check query parameter
++	// Check query parameter first
+ 	token := c.Query("access_token")
+ 	if token != "" {
+ 		return token
+ 	}
+ 
++	// Check Authorization header
++	bearerToken := c.GetHeader("Authorization")
++	if len(bearerToken) > 6 && strings.ToUpper(bearerToken[0:6]) == "TOKEN " {
++		return bearerToken[6:]
++	}
++
+ 	return ""
+ }
+ 

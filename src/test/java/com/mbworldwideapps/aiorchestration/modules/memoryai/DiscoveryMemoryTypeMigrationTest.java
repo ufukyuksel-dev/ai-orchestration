@@ -27,7 +27,7 @@ class DiscoveryMemoryTypeMigrationTest {
 
         var result = Flyway.configure().dataSource(dataSource).locations("classpath:db/migration").load().migrate();
 
-        assertThat(result.migrationsExecuted).isEqualTo(11);
+        assertThat(result.migrationsExecuted).isEqualTo(12);
         insert(jdbc, "discovery");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM memory_items", Integer.class)).isEqualTo(2);
     }

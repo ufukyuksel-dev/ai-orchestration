@@ -1,0 +1,8 @@
+{
+  "keys": {
+    "status": {"kind": "text", "accept": ["401", "401 unauthorized"]},
+    "function": {"kind": "symbol", "accept": ["AuthMiddleware", "users.AuthMiddleware"]},
+    "reacheshandler": {"kind": "text", "accept": ["no"]}
+  },
+  "contradict": ["ArticleFeed", "reacheshandler:\\s*yes", "status:\\s*(200|404)"]
+}

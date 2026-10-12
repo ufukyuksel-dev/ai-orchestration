@@ -93,7 +93,7 @@ How it works: [docs/how-it-works.md](docs/how-it-works.md) · Panel tour: [docs/
 |---|---|
 | **Claude Code** | MCP server `ai-orchestration` (three tools), two hooks in `~/.claude/settings.json` — rules and matching cards arrive with your request; at the end of a task that changed code the agent is asked once to save what it learned — and a short session block in `~/.claude/CLAUDE.md`. All added by the installer. |
 | **Codex** | MCP server in `~/.codex/config.toml` + the same block in `~/.codex/AGENTS.md`. |
-| **GitHub Copilot** | The `ai_orch` terminal command. Per repository: `ai_orch project add <folder> --copilot` writes the instructions into that repository's `.github/`. |
+| **GitHub Copilot** | The `ai_orch` terminal command and hooks. Per repository: `ai_orch project add <folder> --copilot` writes into that repository's `.github/` the instructions, the skills, the hooks (memory cards with each prompt, learning saved from the final answer) and the compact agent; trust the folder once in Copilot CLI. Start Copilot with `copilot --agent ai-orchestration` (no subagents; about half the fixed input per model call). Results: [bench/copilot-results.md](bench/copilot-results.md). |
 
 ## Privacy
 

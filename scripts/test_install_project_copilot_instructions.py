@@ -300,5 +300,56 @@ class ProjectInstallerTest(unittest.TestCase):
         self.assertFalse(self.target.exists())
 
 
+    def runtime(self):
+        return self.project / '.github' / 'hooks' / 'ai-orchestration.json', \
+            self.project / '.github' / 'agents' / 'ai-orchestration.agent.md'
+
+    def test_installs_the_copilot_hooks_and_the_compact_agent(self):
+        import json
+        hooks, agent = self.runtime()
+        code, _ = self.install()
+        self.assertEqual(code, 0)
+        value = json.loads(hooks.read_text())
+        scripts = self.repo.resolve() / 'skills' / 'copilot' / 'ai-orchestration-memory' / 'scripts'
+        self.assertEqual(value['hooks']['agentStop'][0]['bash'], f"{scripts / 'copilot_memory_gate.py'} stop")
+        self.assertEqual(value['hooks']['postToolUse'][0]['bash'], f"{scripts / 'copilot_memory_gate.py'} post")
+        self.assertEqual(value['hooks']['userPromptSubmitted'][0]['bash'], str(scripts / 'copilot_memory_gate.py'))
+        self.assertTrue(agent.read_text().startswith('---\nname: ai-orchestration\n'))
+        self.assertEqual(self.install('--check')[0], 0)  # idempotent: nothing to do
+        agent.write_text(agent.read_text() + 'edited\n')
+        self.assertEqual(self.install('--check')[0], 1)  # drift of an owned file is reported
+        self.assertEqual(self.install()[0], 0)
+        self.assertNotIn('edited', agent.read_text())
+
+    def test_foreign_hook_or_agent_files_are_refused_and_kept(self):
+        hooks, agent = self.runtime()
+        hooks.parent.mkdir(parents=True)
+        hooks.write_text('{"version": 1, "hooks": {}}')
+        code, out = self.install()
+        self.assertEqual(code, 2)
+        self.assertIn('not owned by AI Orchestration', out)
+        self.assertFalse(self.target.exists())  # nothing written on a conflict
+        hooks.unlink()
+        agent.parent.mkdir(parents=True)
+        agent.write_text('---\nname: ai-orchestration\ndescription: mine\n---\n')
+        self.assertEqual(self.install()[0], 2)
+        self.assertEqual(self.install('--uninstall')[0], 0)
+        self.assertEqual(agent.read_text(), '---\nname: ai-orchestration\ndescription: mine\n---\n')
+
+    def test_uninstall_removes_the_owned_hooks_and_agent(self):
+        hooks, agent = self.runtime()
+        self.install()
+        self.assertEqual(self.install('--uninstall')[0], 0)
+        self.assertFalse(hooks.exists())
+        self.assertFalse(agent.exists())
+
+    def test_no_runtime_flag_and_the_checkout_itself_get_no_hooks(self):
+        hooks, agent = self.runtime()
+        self.install('--no-runtime')
+        self.assertFalse(hooks.exists())
+        self.assertFalse(agent.exists())
+        run('--target', str(self.repo), '--repo', str(self.repo))
+        self.assertFalse((self.repo / '.github' / 'hooks').exists())
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

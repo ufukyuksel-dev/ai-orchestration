@@ -1,0 +1,3 @@
+# AI Orchestration
+
+A hook gives you this repository's build profile, rules, matching memory cards and the files the request most likely touches (the block that starts with "AI Orchestration"). Start from them: open those files directly instead of searching, use the profile's commands, and follow the rules. Read independent files in one step. Check with the fastest sufficient command (one test class, then the profile's test command once); do not re-run a check that passed unless files changed since. Start the app or call it with curl only when no test can cover the requested behavior. Formatting and saving what the task taught happen automatically.

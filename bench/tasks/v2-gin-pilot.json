@@ -1,0 +1,33 @@
+{
+  "suite": "v2-gin-pilot",
+  "note": "Disposable pilot family for the v2 gin suite (plan §7.2): proves setup, baseline patch, hidden check and ANSWER: scoring on golang-gin-realworld-example-app. Not scored, never reused. Notes: bench/v2-gin-notes.md (Pilot section).",
+  "repo": "golang-gin-realworld-example-app",
+  "url": "https://github.com/gothinkster/golang-gin-realworld-example-app.git",
+  "sha": "626c372d259472148d93303f74aa9b9a1cdcef24",
+  "hiddenTarget": ".",
+  "qualityCommand": "go vet ./... && test -z \"$(gofmt -l .)\"",
+  "hiddenTestCommand": "go test -count=1 -run '^TestBenchGN' .",
+  "ownTestCommand": "go test -count=1 ./...",
+  "families": [
+    {
+      "id": "GNP",
+      "title": "Pilot: comment list bug and page-size question",
+      "tasks": [
+        {
+          "id": "gnp1",
+          "type": "B",
+          "kind": "code",
+          "prompt": "Deleted comments do not go away. After the author of a comment deletes it (`DELETE /api/articles/{slug}/comments/{id}` answers `200`), `GET /api/articles/{slug}/comments` still lists that comment. A deleted comment must no longer be listed; the remaining comments stay listed as before. All other endpoints must keep working unchanged. Make sure the project's build, vet and tests still pass.",
+          "hidden": ["bench_gnp1_test.go"],
+          "baseline": {"patch": "baselines/gnp1.patch"}
+        },
+        {
+          "id": "gnp2",
+          "type": "I",
+          "kind": "investigation",
+          "prompt": "`GET /api/articles` (the application as started with `go run .`) supports paging with the `limit` and `offset` query parameters. How many articles does it return at most when the request has no `limit` parameter, how many at most when the request has `limit=abc`, and which function of this repository decides that default? Answer from the code. Do not change any files. End your reply with a block that starts with a line `ANSWER:` followed by one `key: value` line per key: `defaultLimit` (a number), `invalidLimit` (a number), `function` (the function's name, optionally with its package)."
+        }
+      ]
+    }
+  ]
+}

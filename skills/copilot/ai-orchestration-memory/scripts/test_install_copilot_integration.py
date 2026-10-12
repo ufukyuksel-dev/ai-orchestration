@@ -47,9 +47,11 @@ class InstallerTestCase(unittest.TestCase):
 class InstallAndCheckTest(InstallerTestCase):
     def test_full_install_creates_every_owned_artifact(self) -> None:
         (mcp_config, memory_launcher, ai_orch_launcher), _ = self.install()
-        memory_bridge, ai_orch = installer.integration_paths()
+        gate, memory_bridge, ai_orch = installer.integration_paths()
 
-        self.assertFalse((self.copilot_home / "hooks" / installer.HOOK_FILENAME).exists())
+        hook = self.copilot_home / "hooks" / installer.HOOK_FILENAME
+        self.assertEqual(json.loads(hook.read_text()), installer.expected_hook(gate))
+        self.assertEqual(hook.stat().st_mode & 0o777, 0o600)
         self.assertEqual(memory_launcher.resolve(), memory_bridge)
         self.assertEqual(ai_orch_launcher.resolve(), ai_orch)
         server = json.loads(mcp_config.read_text())["mcpServers"]["ai-orchestration"]

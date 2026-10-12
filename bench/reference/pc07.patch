@@ -1,0 +1,88 @@
+diff --git a/src/main/java/org/springframework/samples/petclinic/owner/VisitController.java b/src/main/java/org/springframework/samples/petclinic/owner/VisitController.java
+index c721f55..5967744 100644
+--- a/src/main/java/org/springframework/samples/petclinic/owner/VisitController.java
++++ b/src/main/java/org/springframework/samples/petclinic/owner/VisitController.java
+@@ -91,6 +91,11 @@ class VisitController {
+ 	@PostMapping("/owners/{ownerId}/pets/{petId}/visits/new")
+ 	public String processNewVisitForm(@ModelAttribute Owner owner, @PathVariable int petId, @Valid Visit visit,
+ 			BindingResult result, RedirectAttributes redirectAttributes) {
++		Pet pet = owner.getPet(petId);
++		if (visit.getDate() != null && pet != null && pet.getBirthDate() != null
++				&& visit.getDate().isBefore(pet.getBirthDate())) {
++			result.rejectValue("date", "visitDate.beforeBirthDate");
++		}
+ 		if (result.hasErrors()) {
+ 			return "pets/createOrUpdateVisitForm";
+ 		}
+diff --git a/src/main/resources/messages/messages.properties b/src/main/resources/messages/messages.properties
+index 1935658..3cbc93c 100644
+--- a/src/main/resources/messages/messages.properties
++++ b/src/main/resources/messages/messages.properties
+@@ -49,3 +49,4 @@ petsAndVisits=Pets and Visits
+ error.404=The requested page was not found.
+ error.500=An internal server error occurred.
+ error.general=An unexpected error occurred.
++visitDate.beforeBirthDate=Visit date must not be before the birth date of the pet
+diff --git a/src/main/resources/messages/messages_de.properties b/src/main/resources/messages/messages_de.properties
+index 89a08ea..3051103 100644
+--- a/src/main/resources/messages/messages_de.properties
++++ b/src/main/resources/messages/messages_de.properties
+@@ -49,3 +49,4 @@ petsAndVisits=Haustiere und Besuche
+ error.404=Die angeforderte Seite wurde nicht gefunden.
+ error.500=Ein interner Serverfehler ist aufgetreten.
+ error.general=Ein unerwarteter Fehler ist aufgetreten.
++visitDate.beforeBirthDate=Das Besuchsdatum darf nicht vor dem Geburtsdatum des Tieres liegen
+diff --git a/src/main/resources/messages/messages_es.properties b/src/main/resources/messages/messages_es.properties
+index 911d733..dfff01e 100644
+--- a/src/main/resources/messages/messages_es.properties
++++ b/src/main/resources/messages/messages_es.properties
+@@ -49,3 +49,4 @@ petsAndVisits=Mascotas y visitas
+ error.404=La página solicitada no fue encontrada.
+ error.500=Ocurrió un error interno del servidor.
+ error.general=Ocurrió un error inesperado.
++visitDate.beforeBirthDate=La fecha de la visita no puede ser anterior a la fecha de nacimiento de la mascota
+diff --git a/src/main/resources/messages/messages_fa.properties b/src/main/resources/messages/messages_fa.properties
+index 6d0994a..d9cd9ec 100644
+--- a/src/main/resources/messages/messages_fa.properties
++++ b/src/main/resources/messages/messages_fa.properties
+@@ -49,3 +49,4 @@ petsAndVisits=حیوانات و ویزیت‌ها
+ error.404=صفحه درخواستی پیدا نشد.
+ error.500=خطای داخلی سرور رخ داد.
+ error.general=خطای غیرمنتظره‌ای رخ داد.
++visitDate.beforeBirthDate=تاریخ ویزیت نمی‌تواند قبل از تاریخ تولد حیوان باشد
+diff --git a/src/main/resources/messages/messages_ko.properties b/src/main/resources/messages/messages_ko.properties
+index 6e2f488..9ec564d 100644
+--- a/src/main/resources/messages/messages_ko.properties
++++ b/src/main/resources/messages/messages_ko.properties
+@@ -49,3 +49,4 @@ petsAndVisits=반려동물 및 방문
+ error.404=요청하신 페이지를 찾을 수 없습니다.
+ error.500=서버 내부 오류가 발생했습니다.
+ error.general=알 수 없는 오류가 발생했습니다.
++visitDate.beforeBirthDate=방문 날짜는 반려동물의 생일보다 이전일 수 없습니다
+diff --git a/src/main/resources/messages/messages_pt.properties b/src/main/resources/messages/messages_pt.properties
+index 7eea4b9..5385963 100644
+--- a/src/main/resources/messages/messages_pt.properties
++++ b/src/main/resources/messages/messages_pt.properties
+@@ -49,3 +49,4 @@ petsAndVisits=Animais e visitas
+ error.404=A página solicitada não foi encontrada.
+ error.500=Ocorreu um erro interno no servidor.
+ error.general=Ocorreu um erro inesperado.
++visitDate.beforeBirthDate=A data da visita nao pode ser anterior a data de nascimento do animal
+diff --git a/src/main/resources/messages/messages_ru.properties b/src/main/resources/messages/messages_ru.properties
+index f06d2cb..be462d3 100644
+--- a/src/main/resources/messages/messages_ru.properties
++++ b/src/main/resources/messages/messages_ru.properties
+@@ -49,3 +49,4 @@ petsAndVisits=Питомцы и визиты
+ error.404=Запрашиваемая страница не найдена.
+ error.500=Произошла внутренняя ошибка сервера.
+ error.general=Произошла непредвиденная ошибка.
++visitDate.beforeBirthDate=Дата визита не может быть раньше даты рождения питомца
+diff --git a/src/main/resources/messages/messages_tr.properties b/src/main/resources/messages/messages_tr.properties
+index 2c806f9..8194b40 100644
+--- a/src/main/resources/messages/messages_tr.properties
++++ b/src/main/resources/messages/messages_tr.properties
+@@ -49,3 +49,4 @@ petsAndVisits=Evcil Hayvanlar ve Ziyaretler
+ error.404=İstenen sayfa bulunamadı.
+ error.500=Sunucuda dahili bir hata oluştu.
+ error.general=Beklenmeyen bir hata oluştu.
++visitDate.beforeBirthDate=Ziyaret tarihi evcil hayvanın doğum tarihinden önce olamaz

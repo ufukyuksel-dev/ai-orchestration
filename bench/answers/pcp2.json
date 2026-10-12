@@ -1,0 +1,24 @@
+{
+  "keys": {
+    "pagesize": {
+      "kind": "text",
+      "accept": [
+        "5",
+        "five",
+        "5 owners",
+        "5 owners per page"
+      ]
+    },
+    "cache": {
+      "kind": "text",
+      "accept": [
+        "vets",
+        "\"vets\""
+      ]
+    }
+  },
+  "contradict": [
+    "pageSize:.*\\b10\\b",
+    "cache:.*\\bowners\\b"
+  ]
+}

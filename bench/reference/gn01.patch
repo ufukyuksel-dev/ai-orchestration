@@ -1,0 +1,14 @@
+diff --git a/articles/serializers.go b/articles/serializers.go
+index 5872728..a9ff9f7 100644
+--- a/articles/serializers.go
++++ b/articles/serializers.go
+@@ -128,7 +128,8 @@ func (s *ArticlesSerializer) Response() []ArticleResponse {
+ 	favoriteCounts := BatchGetFavoriteCounts(articleIDs)
+ 
+ 	myUserModel := s.C.MustGet("my_user_model").(users.UserModel)
+-	favoriteStatus := BatchGetFavoriteStatus(articleIDs, myUserModel.ID)
++	articleUserModel := GetArticleUserModel(myUserModel)
++	favoriteStatus := BatchGetFavoriteStatus(articleIDs, articleUserModel.ID)
+ 
+ 	for _, article := range s.Articles {
+ 		serializer := ArticleSerializer{C: s.C, ArticleModel: article}

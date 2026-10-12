@@ -1,0 +1,15 @@
+{"learningCandidates":[{
+  "kind":"behavior",
+  "summary":"New read-only API resources: add to_dict() on model, new app/api/<res>.py, register in app/api/__init__.py",
+  "content":"To add a GET-only token-authenticated API endpoint for a model in this Flask app: (1) add a to_dict() method on the SQLAlchemy model in app/models.py returning plain JSON-serializable fields (datetimes via .replace(tzinfo=timezone.utc).isoformat()); (2) create app/api/<resource>.py with a route decorated with @token_auth.login_required from app.api.auth, using db.get_or_404(Model, id) which auto-triggers the shared HTTPException errorhandler in app/api/errors.py for 404s with an {'error': ...} JSON body; (3) import the new module in app/api/__init__.py's bottom import line (from app.api import users, errors, tokens, posts) so the blueprint registers the route. Tests run via `python -m unittest discover -q` (pytest is not installed in the venv).",
+  "locators":[
+    {"kind":"symbol","ref":"app.models.Post#to_dict","signature":"to_dict()","path":"app/models.py","role":"primary_change_point"},
+    {"kind":"file","ref":"app/api/posts.py","role":"primary_change_point"},
+    {"kind":"file","ref":"app/api/__init__.py","role":"configuration"},
+    {"kind":"file","ref":"app/api/errors.py","role":"supporting"},
+    {"kind":"file","ref":"app/api/auth.py","role":"supporting"}
+  ],
+  "appliesWhen":["Adding a new read-only token-authenticated JSON API endpoint to this Flask microblog app"],
+  "limitations":["Does not cover write endpoints (POST/PUT) or pagination collection endpoints"],
+  "reusableFor":["Adding future GET /api/<resource>/<id> endpoints","Debugging why a new api submodule route 404s (missing import in app/api/__init__.py)"]
+}]}

@@ -28,7 +28,7 @@ class AgentLearningMigrationTest {
         var result = Flyway.configure().dataSource(dataSource).locations("classpath:db/migration").load().migrate();
         var jdbc = new JdbcTemplate(dataSource);
 
-        assertThat(result.migrationsExecuted).isEqualTo(10);
+        assertThat(result.migrationsExecuted).isEqualTo(11);
         assertThat(jdbc.queryForList("""
                 SELECT table_name FROM information_schema.tables
                 WHERE table_schema='public' AND table_name IN

@@ -1,0 +1,9 @@
+{
+  "keys": {
+    "handler": {"kind": "symbol", "accept": ["not_found_error", "app.errors.handlers.not_found_error", "handlers.not_found_error", "errors.handlers.not_found_error"]},
+    "decider": {"kind": "symbol", "accept": ["wants_json_response", "app.errors.handlers.wants_json_response", "handlers.wants_json_response", "errors.handlers.wants_json_response"]},
+    "format": {"kind": "text", "accept": ["json", "application/json"]},
+    "status": {"kind": "text", "accept": ["404"]}
+  },
+  "contradict": ["handle_exception", "text/html", "\\bhtml\\b", "errors/404\\.html"]
+}

@@ -1,0 +1,35 @@
+{
+  "keys": {
+    "view": {
+      "kind": "text",
+      "accept": [
+        "owners/findOwners",
+        "owners/findOwners.html",
+        "templates/owners/findOwners.html",
+        "src/main/resources/templates/owners/findOwners.html",
+        "findOwners"
+      ]
+    },
+    "errorcode": {
+      "kind": "text",
+      "accept": [
+        "notFound",
+        "\"notFound\""
+      ]
+    },
+    "field": {
+      "kind": "text",
+      "accept": [
+        "lastName",
+        "owner.lastName"
+      ]
+    }
+  },
+  "contradict": [
+    "ownersList",
+    "redirect",
+    "\\b404\\b",
+    "\\b500\\b",
+    "ownerDetails"
+  ]
+}
