@@ -1,0 +1,121 @@
+diff --git a/test_api_tokens.py b/test_api_tokens.py
+new file mode 100644
+index 0000000..578150c
+--- /dev/null
++++ b/test_api_tokens.py
+@@ -0,0 +1,115 @@
++#!/usr/bin/env python
++from datetime import datetime, timezone, timedelta
++from base64 import b64encode
++import unittest
++from app import create_app, db
++from app.models import User
++from config import Config
++
++
++class TestConfig(Config):
++    TESTING = True
++    SQLALCHEMY_DATABASE_URI = 'sqlite://'
++    ELASTICSEARCH_URL = None
++
++
++class APITokenCase(unittest.TestCase):
++    def setUp(self):
++        self.app = create_app(TestConfig)
++        self.app_context = self.app.app_context()
++        self.app_context.push()
++        db.create_all()
++        self.client = self.app.test_client()
++        self.user = User(username='susan', email='susan@example.com')
++        self.user.set_password('cat')
++        db.session.add(self.user)
++        db.session.commit()
++
++    def tearDown(self):
++        db.session.remove()
++        db.drop_all()
++        self.app_context.pop()
++
++    def basic(self, username, password):
++        raw = f'{username}:{password}'.encode()
++        return {'Authorization': 'Basic ' + b64encode(raw).decode()}
++
++    def bearer(self, token):
++        return {'Authorization': 'Bearer ' + token}
++
++    def request_token(self):
++        rv = self.client.post('/api/tokens', headers=self.basic('susan', 'cat'))
++        self.assertEqual(rv.status_code, 200)
++        return rv.get_json()['token']
++
++    def expiration(self):
++        db.session.expire_all()
++        value = db.session.get(User, self.user.id).token_expiration
++        return value.replace(tzinfo=timezone.utc)
++
++    def set_expiration(self, delta):
++        user = db.session.get(User, self.user.id)
++        user.token_expiration = datetime.now(timezone.utc) + delta
++        db.session.commit()
++
++    def test_token_with_valid_password(self):
++        token = self.request_token()
++        self.assertIsInstance(token, str)
++        self.assertTrue(token)
++        rv = self.client.get(f'/api/users/{self.user.id}', headers=self.bearer(token))
++        self.assertEqual(rv.status_code, 200)
++        self.assertEqual(rv.get_json()['username'], 'susan')
++
++    def test_wrong_password_or_user_gets_401(self):
++        rv = self.client.post('/api/tokens', headers=self.basic('susan', 'dog'))
++        self.assertEqual(rv.status_code, 401)
++        self.assertEqual(rv.get_json()['error'], 'Unauthorized')
++        rv = self.client.post('/api/tokens', headers=self.basic('nobody', 'cat'))
++        self.assertEqual(rv.status_code, 401)
++        rv = self.client.post('/api/tokens')
++        self.assertEqual(rv.status_code, 401)
++
++    def test_token_lifetime_is_one_hour(self):
++        self.request_token()
++        left = self.expiration() - datetime.now(timezone.utc)
++        self.assertGreater(left, timedelta(minutes=59))
++        self.assertLessEqual(left, timedelta(hours=1))
++
++    def test_same_token_while_more_than_a_minute_left(self):
++        first = self.request_token()
++        self.assertEqual(self.request_token(), first)
++        self.set_expiration(timedelta(minutes=5))
++        self.assertEqual(self.request_token(), first)
++
++    def test_new_token_when_less_than_a_minute_left(self):
++        first = self.request_token()
++        self.set_expiration(timedelta(seconds=30))
++        second = self.request_token()
++        self.assertNotEqual(second, first)
++        self.assertGreater(self.expiration() - datetime.now(timezone.utc),
++                           timedelta(minutes=59))
++
++    def test_expired_token_is_rejected(self):
++        token = self.request_token()
++        self.set_expiration(timedelta(seconds=-5))
++        rv = self.client.get(f'/api/users/{self.user.id}', headers=self.bearer(token))
++        self.assertEqual(rv.status_code, 401)
++        self.assertEqual(rv.get_json()['error'], 'Unauthorized')
++
++    def test_unknown_or_missing_token_is_rejected(self):
++        rv = self.client.get(f'/api/users/{self.user.id}', headers=self.bearer('nope'))
++        self.assertEqual(rv.status_code, 401)
++        rv = self.client.get(f'/api/users/{self.user.id}')
++        self.assertEqual(rv.status_code, 401)
++
++    def test_revoked_token_is_rejected(self):
++        token = self.request_token()
++        rv = self.client.delete('/api/tokens', headers=self.bearer(token))
++        self.assertEqual(rv.status_code, 204)
++        rv = self.client.get(f'/api/users/{self.user.id}', headers=self.bearer(token))
++        self.assertEqual(rv.status_code, 401)
++        self.assertNotEqual(self.request_token(), token)
++
++
++if __name__ == '__main__':
++    unittest.main(verbosity=2)

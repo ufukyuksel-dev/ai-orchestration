@@ -87,6 +87,11 @@ public interface CodeBaselineRepository {
         return List.of();
     }
 
+    /** The symbols of one scanned file, in line order (a file's outline). */
+    default List<CodeSymbolRecord> findSymbolsForFile(String projectKey, UUID fileId, int limit) {
+        return List.of();
+    }
+
     default boolean directoryExists(String projectKey, String canonicalDirectory) {
         return false;
     }

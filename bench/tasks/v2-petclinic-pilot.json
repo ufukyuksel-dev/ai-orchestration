@@ -1,0 +1,40 @@
+{
+  "suite": "v2-petclinic-pilot",
+  "note": "Disposable pilot family for spring-petclinic (plan-harness-benchmark-v2 §7.2): validates setup, baselines, scoring and resume of the v2 runner. Never scored, never reused. Notes: bench/v2-petclinic-notes.md.",
+  "repo": "spring-petclinic",
+  "sha": "a6efbed773f61a271c071461326940786998722e",
+  "hiddenTarget": "src/test/java/org/springframework/samples/petclinic",
+  "qualityCommand": [
+    "./mvnw",
+    "-q",
+    "-DskipTests",
+    "validate"
+  ],
+  "families": [
+    {
+      "id": "PCP",
+      "title": "Pilot: pet names and a code question",
+      "tasks": [
+        {
+          "id": "pcp1",
+          "type": "B",
+          "kind": "code",
+          "prompt": "Owners can end up with two pets of the same name when the names differ only in letter case: adding a new pet named `LEO` (or `leo`) to George Franklin, who already has a pet named `Leo`, is accepted and creates a second pet. Pet names of one owner must be unique regardless of letter case: the add-pet form must reject such a name with the same 'is already in use' error on the name field that an exact duplicate gets, and must not save the pet. Make sure the project's build and tests still pass.",
+          "hidden": [
+            "BenchPcp1Test.java"
+          ],
+          "tests": "!MySqlIntegrationTests,!PostgresIntegrationTests",
+          "baseline": {
+            "patch": "baselines/pcp1.patch"
+          }
+        },
+        {
+          "id": "pcp2",
+          "type": "I",
+          "kind": "investigation",
+          "prompt": "Answer from the code: how many owners does one page of the owner search results show, and what is the name of the cache that the veterinarian lookups go through? Do not change any files. End your reply with a block that starts with a line `ANSWER:` followed by one `key: value` line per key: `pageSize` (a number), `cache` (the cache name)."
+        }
+      ]
+    }
+  ]
+}

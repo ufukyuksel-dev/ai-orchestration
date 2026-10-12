@@ -336,6 +336,7 @@ class McpServerIT {
             assertThat(item.status()).isEqualTo("active");
         });
         assertThat(response.wordEstimate()).isPositive();
+        assertThat(response.hint()).isNull();
         byte[] serialized = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(response);
         assertThat(serialized.length).isLessThan(4096);
         assertThat(new String(serialized, java.nio.charset.StandardCharsets.UTF_8))
@@ -350,9 +351,11 @@ class McpServerIT {
         when(retrieval.searchPreviews("fact", "PROJECT_A", null, 3, 256)).thenReturn(List.of());
         MemoryMcpTool tool = memoryTool(retrieval, mock(MemoryService.class));
 
-        tool.search("fact", 3, null, "PROJECT_A", 256, "agent");
+        Object empty = tool.search("fact", 3, null, "PROJECT_A", 256, "agent");
 
         verify(retrieval).searchPreviews("fact", "PROJECT_A", null, 3, 256);
+        // an empty answer tells the agent to stop searching memory for this task
+        assertThat(((MemoryAgentViewResponse.Search) empty).hint()).isEqualTo(MemoryMcpTool.NOTHING_IN_MEMORY);
     }
 
     @Test

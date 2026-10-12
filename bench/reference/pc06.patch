@@ -1,0 +1,114 @@
+diff --git a/src/test/java/org/springframework/samples/petclinic/owner/OwnerPetsTests.java b/src/test/java/org/springframework/samples/petclinic/owner/OwnerPetsTests.java
+new file mode 100644
+index 0000000..3fbf6df
+--- /dev/null
++++ b/src/test/java/org/springframework/samples/petclinic/owner/OwnerPetsTests.java
+@@ -0,0 +1,108 @@
++/*
++ * Copyright 2012-2025 the original author or authors.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      https://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.springframework.samples.petclinic.owner;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
++
++import org.junit.jupiter.api.BeforeEach;
++import org.junit.jupiter.api.Test;
++
++/**
++ * Pet lookup and the adding of pets and visits on {@link Owner}.
++ */
++class OwnerPetsTests {
++
++	private Owner owner;
++
++	private Pet leo;
++
++	private Pet basil;
++
++	private static Pet pet(String name) {
++		Pet pet = new Pet();
++		pet.setName(name);
++		return pet;
++	}
++
++	@BeforeEach
++	void setUp() {
++		this.owner = new Owner();
++		this.leo = pet("Leo");
++		this.basil = pet("Basil");
++		this.owner.addPet(this.leo);
++		this.owner.addPet(this.basil);
++		this.leo.setId(1);
++		this.basil.setId(2);
++	}
++
++	@Test
++	void findsPetByNameIgnoringCase() {
++		assertThat(this.owner.getPet("Leo")).isSameAs(this.leo);
++		assertThat(this.owner.getPet("leo")).isSameAs(this.leo);
++		assertThat(this.owner.getPet("BASIL", true)).isSameAs(this.basil);
++		assertThat(this.owner.getPet("Rosy")).isNull();
++	}
++
++	@Test
++	void unsavedPetsAreFoundByNameUnlessIgnored() {
++		Pet fresh = pet("Fresh");
++		this.owner.addPet(fresh);
++		assertThat(this.owner.getPet("Fresh")).isSameAs(fresh);
++		assertThat(this.owner.getPet("Fresh", false)).isSameAs(fresh);
++		assertThat(this.owner.getPet("Fresh", true)).isNull();
++		assertThat(this.owner.getPet("Leo", true)).isSameAs(this.leo);
++	}
++
++	@Test
++	void findsPetById() {
++		assertThat(this.owner.getPet(1)).isSameAs(this.leo);
++		assertThat(this.owner.getPet(2)).isSameAs(this.basil);
++		assertThat(this.owner.getPet(3)).isNull();
++	}
++
++	@Test
++	void addsOnlyUnsavedPets() {
++		assertThat(this.owner.getPets()).hasSize(2);
++		this.owner.addPet(this.leo);
++		assertThat(this.owner.getPets()).hasSize(2);
++		Pet saved = pet("Saved");
++		saved.setId(9);
++		this.owner.addPet(saved);
++		assertThat(this.owner.getPets()).hasSize(2).doesNotContain(saved);
++		Pet fresh = pet("Fresh");
++		this.owner.addPet(fresh);
++		assertThat(this.owner.getPets()).hasSize(3).contains(fresh);
++	}
++
++	@Test
++	void addsVisitToThePetWithTheGivenId() {
++		Visit visit = new Visit();
++		visit.setDescription("rabies shot");
++		this.owner.addVisit(2, visit);
++		assertThat(this.basil.getVisits()).containsExactly(visit);
++		assertThat(this.leo.getVisits()).isEmpty();
++	}
++
++	@Test
++	void addingVisitToUnknownPetIsRejected() {
++		assertThatIllegalArgumentException().isThrownBy(() -> this.owner.addVisit(42, new Visit()));
++		assertThatIllegalArgumentException().isThrownBy(() -> this.owner.addVisit(null, new Visit()));
++		assertThatIllegalArgumentException().isThrownBy(() -> this.owner.addVisit(1, null));
++		assertThat(this.leo.getVisits()).isEmpty();
++	}
++
++}

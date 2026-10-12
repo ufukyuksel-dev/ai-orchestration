@@ -428,6 +428,65 @@ class MemoryLifecycleTest(CommandTestCase):
         )
 
 
+class MemorySearchGateTest(CommandTestCase):
+    """After a search that found nothing, `memory search` answers locally until the next prompt of that session."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        for patcher in (patch.object(ai_orch.copilot_memory_gate.tempfile, "gettempdir", return_value=tmp.name),
+                        patch.dict(os.environ, {"COPILOT_AGENT_SESSION_ID": "session-a"})):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def search(self, query: str, result: object = None):
+        results = {"memory.search": result} if result is not None else {}
+        return self.run_command(["memory", "search", "--query", query, "--view", "agent"], results)
+
+    def searches(self, client: FakeClient) -> int:
+        return sum(1 for name, _ in client.calls if name == "memory.search")
+
+    def test_an_empty_answer_refuses_further_searches_without_a_server_call(self) -> None:
+        first_output, first = self.search("csv export", {"schemaVersion": 1, "items": []})
+        self.assertEqual(self.searches(first), 1)
+        self.assertEqual(first_output["result"]["hint"], ai_orch.copilot_memory_gate.NOTHING)
+        output, second = self.search("vets controller", {"knowledge": [{"id": "m"}]})
+        self.assertEqual(second.calls, [])  # not even initialize/resolve: nothing reaches the server
+        self.assertTrue(output["result"]["refused"])
+        self.assertIn("final for this task", output["result"]["hint"])
+        self.assertIn("csv export", output["result"]["hint"])
+
+    def test_the_same_query_is_answered_locally_and_other_queries_still_run(self) -> None:
+        self.search("Owner validation", {"knowledge": [{"id": "m"}]})
+        output, again = self.search("owner  VALIDATION", {"knowledge": [{"id": "m"}]})
+        self.assertEqual(again.calls, [])
+        self.assertIn("already searched memory", output["result"]["hint"])
+        _, other = self.search("pet formatter", {"knowledge": [{"id": "n"}]})
+        self.assertEqual(self.searches(other), 1)
+
+    def test_a_failed_search_closes_nothing(self) -> None:
+        self.search("csv export", {"error": "unavailable"})
+        _, retry = self.search("csv export", {"knowledge": []})
+        self.assertEqual(self.searches(retry), 1)
+
+    def test_a_new_prompt_reopens_memory_and_other_sessions_are_independent(self) -> None:
+        self.search("csv export", {"knowledge": []})
+        with patch.dict(os.environ, {"COPILOT_AGENT_SESSION_ID": "session-b"}):
+            _, other_session = self.search("csv export", {"knowledge": []})
+        self.assertEqual(self.searches(other_session), 1)
+        with patch("sys.stdin", new=io.StringIO(json.dumps({"sessionId": "session-a", "prompt": "next"}))):
+            ai_orch.copilot_memory_gate.main()
+        _, next_request = self.search("csv export", {"knowledge": []})
+        self.assertEqual(self.searches(next_request), 1)
+
+    def test_without_a_copilot_session_nothing_is_gated(self) -> None:
+        with patch.dict(os.environ, {"COPILOT_AGENT_SESSION_ID": ""}):
+            self.search("csv export", {"knowledge": []})
+            _, again = self.search("csv export", {"knowledge": []})
+        self.assertEqual(self.searches(again), 1)
+
+
 class AgentLearningCommandTest(CommandTestCase):
     def test_memory_exposes_search_learn_update_and_archive_only(self) -> None:
         root_choices = parser()._subparsers._group_actions[0].choices
@@ -501,6 +560,110 @@ class AgentLearningCommandTest(CommandTestCase):
         self.assertFalse(expired.exists())
         self.assertTrue(Path(request).exists())
         self.assertEqual(json.loads(staged[0].read_text())["contractVersion"], "agent-learning/v2")
+
+    FIXTURES = Path(__file__).resolve().parent / "fixtures"
+
+    def learn(self, payload: dict) -> tuple[dict, dict]:
+        request = self.workspace.request("learn.json", payload)
+        output, client = self.run_command(
+            ["memory", "learn", "--file", request],
+            {"terminal.learning.capture": {"status": "ACCEPTED", "created": 1}},
+        )
+        return output, client.calls[-1][1]
+
+    def test_requests_rejected_in_the_benchmark_are_now_accepted_in_one_try(self) -> None:
+        # the two requests Copilot wrote in the benchmark that the bridge rejected (a locator used by two
+        # candidates; content of 754 characters), unchanged
+        duplicate = json.loads((self.FIXTURES / "learn-rejected-duplicate-locators.json").read_text())
+        output, sent = self.learn(duplicate)
+        self.assertEqual(len(sent["learningCandidates"]), 2)
+        refs = [[loc["ref"] for loc in c["locators"]] for c in sent["learningCandidates"]]
+        self.assertEqual(refs, [["app/api/__init__.py", "app/api/posts.py"], ["app.models.Post", "app/api/posts.py"]])
+        self.assertTrue(output["success"])
+
+        long = json.loads((self.FIXTURES / "learn-rejected-long-content.json").read_text())
+        output, sent = self.learn(long)
+        content = sent["learningCandidates"][0]["content"]
+        self.assertLessEqual(len(content), 700)
+        self.assertTrue(content.endswith("\u2026"))
+        self.assertTrue(long["learningCandidates"][0]["content"].startswith(content[:-1].rstrip()))
+        self.assertIn("learning 0 content shortened to 700 characters", output["warnings"])
+
+    def test_fitting_keeps_locator_details_and_only_drops_exact_repeats(self) -> None:
+        file_a = {"kind": "file", "ref": "app/a.py", "role": "primary_change_point"}
+        f_in_a = {"kind": "symbol", "ref": "app.a.f", "path": "app/a.py", "role": "supporting"}
+        f_in_b = dict(f_in_a, path="app/b.py")
+        payload = {"learningCandidates": [{
+            "kind": "behavior", "summary": "S" * 200, "content": "word " * 200,
+            "locators": [file_a, dict(file_a), f_in_a, f_in_b],
+            "appliesWhen": ["x", "x"] + [f"case {i}" for i in range(8)],
+        }]}
+        output, sent = self.learn(payload)
+        candidate = sent["learningCandidates"][0]
+        # the exact repeat is dropped; the same symbol in another file is another target and stays
+        self.assertEqual(candidate["locators"], [file_a, f_in_a, f_in_b])
+        self.assertEqual(len(candidate["summary"]), 160)
+        self.assertLessEqual(len(candidate["content"]), 700)
+        self.assertEqual(candidate["appliesWhen"], ["x", "case 0", "case 1", "case 2", "case 3", "case 4"])
+        self.assertEqual(len(output["warnings"]), 5)  # locator, summary, content, repeated entry, list cut
+
+    def test_one_target_with_two_roles_in_a_candidate_is_rejected_like_the_server_does(self) -> None:
+        # AgentLearningService rejects "locators must be unique" by captureLocatorKey, which ignores the role; the
+        # bridge asks the agent to choose instead of dropping one role silently
+        file_a = {"kind": "file", "ref": "app/a.py", "role": "primary_change_point"}
+        sym = {"kind": "symbol", "ref": "app.a.f", "path": "app/a.py", "role": "supporting", "signature": "f(x)"}
+        for second in (dict(file_a, role="supporting"), dict(sym, signature="def f(x)")):
+            first = sym if second["kind"] == "symbol" else file_a
+            with self.subTest(second=second):
+                error, client = self.expect_failure(["memory", "learn", "--file", self.workspace.request(
+                    "conflict.json", {"learningCandidates": [{"kind": "behavior", "summary": "s", "content": "c",
+                                                              "locators": [first, second]}]})])
+                self.assertIn("twice with different roles or signatures", str(error))
+                self.assertNotIn("terminal.learning.capture", [name for name, _ in client.calls])
+        # another signature parameter list is another target (server key: ref + signature from "(")
+        output, sent = self.learn({"learningCandidates": [{"kind": "behavior", "summary": "s", "content": "c",
+                                                           "locators": [sym, dict(sym, signature="f(x, y)")]}]})
+        self.assertEqual(len(sent["learningCandidates"][0]["locators"]), 2)
+
+    def test_eight_targets_are_counted_with_the_servers_key(self) -> None:
+        def symbol(i: int, signature: str) -> dict:
+            return {"kind": "symbol", "ref": f"app.m.f{i}", "path": "app/m.py", "role": "supporting",
+                    "signature": signature}
+
+        # the same eight targets written with different signature prefixes count as eight, shared across candidates
+        first = [symbol(i, f"f{i}(a)") for i in range(8)]
+        second = [symbol(i, f"def f{i}(a)") for i in range(8)]
+        _, sent = self.learn({"learningCandidates": [
+            {"kind": "behavior", "summary": "one", "content": "c", "locators": first},
+            {"kind": "behavior", "summary": "two", "content": "c", "locators": second}]})
+        self.assertEqual(len(sent["learningCandidates"]), 2)
+        error, _ = self.expect_failure(["memory", "learn", "--file", self.workspace.request("nine.json", {
+            "learningCandidates": [{"kind": "behavior", "summary": "s", "content": "c", "locators": first},
+                                   {"kind": "behavior", "summary": "t", "content": "c",
+                                    "locators": [symbol(8, "f8(a)")]}]})])
+        self.assertIn("at most eight distinct locators", str(error))
+
+    def test_what_cannot_be_fitted_is_still_rejected(self) -> None:
+        good = {"kind": "file", "ref": "app/a.py", "role": "primary_change_point"}
+        for broken, message in (
+            ({"kind": "opinion", "summary": "s", "content": "c", "locators": [good]}, "unsupported kind"),
+            ({"kind": "behavior", "summary": "s", "content": "c",
+              "locators": [{"kind": "file", "ref": "/abs/a.py", "role": "supporting"}]}, "canonical"),
+            ({"kind": "behavior", "summary": "s", "content": "c",
+              "locators": [{"kind": "directory", "ref": "app", "role": "supporting"}]}, "symbol or file"),
+            ({"kind": "behavior", "summary": "s", "content": "c",
+              "locators": [{"kind": "file", "ref": "x" * 600, "role": "supporting"}]}, "exceeds"),
+        ):
+            with self.subTest(message=message):
+                error, _ = self.expect_failure(
+                    ["memory", "learn", "--file", self.workspace.request("bad.json", {"learningCandidates": [broken]})])
+                self.assertIn(message, str(error))
+        many = [{"kind": "behavior", "summary": f"s{i}", "content": "c",
+                 "locators": [{"kind": "file", "ref": f"app/f{i}{j}.py", "role": "supporting"} for j in range(3)]}
+                for i in range(3)]
+        error, _ = self.expect_failure(
+            ["memory", "learn", "--file", self.workspace.request("many.json", {"learningCandidates": many})])
+        self.assertIn("at most eight distinct locators", str(error))
 
     def test_memory_learn_consume_removes_request_only_after_completed_receipt(self) -> None:
         request = self.workspace.request(
@@ -620,21 +783,17 @@ class AgentLearningCommandTest(CommandTestCase):
                 self.assertIn(expected, str(error))
                 self.assertNotIn("terminal.learning.capture", [name for name, _ in client.calls])
 
-    def test_memory_learn_rejects_bounded_list_entries_over_160_characters(self) -> None:
+    def test_memory_learn_fits_bounded_list_entries_over_160_characters(self) -> None:
         candidate = {
             "kind": "behavior", "summary": "s", "content": "c",
             "locators": [{"kind": "file", "ref": "src/A.java", "role": "supporting"}],
         }
         for field in ("appliesWhen", "limitations", "reusableFor"):
             with self.subTest(field=field):
-                invalid = dict(candidate, **{field: ["x" * 161]})
-                request = self.workspace.request(
-                    f"invalid-{field}-length.json",
-                    {"learningCandidates": [invalid]},
-                )
-                error, client = self.expect_failure(["memory", "learn", "--file", request])
-                self.assertIn(f"{field} entry exceeds 160 characters", str(error))
-                self.assertNotIn("terminal.learning.capture", [name for name, _ in client.calls])
+                long = dict(candidate, **{field: ["x" * 161]})
+                output, sent = self.learn({"learningCandidates": [long]})
+                self.assertEqual(len(sent["learningCandidates"][0][field][0]), 160)
+                self.assertIn(f"learning 0 {field} entry shortened to 160 characters", output["warnings"])
 
     def test_memory_learn_accepts_context_local_correction_ref(self) -> None:
         candidate = {

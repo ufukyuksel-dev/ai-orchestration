@@ -1,0 +1,15 @@
+diff --git a/src/main/java/org/springframework/samples/petclinic/owner/Owner.java b/src/main/java/org/springframework/samples/petclinic/owner/Owner.java
+index 480a7a6..f7c195d 100644
+--- a/src/main/java/org/springframework/samples/petclinic/owner/Owner.java
++++ b/src/main/java/org/springframework/samples/petclinic/owner/Owner.java
+@@ -95,9 +95,7 @@ public class Owner extends Person {
+ 	}
+ 
+ 	public void addPet(Pet pet) {
+-		if (pet.isNew()) {
+-			getPets().add(pet);
+-		}
++		getPets().add(pet);
+ 	}
+ 
+ 	/**

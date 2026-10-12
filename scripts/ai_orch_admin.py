@@ -138,7 +138,8 @@ def _claude():
         return False, "registered without alwaysLoad (its tools are deferred)", "./install.sh (re-run registers it)"
     settings = Path.home() / ".claude" / "settings.json"
     text = settings.read_text() if settings.exists() else ""
-    hooked = "ai_orch_prompt_context.py" in text and "ai_orch_learn_reminder.py" in text
+    hooked = "ai_orch_prompt_context.py" in text and ("ai_orch_stop.py" in text  # the Stop hook (checks + learning)
+                                                     or "ai_orch_learn_reminder.py" in text)  # its earlier form
     return hooked, "registered, hooks installed" if hooked else "registered, hooks missing", \
         "./install.sh (re-run installs the hooks)"
 

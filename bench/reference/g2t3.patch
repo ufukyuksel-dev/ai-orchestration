@@ -1,0 +1,87 @@
+diff --git a/articles/csv.go b/articles/csv.go
+new file mode 100644
+index 0000000..752ef7d
+--- /dev/null
++++ b/articles/csv.go
+@@ -0,0 +1,23 @@
++package articles
++
++import (
++	"bytes"
++	"encoding/csv"
++	"net/http"
++
++	"github.com/gin-gonic/gin"
++)
++
++// csvDateFormat is the timestamp format of the JSON API (createdAt/updatedAt).
++const csvDateFormat = "2006-01-02T15:04:05.999Z"
++
++// writeCSV answers with the records as RFC 4180 CSV (encoding/csv quotes commas, quotes and line breaks).
++func writeCSV(c *gin.Context, records [][]string) {
++	var buf bytes.Buffer
++	w := csv.NewWriter(&buf)
++	if err := w.WriteAll(records); err != nil {
++		c.AbortWithStatus(http.StatusInternalServerError)
++		return
++	}
++	c.Data(http.StatusOK, "text/csv; charset=utf-8", buf.Bytes())
++}
+diff --git a/articles/favorites_csv.go b/articles/favorites_csv.go
+new file mode 100644
+index 0000000..b851410
+--- /dev/null
++++ b/articles/favorites_csv.go
+@@ -0,0 +1,40 @@
++package articles
++
++import (
++	"errors"
++	"net/http"
++
++	"github.com/gin-gonic/gin"
++	"github.com/gothinkster/golang-gin-realworld-example-app/common"
++	"github.com/gothinkster/golang-gin-realworld-example-app/users"
++)
++
++// ProfileFavoritesAnonymousRegister registers the favorites export of a profile. It lives in this package
++// because favorites are article models (users cannot import articles).
++func ProfileFavoritesAnonymousRegister(router *gin.RouterGroup) {
++	router.GET("/:username/favorites.csv", ProfileFavoritesCSV)
++}
++
++// ProfileFavoritesCSV exports the articles a user currently favorites, ordered by slug.
++func ProfileFavoritesCSV(c *gin.Context) {
++	userModel, err := users.FindOneUser(&users.UserModel{Username: c.Param("username")})
++	if err != nil {
++		c.JSON(http.StatusNotFound, common.NewError("profile", errors.New("Invalid username")))
++		return
++	}
++	db := common.GetDB()
++	records := [][]string{{"slug", "title", "author"}}
++	// FavoriteModel.FavoriteByID references the ArticleUserModel, not the UserModel.
++	var articleUser ArticleUserModel
++	db.Where(&ArticleUserModel{UserModelID: userModel.ID}).Limit(1).Find(&articleUser)
++	if articleUser.ID != 0 {
++		var models []ArticleModel
++		db.Preload("Author.UserModel").
++			Where("id IN (?)", db.Model(&FavoriteModel{}).Select("favorite_id").Where("favorite_by_id = ?", articleUser.ID)).
++			Order("slug ASC").Find(&models)
++		for _, m := range models {
++			records = append(records, []string{m.Slug, m.Title, m.Author.UserModel.Username})
++		}
++	}
++	writeCSV(c, records)
++}
+diff --git a/hello.go b/hello.go
+index 4ff36d3..5f2443c 100644
+--- a/hello.go
++++ b/hello.go
+@@ -44,6 +44,7 @@ func main() {
+ 	articles.ArticlesAnonymousRegister(v1.Group("/articles"))
+ 	articles.TagsAnonymousRegister(v1.Group("/tags"))
+ 	users.ProfileRetrieveRegister(v1.Group("/profiles"))
++	articles.ProfileFavoritesAnonymousRegister(v1.Group("/profiles"))
+ 
+ 	v1.Use(users.AuthMiddleware(true))
+ 	users.UserRegister(v1.Group("/user"))

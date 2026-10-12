@@ -1,0 +1,61 @@
+diff --git a/app/api/__init__.py b/app/api/__init__.py
+index 61b2e60..cb3aad4 100644
+--- a/app/api/__init__.py
++++ b/app/api/__init__.py
+@@ -2,4 +2,4 @@ from flask import Blueprint
+ 
+ bp = Blueprint('api', __name__)
+ 
+-from app.api import users, errors, tokens
++from app.api import users, errors, tokens, posts
+diff --git a/app/api/posts.py b/app/api/posts.py
+new file mode 100644
+index 0000000..3e712e1
+--- /dev/null
++++ b/app/api/posts.py
+@@ -0,0 +1,45 @@
++from datetime import timezone
++from flask import request, url_for
++import sqlalchemy as sa
++from app import db
++from app.models import Post, User
++from app.api import bp
++from app.api.auth import token_auth
++
++
++def post_to_dict(post):
++    return {
++        'id': post.id,
++        'body': post.body,
++        'timestamp': post.timestamp.replace(tzinfo=timezone.utc).isoformat(),
++        'language': post.language or None,
++        'author': {'id': post.author.id, 'username': post.author.username},
++    }
++
++
++@bp.route('/users/<int:id>/posts', methods=['GET'])
++@token_auth.login_required
++def get_user_posts(id):
++    user = db.get_or_404(User, id)
++    page = request.args.get('page', 1, type=int)
++    per_page = min(request.args.get('per_page', 10, type=int), 100)
++    query = user.posts.select().order_by(Post.timestamp.desc(),
++                                         Post.id.desc())
++    posts = db.paginate(query, page=page, per_page=per_page, error_out=False)
++    return {
++        'items': [post_to_dict(post) for post in posts.items],
++        '_meta': {
++            'page': page,
++            'per_page': per_page,
++            'total_pages': posts.pages,
++            'total_items': posts.total,
++        },
++        '_links': {
++            'self': url_for('api.get_user_posts', id=id, page=page,
++                            per_page=per_page),
++            'next': url_for('api.get_user_posts', id=id, page=page + 1,
++                            per_page=per_page) if posts.has_next else None,
++            'prev': url_for('api.get_user_posts', id=id, page=page - 1,
++                            per_page=per_page) if posts.has_prev else None,
++        },
++    }

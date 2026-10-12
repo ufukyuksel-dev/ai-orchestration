@@ -1,0 +1,13 @@
+diff --git b/app/models.py a/app/models.py
+index be1412f..db447d8 100644
+--- b/app/models.py
++++ a/app/models.py
+@@ -155,7 +155,7 @@ class User(PaginatedAPIMixin, UserMixin, db.Model):
+ 
+     def followers_count(self):
+         query = sa.select(sa.func.count()).select_from(
+-            self.following.select().subquery())
++            self.followers.select().subquery())
+         return db.session.scalar(query)
+ 
+     def following_count(self):

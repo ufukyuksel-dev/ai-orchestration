@@ -1,0 +1,14 @@
+diff --git a/app/models.py b/app/models.py
+index db447d8..4451575 100644
+--- a/app/models.py
++++ b/app/models.py
+@@ -273,8 +273,7 @@ class User(PaginatedAPIMixin, UserMixin, db.Model):
+     @staticmethod
+     def check_token(token):
+         user = db.session.scalar(sa.select(User).where(User.token == token))
+-        if user is None or user.token_expiration.replace(
+-                tzinfo=timezone.utc) < datetime.now(timezone.utc):
++        if user is None:
+             return None
+         return user
+ 

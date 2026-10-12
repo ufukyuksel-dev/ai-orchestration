@@ -1,0 +1,382 @@
+diff --git a/app/models/__init__.py b/app/models/__init__.py
+new file mode 100644
+index 0000000..6ee3e66
+--- /dev/null
++++ b/app/models/__init__.py
+@@ -0,0 +1,9 @@
++from app.models.mixins import SearchableMixin, PaginatedAPIMixin
++from app.models.user import followers, User, load_user
++from app.models.post import Post
++from app.models.message import Message
++from app.models.notification import Notification
++from app.models.task import Task
++
++__all__ = ['SearchableMixin', 'PaginatedAPIMixin', 'followers', 'User',
++           'load_user', 'Post', 'Message', 'Notification', 'Task']
+diff --git a/app/models/message.py b/app/models/message.py
+new file mode 100644
+index 0000000..ca78f65
+--- /dev/null
++++ b/app/models/message.py
+@@ -0,0 +1,26 @@
++from datetime import datetime, timezone
++import sqlalchemy as sa
++import sqlalchemy.orm as so
++from app import db
++from app.models.user import User
++
++
++class Message(db.Model):
++    id: so.Mapped[int] = so.mapped_column(primary_key=True)
++    sender_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey(User.id),
++                                                 index=True)
++    recipient_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey(User.id),
++                                                    index=True)
++    body: so.Mapped[str] = so.mapped_column(sa.String(140))
++    timestamp: so.Mapped[datetime] = so.mapped_column(
++        index=True, default=lambda: datetime.now(timezone.utc))
++
++    author: so.Mapped[User] = so.relationship(
++        foreign_keys='Message.sender_id',
++        back_populates='messages_sent')
++    recipient: so.Mapped[User] = so.relationship(
++        foreign_keys='Message.recipient_id',
++        back_populates='messages_received')
++
++    def __repr__(self):
++        return '<Message {}>'.format(self.body)
+diff --git a/app/models/mixins.py b/app/models/mixins.py
+new file mode 100644
+index 0000000..a61a295
+--- /dev/null
++++ b/app/models/mixins.py
+@@ -0,0 +1,73 @@
++import sqlalchemy as sa
++from flask import url_for
++from app import db
++from app.search import add_to_index, remove_from_index, query_index
++
++
++class SearchableMixin:
++    @classmethod
++    def search(cls, expression, page, per_page):
++        ids, total = query_index(cls.__tablename__, expression, page, per_page)
++        if total == 0:
++            return [], 0
++        when = []
++        for i in range(len(ids)):
++            when.append((ids[i], i))
++        query = sa.select(cls).where(cls.id.in_(ids)).order_by(
++            db.case(*when, value=cls.id))
++        return db.session.scalars(query), total
++
++    @classmethod
++    def before_commit(cls, session):
++        session._changes = {
++            'add': list(session.new),
++            'update': list(session.dirty),
++            'delete': list(session.deleted)
++        }
++
++    @classmethod
++    def after_commit(cls, session):
++        for obj in session._changes['add']:
++            if isinstance(obj, SearchableMixin):
++                add_to_index(obj.__tablename__, obj)
++        for obj in session._changes['update']:
++            if isinstance(obj, SearchableMixin):
++                add_to_index(obj.__tablename__, obj)
++        for obj in session._changes['delete']:
++            if isinstance(obj, SearchableMixin):
++                remove_from_index(obj.__tablename__, obj)
++        session._changes = None
++
++    @classmethod
++    def reindex(cls):
++        for obj in db.session.scalars(sa.select(cls)):
++            add_to_index(cls.__tablename__, obj)
++
++
++db.event.listen(db.session, 'before_commit', SearchableMixin.before_commit)
++db.event.listen(db.session, 'after_commit', SearchableMixin.after_commit)
++
++
++class PaginatedAPIMixin(object):
++    @staticmethod
++    def to_collection_dict(query, page, per_page, endpoint, **kwargs):
++        resources = db.paginate(query, page=page, per_page=per_page,
++                                error_out=False)
++        data = {
++            'items': [item.to_dict() for item in resources.items],
++            '_meta': {
++                'page': page,
++                'per_page': per_page,
++                'total_pages': resources.pages,
++                'total_items': resources.total
++            },
++            '_links': {
++                'self': url_for(endpoint, page=page, per_page=per_page,
++                                **kwargs),
++                'next': url_for(endpoint, page=page + 1, per_page=per_page,
++                                **kwargs) if resources.has_next else None,
++                'prev': url_for(endpoint, page=page - 1, per_page=per_page,
++                                **kwargs) if resources.has_prev else None
++            }
++        }
++        return data
+diff --git a/app/models/notification.py b/app/models/notification.py
+new file mode 100644
+index 0000000..2dcea3d
+--- /dev/null
++++ b/app/models/notification.py
+@@ -0,0 +1,20 @@
++import json
++from time import time
++import sqlalchemy as sa
++import sqlalchemy.orm as so
++from app import db
++from app.models.user import User
++
++
++class Notification(db.Model):
++    id: so.Mapped[int] = so.mapped_column(primary_key=True)
++    name: so.Mapped[str] = so.mapped_column(sa.String(128), index=True)
++    user_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey(User.id),
++                                               index=True)
++    timestamp: so.Mapped[float] = so.mapped_column(index=True, default=time)
++    payload_json: so.Mapped[str] = so.mapped_column(sa.Text)
++
++    user: so.Mapped[User] = so.relationship(back_populates='notifications')
++
++    def get_data(self):
++        return json.loads(str(self.payload_json))
+diff --git a/app/models/post.py b/app/models/post.py
+new file mode 100644
+index 0000000..7df2fac
+--- /dev/null
++++ b/app/models/post.py
+@@ -0,0 +1,23 @@
++from datetime import datetime, timezone
++from typing import Optional
++import sqlalchemy as sa
++import sqlalchemy.orm as so
++from app import db
++from app.models.mixins import SearchableMixin
++from app.models.user import User
++
++
++class Post(SearchableMixin, db.Model):
++    __searchable__ = ['body']
++    id: so.Mapped[int] = so.mapped_column(primary_key=True)
++    body: so.Mapped[str] = so.mapped_column(sa.String(140))
++    timestamp: so.Mapped[datetime] = so.mapped_column(
++        index=True, default=lambda: datetime.now(timezone.utc))
++    user_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey(User.id),
++                                               index=True)
++    language: so.Mapped[Optional[str]] = so.mapped_column(sa.String(5))
++
++    author: so.Mapped[User] = so.relationship(back_populates='posts')
++
++    def __repr__(self):
++        return '<Post {}>'.format(self.body)
+diff --git a/app/models/task.py b/app/models/task.py
+new file mode 100644
+index 0000000..9dadb51
+--- /dev/null
++++ b/app/models/task.py
+@@ -0,0 +1,29 @@
++from typing import Optional
++import sqlalchemy as sa
++import sqlalchemy.orm as so
++from flask import current_app
++import redis
++import rq
++from app import db
++from app.models.user import User
++
++
++class Task(db.Model):
++    id: so.Mapped[str] = so.mapped_column(sa.String(36), primary_key=True)
++    name: so.Mapped[str] = so.mapped_column(sa.String(128), index=True)
++    description: so.Mapped[Optional[str]] = so.mapped_column(sa.String(128))
++    user_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey(User.id))
++    complete: so.Mapped[bool] = so.mapped_column(default=False)
++
++    user: so.Mapped[User] = so.relationship(back_populates='tasks')
++
++    def get_rq_job(self):
++        try:
++            rq_job = rq.job.Job.fetch(self.id, connection=current_app.redis)
++        except (redis.exceptions.RedisError, rq.exceptions.NoSuchJobError):
++            return None
++        return rq_job
++
++    def get_progress(self):
++        job = self.get_rq_job()
++        return job.meta.get('progress', 0) if job is not None else 100
+diff --git a/app/models.py b/app/models/user.py
+similarity index 59%
+rename from app/models.py
+rename to app/models/user.py
+index db447d8..3e8ae8b 100644
+--- a/app/models.py
++++ b/app/models/user.py
+@@ -10,79 +10,8 @@ from flask import current_app, url_for
+ from flask_login import UserMixin
+ from werkzeug.security import generate_password_hash, check_password_hash
+ import jwt
+-import redis
+-import rq
+ from app import db, login
+-from app.search import add_to_index, remove_from_index, query_index
+-
+-
+-class SearchableMixin:
+-    @classmethod
+-    def search(cls, expression, page, per_page):
+-        ids, total = query_index(cls.__tablename__, expression, page, per_page)
+-        if total == 0:
+-            return [], 0
+-        when = []
+-        for i in range(len(ids)):
+-            when.append((ids[i], i))
+-        query = sa.select(cls).where(cls.id.in_(ids)).order_by(
+-            db.case(*when, value=cls.id))
+-        return db.session.scalars(query), total
+-
+-    @classmethod
+-    def before_commit(cls, session):
+-        session._changes = {
+-            'add': list(session.new),
+-            'update': list(session.dirty),
+-            'delete': list(session.deleted)
+-        }
+-
+-    @classmethod
+-    def after_commit(cls, session):
+-        for obj in session._changes['add']:
+-            if isinstance(obj, SearchableMixin):
+-                add_to_index(obj.__tablename__, obj)
+-        for obj in session._changes['update']:
+-            if isinstance(obj, SearchableMixin):
+-                add_to_index(obj.__tablename__, obj)
+-        for obj in session._changes['delete']:
+-            if isinstance(obj, SearchableMixin):
+-                remove_from_index(obj.__tablename__, obj)
+-        session._changes = None
+-
+-    @classmethod
+-    def reindex(cls):
+-        for obj in db.session.scalars(sa.select(cls)):
+-            add_to_index(cls.__tablename__, obj)
+-
+-
+-db.event.listen(db.session, 'before_commit', SearchableMixin.before_commit)
+-db.event.listen(db.session, 'after_commit', SearchableMixin.after_commit)
+-
+-
+-class PaginatedAPIMixin(object):
+-    @staticmethod
+-    def to_collection_dict(query, page, per_page, endpoint, **kwargs):
+-        resources = db.paginate(query, page=page, per_page=per_page,
+-                                error_out=False)
+-        data = {
+-            'items': [item.to_dict() for item in resources.items],
+-            '_meta': {
+-                'page': page,
+-                'per_page': per_page,
+-                'total_pages': resources.pages,
+-                'total_items': resources.total
+-            },
+-            '_links': {
+-                'self': url_for(endpoint, page=page, per_page=per_page,
+-                                **kwargs),
+-                'next': url_for(endpoint, page=page + 1, per_page=per_page,
+-                                **kwargs) if resources.has_next else None,
+-                'prev': url_for(endpoint, page=page - 1, per_page=per_page,
+-                                **kwargs) if resources.has_prev else None
+-            }
+-        }
+-        return data
++from app.models.mixins import PaginatedAPIMixin
+ 
+ 
+ followers = sa.Table(
+@@ -284,73 +213,7 @@ def load_user(id):
+     return db.session.get(User, int(id))
+ 
+ 
+-class Post(SearchableMixin, db.Model):
+-    __searchable__ = ['body']
+-    id: so.Mapped[int] = so.mapped_column(primary_key=True)
+-    body: so.Mapped[str] = so.mapped_column(sa.String(140))
+-    timestamp: so.Mapped[datetime] = so.mapped_column(
+-        index=True, default=lambda: datetime.now(timezone.utc))
+-    user_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey(User.id),
+-                                               index=True)
+-    language: so.Mapped[Optional[str]] = so.mapped_column(sa.String(5))
+-
+-    author: so.Mapped[User] = so.relationship(back_populates='posts')
+-
+-    def __repr__(self):
+-        return '<Post {}>'.format(self.body)
+-
+-
+-class Message(db.Model):
+-    id: so.Mapped[int] = so.mapped_column(primary_key=True)
+-    sender_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey(User.id),
+-                                                 index=True)
+-    recipient_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey(User.id),
+-                                                    index=True)
+-    body: so.Mapped[str] = so.mapped_column(sa.String(140))
+-    timestamp: so.Mapped[datetime] = so.mapped_column(
+-        index=True, default=lambda: datetime.now(timezone.utc))
+-
+-    author: so.Mapped[User] = so.relationship(
+-        foreign_keys='Message.sender_id',
+-        back_populates='messages_sent')
+-    recipient: so.Mapped[User] = so.relationship(
+-        foreign_keys='Message.recipient_id',
+-        back_populates='messages_received')
+-
+-    def __repr__(self):
+-        return '<Message {}>'.format(self.body)
+-
+-
+-class Notification(db.Model):
+-    id: so.Mapped[int] = so.mapped_column(primary_key=True)
+-    name: so.Mapped[str] = so.mapped_column(sa.String(128), index=True)
+-    user_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey(User.id),
+-                                               index=True)
+-    timestamp: so.Mapped[float] = so.mapped_column(index=True, default=time)
+-    payload_json: so.Mapped[str] = so.mapped_column(sa.Text)
+-
+-    user: so.Mapped[User] = so.relationship(back_populates='notifications')
+-
+-    def get_data(self):
+-        return json.loads(str(self.payload_json))
+-
+-
+-class Task(db.Model):
+-    id: so.Mapped[str] = so.mapped_column(sa.String(36), primary_key=True)
+-    name: so.Mapped[str] = so.mapped_column(sa.String(128), index=True)
+-    description: so.Mapped[Optional[str]] = so.mapped_column(sa.String(128))
+-    user_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey(User.id))
+-    complete: so.Mapped[bool] = so.mapped_column(default=False)
+-
+-    user: so.Mapped[User] = so.relationship(back_populates='tasks')
+-
+-    def get_rq_job(self):
+-        try:
+-            rq_job = rq.job.Job.fetch(self.id, connection=current_app.redis)
+-        except (redis.exceptions.RedisError, rq.exceptions.NoSuchJobError):
+-            return None
+-        return rq_job
+-
+-    def get_progress(self):
+-        job = self.get_rq_job()
+-        return job.meta.get('progress', 0) if job is not None else 100
++from app.models.post import Post  # noqa: E402
++from app.models.message import Message  # noqa: E402
++from app.models.notification import Notification  # noqa: E402
++from app.models.task import Task  # noqa: E402

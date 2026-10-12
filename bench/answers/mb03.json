@@ -1,0 +1,10 @@
+{
+  "keys": {
+    "listener": {"kind": "symbol", "accept": ["SearchableMixin.after_commit", "app.models.SearchableMixin.after_commit", "models.SearchableMixin.after_commit"]},
+    "event": {"kind": "text", "accept": ["after_commit"]},
+    "indexer": {"kind": "symbol", "accept": ["add_to_index", "app.search.add_to_index", "search.add_to_index"]},
+    "fields": {"kind": "symbol", "accept": ["__searchable__", "Post.__searchable__", "app.models.Post.__searchable__", "SearchableMixin.__searchable__"]},
+    "switch": {"kind": "text", "accept": ["ELASTICSEARCH_URL", "Config.ELASTICSEARCH_URL", "app.config['ELASTICSEARCH_URL']"]}
+  },
+  "contradict": ["before_commit", "\\breindex\\b", "remove_from_index", "query_index", "\\bMS_TRANSLATOR_KEY\\b", "\\bREDIS_URL\\b"]
+}

@@ -1,0 +1,13 @@
+diff --git a/src/main/java/org/springframework/samples/petclinic/owner/Owner.java b/src/main/java/org/springframework/samples/petclinic/owner/Owner.java
+index 480a7a6..0e0c9cb 100644
+--- a/src/main/java/org/springframework/samples/petclinic/owner/Owner.java
++++ b/src/main/java/org/springframework/samples/petclinic/owner/Owner.java
+@@ -106,7 +106,7 @@ public class Owner extends Person {
+ 	 * @return the Pet with the given name, or null if no such Pet exists for this Owner
+ 	 */
+ 	public Pet getPet(String name) {
+-		return getPet(name, false);
++		return getPet(name, true);
+ 	}
+ 
+ 	/**

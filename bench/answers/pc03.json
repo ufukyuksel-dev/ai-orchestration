@@ -1,0 +1,47 @@
+{
+  "keys": {
+    "status": {
+      "kind": "text",
+      "accept": [
+        "500",
+        "HTTP 500",
+        "500 Internal Server Error",
+        "Internal Server Error",
+        "500 (Internal Server Error)"
+      ]
+    },
+    "exception": {
+      "kind": "symbol",
+      "accept": [
+        "IllegalArgumentException",
+        "java.lang.IllegalArgumentException"
+      ]
+    },
+    "thrownin": {
+      "kind": "symbol",
+      "accept": [
+        "VisitController.loadPetWithVisit",
+        "org.springframework.samples.petclinic.owner.VisitController.loadPetWithVisit",
+        "loadPetWithVisit"
+      ]
+    },
+    "lookup": {
+      "kind": "symbol",
+      "accept": [
+        "Owner.getPet",
+        "org.springframework.samples.petclinic.owner.Owner.getPet"
+      ]
+    }
+  },
+  "contradict": [
+    "\\b404\\b",
+    "\\b200\\b",
+    "\\b30[0-9]\\b",
+    "\\bPetController\\b",
+    "\\bOwnerController\\b",
+    "NullPointer",
+    "addVisit",
+    "processNewVisitForm",
+    "initNewVisitForm"
+  ]
+}

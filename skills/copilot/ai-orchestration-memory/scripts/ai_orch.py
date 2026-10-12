@@ -36,6 +36,7 @@ from typing import Any, Callable, Iterable
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+import copilot_memory_gate
 import memory_bridge
 
 
@@ -1800,7 +1801,25 @@ def _b_graph_retrieve(args, project_key, repo_root):  # type: ignore[no-untyped-
     return arguments
 
 
-def _learning_candidates(value: Any) -> list[dict[str, Any]]:
+def _fit_chars(value: Any, maximum: int, label: str, adjustments: list[str]) -> str:
+    """A learning text field fitted to `maximum` characters at the last word boundary, ending with an ellipsis, with
+    the adjustment reported: a too-long card text is shortened, not a reason for the agent to retry. Learning fields
+    only; every other input keeps the strict `_bounded_chars`."""
+    candidate = _nonblank(value, label)
+    if len(candidate) <= maximum:
+        return candidate
+    cut = candidate[: maximum - 1]
+    if " " in cut[maximum // 2:]:
+        cut = cut[: cut.rindex(" ")]
+    adjustments.append(f"{label} shortened to {maximum} characters")
+    return cut.rstrip(" ,;:.") + "\u2026"
+
+
+def _learning_candidates(value: Any, adjustments: list[str] | None = None) -> list[dict[str, Any]]:
+    """The validated learning batch. Text fields that are too long, list fields with too many or repeated items and
+    exact repeats of a locator inside one candidate are fitted (each reported in `adjustments`); a locator used by
+    several candidates is accepted, as the server accepts it. Everything else that is wrong is rejected."""
+    adjustments = [] if adjustments is None else adjustments
     schema = _canonical_learning_schema()
     learning_schema = schema["$defs"]["learning"]
     batch_schema = schema["properties"]["learningCandidates"]
@@ -1815,7 +1834,7 @@ def _learning_candidates(value: Any) -> list[dict[str, Any]]:
     locator_properties = locator_schema["properties"]
     locator_kinds = set(locator_properties["kind"]["enum"])
     locator_roles = set(locator_properties["role"]["enum"])
-    distinct_locators: set[tuple[str, str, str | None]] = set()
+    distinct_locators: set[str] = set()
     for index, entry in enumerate(value):
         if not isinstance(entry, dict):
             raise BridgeError(f"learning {index} must be an object")
@@ -1856,29 +1875,42 @@ def _learning_candidates(value: Any) -> list[dict[str, Any]]:
                     raise BridgeError("file/directory locators do not accept path or signature")
                 locator["ref"] = _canonical_relative_path(ref, "locator ref")
                 has_source = has_source or locator_kind == "file"
-            key = (locator_kind, locator["ref"], locator.get("signature"))
-            if key in distinct_locators:
-                raise BridgeError("learning locators must be unique across the batch")
+            if locator in locators:  # the very same locator twice in one candidate: nothing is lost
+                adjustments.append(f"learning {index} repeated locator {locator['ref']} dropped")
+                continue
+            key = _capture_locator_key(locator)
+            if any(_capture_locator_key(kept) == key for kept in locators):
+                # the server keeps one locator per target in a candidate; which role is meant is the agent's call
+                raise BridgeError(f"learning {index} names {locator['ref']} twice with different roles or "
+                                  "signatures; keep one locator for it")
             distinct_locators.add(key)
             locators.append(locator)
         if not has_source:
             raise BridgeError(f"learning {index} requires a symbol or file locator")
         candidate: dict[str, Any] = {
             "kind": kind,
-            "summary": _bounded_chars(entry["summary"], properties["summary"]["maxLength"], "summary"),
-            "content": _bounded_chars(entry["content"], properties["content"]["maxLength"], "content"),
+            "summary": _fit_chars(entry["summary"], properties["summary"]["maxLength"], f"learning {index} summary",
+                                  adjustments),
+            "content": _fit_chars(entry["content"], properties["content"]["maxLength"], f"learning {index} content",
+                                  adjustments),
             "locators": locators,
         }
         for field in ("appliesWhen", "limitations", "reusableFor"):
             if field in entry:
-                values = [
-                    _bounded_chars(value, schema["$defs"]["boundedListItem"]["maxLength"], f"{field} entry")
-                    for value in _string_list(
-                        entry[field], field, schema["$defs"]["boundedList"]["maxItems"]
-                    )
-                ]
-                if len(set(values)) != len(values):
-                    raise BridgeError(f"{field} items must be unique")
+                if not isinstance(entry[field], list):
+                    raise BridgeError(f"{field} must be an array of strings")
+                values: list[str] = []
+                for item in entry[field]:
+                    fitted = _fit_chars(item, schema["$defs"]["boundedListItem"]["maxLength"],
+                                        f"learning {index} {field} entry", adjustments)
+                    if fitted in values:
+                        adjustments.append(f"learning {index} repeated {field} entry dropped")
+                    else:
+                        values.append(fitted)
+                most = schema["$defs"]["boundedList"]["maxItems"]
+                if len(values) > most:
+                    adjustments.append(f"learning {index} {field} kept its first {most} entries")
+                    values = values[:most]
                 candidate[field] = values
         if "correctionRef" in entry:
             correction = _nonblank(entry["correctionRef"], "correctionRef")
@@ -1897,6 +1929,16 @@ def _learning_candidates(value: Any) -> list[dict[str, Any]]:
     if len(distinct_locators) > 8:
         raise BridgeError("learningCandidates accept at most eight distinct locators")
     return result
+
+
+def _capture_locator_key(locator: dict[str, Any]) -> str:
+    """The server's target key for a locator (AgentLearningService#captureLocatorKey): kind, path and ref, a symbol's
+    ref extended with its signature's parameter list. Locators with the same key are the same target."""
+    ref = locator["ref"]
+    signature = locator.get("signature")
+    if locator["kind"] == "symbol" and signature and "(" in signature:
+        ref += signature[signature.index("("):]
+    return f"{locator['kind']}\x1f{locator.get('path') or ''}\x1f{ref}"
 
 
 def _canonical_relative_path(value: Any, label: str) -> str:
@@ -1925,7 +1967,10 @@ def _b_memory_learn(args, project_key, repo_root):  # type: ignore[no-untyped-de
     setattr(args, "_learn_request_path", candidate.resolve(strict=True))
     take_fields(payload, required=("learningCandidates",))
     reject_bridge_owned_fields_deep(payload)
-    return {"learningCandidates": _learning_candidates(payload["learningCandidates"])}
+    adjustments: list[str] = []
+    candidates = _learning_candidates(payload["learningCandidates"], adjustments)
+    setattr(args, "_learn_adjustments", adjustments)
+    return {"learningCandidates": candidates}
 
 
 def stage_learning_request(arguments: dict[str, Any], project_key: str) -> tuple[Path, str]:
@@ -2244,6 +2289,12 @@ def execute(args: argparse.Namespace, client: AiOrchClient) -> dict[str, Any]:
     _reject_global_with_repo_root(args)
     kind = scope_kind(operation, args)
 
+    if operation == "memory.search":
+        # after a search that found nothing (or for a query already asked) in this Copilot request: no server call
+        refused = copilot_memory_gate.refusal(args.query)
+        if refused:
+            return _envelope(operation, kind, None, {"knowledge": [], "refused": True, "hint": refused}, [])
+
     client.initialize()
     tools = client.list_tools()
 
@@ -2276,7 +2327,7 @@ def execute(args: argparse.Namespace, client: AiOrchClient) -> dict[str, Any]:
         )
 
     arguments = _build_arguments(args, operation, project_key, repo_root)
-    warnings: list[str] = []
+    warnings: list[str] = list(getattr(args, "_learn_adjustments", []))  # fitted learning fields, reported
     staged_learning: Path | None = None
     if operation == "memory.learn" and project_key is not None:
         if repo_root is None:
@@ -2309,11 +2360,17 @@ def execute(args: argparse.Namespace, client: AiOrchClient) -> dict[str, Any]:
 
     if operation != "memory.learn":
         result = client.call_tool(tool_name, arguments)
+    if operation == "memory.search":
+        copilot_memory_gate.record(args.query, result)
+        if copilot_memory_gate.outcome(result) == "empty" and not result.get("hint"):
+            result = {**result, "hint": copilot_memory_gate.NOTHING}  # the legacy view has no hint of its own
 
     record_learning_telemetry(operation, arguments, result)
 
     if operation == "memory.learn":
         completed = isinstance(result, dict) and result.get("status") == "ACCEPTED"
+        if completed:
+            copilot_memory_gate.record_learned()  # the stop hook does not ask for learning again
         request_path = getattr(args, "_learn_request_path", None)
         if completed and staged_learning is not None:
             try:

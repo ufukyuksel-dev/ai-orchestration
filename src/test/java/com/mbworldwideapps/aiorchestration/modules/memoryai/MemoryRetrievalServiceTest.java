@@ -281,6 +281,80 @@ class MemoryRetrievalServiceTest {
     }
 
     @Test
+    void restrictedInjectionFiltersBeforeBudgetPackingSoAStrongerMemoryCannotCrowdItOut() {
+        FakeMemoryRepository repository = new FakeMemoryRepository();
+        MemoryItem strong = item(MemoryScope.GLOBAL, null, MemoryStatus.ACTIVE, "Strong unrelated rule. " + "x ".repeat(30), 0.9);
+        MemoryItem wanted = item(MemoryScope.GLOBAL, null, MemoryStatus.ACTIVE, "Run tests with the wrapper. " + "y ".repeat(30), 0.9);
+        repository.put(strong);
+        repository.put(wanted);
+        FakeScoredMemoryVectorIndex vectorIndex = new FakeScoredMemoryVectorIndex(repository);
+        vectorIndex.scoreBy(strong, 0.95);
+        vectorIndex.scoreBy(wanted, 0.80);
+        int one = Math.max(
+                MemoryTextPreview.estimateTokens(MemoryTextPreview.promptText(strong.summary(), strong.text())),
+                MemoryTextPreview.estimateTokens(MemoryTextPreview.promptText(wanted.summary(), wanted.text())));
+        MemoryRetrievalService service = new MemoryRetrievalService(repository, vectorIndex, properties(one + 1, true));
+
+        // the budget fits one memory: unrestricted, the stronger one takes it
+        assertThat(service.retrieveForInjection("tests", null).injectedMemoryIds()).containsExactly(strong.id());
+        // restricted to the wanted memory, the filter runs before packing and it gets the budget
+        assertThat(service.retrieveForInjectionWhere("tests", null, m -> m.id().equals(wanted.id())).injectedMemoryIds())
+                .containsExactly(wanted.id());
+    }
+
+    @Test
+    void aStepMatchCountsAsFoundEvenWhenItDoesNotFitTheBudgetOrWasShownBefore() {
+        FakeMemoryRepository repository = new FakeMemoryRepository();
+        MemoryItem shown = item(MemoryScope.GLOBAL, null, MemoryStatus.ACTIVE, "Formatter before tests. " + "x ".repeat(30), 0.9);
+        MemoryItem unseen = item(MemoryScope.GLOBAL, null, MemoryStatus.ACTIVE, "Run tests with the wrapper. " + "y ".repeat(30), 0.9);
+        repository.put(shown);
+        repository.put(unseen);
+        FakeScoredMemoryVectorIndex vectorIndex = new FakeScoredMemoryVectorIndex(repository);
+        vectorIndex.scoreBy(shown, 0.90);
+        vectorIndex.scoreBy(unseen, 0.70);
+        int one = Math.max(
+                MemoryTextPreview.estimateTokens(MemoryTextPreview.promptText(shown.summary(), shown.text())),
+                MemoryTextPreview.estimateTokens(MemoryTextPreview.promptText(unseen.summary(), unseen.text())));
+
+        // the budget fits one memory: the one shown before is left out before packing, so the unseen one gets it
+        var fits = new MemoryRetrievalService(repository, vectorIndex, properties(one + 1, true))
+                .retrieveForStep("tests", null, m -> true, m -> !m.id().equals(shown.id()), 0.6);
+        assertThat(fits.matched()).isTrue();
+        assertThat(fits.response().injectedMemoryIds()).containsExactly(unseen.id());
+        // a budget nothing fits into: no cards, but memory did match (found, not empty)
+        var tooSmall = new MemoryRetrievalService(repository, vectorIndex, properties(1, true))
+                .retrieveForStep("tests", null, m -> true, m -> true, 0.6);
+        assertThat(tooSmall.response().items()).isEmpty();
+        assertThat(tooSmall.matched()).isTrue();
+        // everything shown before: no cards, still found
+        var allShown = new MemoryRetrievalService(repository, vectorIndex, properties(2000, true))
+                .retrieveForStep("tests", null, m -> true, m -> false, 0.6);
+        assertThat(allShown.response().items()).isEmpty();
+        assertThat(allShown.matched()).isTrue();
+        // nothing above the step's floor: empty
+        assertThat(new MemoryRetrievalService(repository, vectorIndex, properties(2000, true))
+                .retrieveForStep("tests", null, m -> true, m -> true, 0.95).matched()).isFalse();
+    }
+
+    @Test
+    void restrictedInjectionWidensThePoolWhenTheAdmittedMemoryRanksBelowManyOthers() {
+        FakeMemoryRepository repository = new FakeMemoryRepository();
+        FakeScoredMemoryVectorIndex vectorIndex = new FakeScoredMemoryVectorIndex(repository);
+        for (int i = 0; i < 60; i++) {  // more stronger, non-qualifying memories than the first 3x pool holds
+            MemoryItem other = item(MemoryScope.GLOBAL, null, MemoryStatus.ACTIVE, "Unrelated rule " + i + ".", 0.9);
+            repository.put(other);
+            vectorIndex.scoreBy(other, 0.95 - i * 0.001);
+        }
+        MemoryItem wanted = item(MemoryScope.GLOBAL, null, MemoryStatus.ACTIVE, "Run tests with the wrapper.", 0.9);
+        repository.put(wanted);
+        vectorIndex.scoreBy(wanted, 0.70);
+        MemoryRetrievalService service = new MemoryRetrievalService(repository, vectorIndex, properties(2000, true));
+
+        assertThat(service.retrieveForInjectionWhere("tests", null, m -> m.id().equals(wanted.id())).injectedMemoryIds())
+                .containsExactly(wanted.id());
+    }
+
+    @Test
     void packInjectsLongMemoryWhenCompactPromptTextFitsHardCap() {
         FakeMemoryRepository repository = new FakeMemoryRepository();
         String longText = "Rule one is important. " + "extra ".repeat(60);
@@ -481,6 +555,10 @@ class MemoryRetrievalServiceTest {
     }
 
     private static AiOrchestrationProperties properties(int hardCap) {
+        return properties(hardCap, false);
+    }
+
+    private static AiOrchestrationProperties properties(int hardCap, boolean injectionEnabled) {
         return new AiOrchestrationProperties(
                 1200,
                 160,
@@ -496,7 +574,7 @@ class MemoryRetrievalServiceTest {
                 null,
                 new AiOrchestrationProperties.Memory("memory_episodic_test_384", hardCap, 0.3,
                         "config/memory/global", ".ai_orch/memory", "AI_ORCHESTRATION", false,
-                        false, hardCap, hardCap, hardCap, 5, 365),
+                        injectionEnabled, hardCap, hardCap, hardCap, 5, 365),
                 365);
     }
 

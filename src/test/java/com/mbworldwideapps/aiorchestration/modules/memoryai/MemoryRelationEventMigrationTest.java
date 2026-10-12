@@ -37,7 +37,7 @@ class MemoryRelationEventMigrationTest {
                 .isInstanceOf(DataIntegrityViolationException.class);
 
         var flyway = Flyway.configure().dataSource(ds).locations("classpath:db/migration").load();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(11);
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(12);
         flyway.validate();
         assertThat(repository.eventsForMemory(memory)).containsExactly(historical);
         int offset = 1;

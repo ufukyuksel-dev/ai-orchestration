@@ -1,0 +1,15 @@
+diff --git a/app/models.py b/app/models.py
+index db447d8..7dcaf4a 100644
+--- a/app/models.py
++++ b/app/models.py
+@@ -267,8 +267,8 @@ class User(PaginatedAPIMixin, UserMixin, db.Model):
+         return self.token
+ 
+     def revoke_token(self):
+-        self.token_expiration = datetime.now(timezone.utc) - timedelta(
+-            seconds=1)
++        self.token_expiration = datetime.now(timezone.utc) + timedelta(
++            seconds=60)
+ 
+     @staticmethod
+     def check_token(token):

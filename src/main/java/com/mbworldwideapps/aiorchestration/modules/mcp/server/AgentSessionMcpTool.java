@@ -40,6 +40,7 @@ public class AgentSessionMcpTool {
     static final Set<String> LOCATOR_ROLES = Set.of(
             "primary_change_point", "supporting", "validation", "configuration", "entry_point");
     static final int MAX_CANDIDATES = 3;
+    static final Set<String> VERIFICATION_KINDS = Set.of("procedure", "test_address");
 
     private final ScannerMcpTool scanner;
     private final InstructionReadService rules;
@@ -51,6 +52,10 @@ public class AgentSessionMcpTool {
     private AgentLearningRepository learned;
     private AgentPrefsStore prefs;
     private double cardMinScore = 0.0;
+    // A task match between this floor and cardMinScore goes out as a pointer (id + summary, no text): a missed card
+    // costs a whole exploration, a pointer a line. 1.0 = no pointers (profiles calibrate it).
+    private com.mbworldwideapps.aiorchestration.modules.scanner.CodeBaselineRepository baseline;
+    private double cardPointerMinScore = 1.0;
 
     public AgentSessionMcpTool(ScannerMcpTool scanner, InstructionReadService rules, MemoryMcpTool memory,
             ObjectProvider<AgentLearningMcpTool> learning, McpAuditLogger audit) {
@@ -74,6 +79,19 @@ public class AgentSessionMcpTool {
         this.cardMinScore = cardMinScore;
     }
 
+    /** The code map, to give a card's symbol locators their current place in the code (optional). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setCodeBaseline(com.mbworldwideapps.aiorchestration.modules.scanner.CodeBaselineRepository baseline) {
+        this.baseline = baseline;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setCardPointerMinScore(
+            @org.springframework.beans.factory.annotation.Value("${ai-orchestration.agent.card-pointer-min-score:1.0}")
+            double cardPointerMinScore) {
+        this.cardPointerMinScore = cardPointerMinScore;
+    }
+
     /** One approved rule, as the agent needs it (approval evidence stays in the panel). */
     @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_EMPTY)
     public record Rule(String scope, String statement, String rationale, List<String> modulePaths) {
@@ -81,7 +99,16 @@ public class AgentSessionMcpTool {
 
     /** A remembered piece of project knowledge relevant to the task: what it says and where to look. */
     @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_EMPTY)
-    public record Card(String id, String summary, String text, List<String> files, Boolean stale) {
+    public record Card(String id, String summary, String text, List<String> files, Boolean stale, Boolean pointer,
+            String code) {
+
+        public Card(String id, String summary, String text, List<String> files, Boolean stale, Boolean pointer) {
+            this(id, summary, text, files, stale, pointer, null);
+        }
+
+        public Card(String id, String summary, String text, List<String> files, Boolean stale) {
+            this(id, summary, text, files, stale, null, null);
+        }
     }
 
     /**
@@ -258,16 +285,274 @@ public class AgentSessionMcpTool {
         try {
             java.util.LinkedHashMap<java.util.UUID, com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextItem>
                     merged = new java.util.LinkedHashMap<>();
-            for (var item : relevant(task, projectKey)) merged.putIfAbsent(item.memoryId(), item);
+            var taskRanked = ranked(task, projectKey, Math.min(cardMinScore, cardPointerMinScore), false);
+            for (var item : band(taskRanked)) merged.putIfAbsent(item.memoryId(), item);
             if (merged.size() < 3) {
                 try {
-                    for (var item : relevant(VERIFY_QUERY, projectKey)) merged.putIfAbsent(item.memoryId(), item);
+                    for (var item : relevant(VERIFY_QUERY, projectKey, true)) {
+                        merged.putIfAbsent(item.memoryId(), item);
+                    }
                 } catch (RuntimeException e) {
                     // the task's own cards still go out
                 }
             }
             var items = merged.values().stream().limit(3).toList();
-            if (items.isEmpty()) return List.of();
+            var pointers = taskRanked.stream()
+                    .filter(item -> item.semanticScore() >= cardPointerMinScore && item.semanticScore() < cardMinScore)
+                    .filter(item -> !merged.containsKey(item.memoryId()))
+                    .limit(MAX_POINTERS)
+                    .map(item -> new Card(item.memoryId().toString(), item.summary(), null, List.of(),
+                            item.stale() ? Boolean.TRUE : null, Boolean.TRUE))
+                    .toList();
+            if (items.isEmpty()) return pointers;
+            List<Card> cards = full(items, projectKey);
+            cards.addAll(pointers);
+            return cards;
+        } catch (RuntimeException e) {
+            return List.of();  // memory cards are a best-effort accelerator, never a startup failure
+        }
+    }
+
+    /** What one step lookup found: {@code found} (matching memories exist, possibly all shown before),
+     *  {@code empty} (memory was searched and no memory of the step's kinds matches) or {@code skipped} (memory was
+     *  not searched: injection off, no query or kinds); a failed lookup throws instead. */
+    public record StepCards(String outcome, List<Card> cards) {
+        static StepCards empty() {
+            return new StepCards("empty", List.of());
+        }
+
+        static StepCards skipped() {
+            return new StepCards("skipped", List.of());
+        }
+    }
+
+    /**
+     * Cards for one step of a task (the hooks ask before/after a build or test, on a new failure): only memories of
+     * the given kinds, the same floors, band and pointer as the task's cards, none of {@code exclude} (already shown
+     * in this session). Kinds and exclusions are applied before budget packing, so a stronger card of another kind or
+     * one already shown cannot crowd them out. The outcome tells a real "nothing in memory" ({@code empty}) apart from
+     * matches that were all shown before or did not fit the budget ({@code found}, possibly with no cards); it is
+     * decided before packing. A retrieval failure is thrown to the caller.
+     */
+    public StepCards stepCards(String query, String projectKey, Set<String> kinds, Set<String> exclude) {
+        if (query == null || query.isBlank() || retrieval == null || kinds == null || kinds.isEmpty()
+                || !retrieval.injectionEnabled()) {
+            return StepCards.skipped();  // not searched: says nothing about what memory holds
+        }
+        Set<String> skip = exclude == null ? Set.of() : exclude;
+        double floor = Math.min(cardMinScore, cardPointerMinScore);
+        // matched is decided before packing and exclusion; only cards not shown before compete for the budget
+        var step = retrieval.retrieveForStep(query, projectKey,
+                (com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryItem item) -> hasKind(item, kinds),
+                item -> !skip.contains(item.id().toString()), floor);
+        if (!step.matched()) {
+            return StepCards.empty();
+        }
+        var ranked = step.response().items().stream()
+                .filter(item -> item.semanticScore() >= floor)
+                .sorted(java.util.Comparator.comparingDouble(
+                        (com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextItem i) ->
+                                i.semanticScore()).reversed())
+                .toList();
+        var items = band(ranked);
+        var shown = items.stream().map(i -> i.memoryId()).collect(java.util.stream.Collectors.toSet());
+        List<Card> cards = items.isEmpty() ? new ArrayList<>() : full(items, projectKey);
+        ranked.stream()
+                .filter(item -> item.semanticScore() >= cardPointerMinScore && item.semanticScore() < cardMinScore)
+                .filter(item -> !shown.contains(item.memoryId()))
+                .limit(MAX_POINTERS)
+                .forEach(item -> cards.add(new Card(item.memoryId().toString(), item.summary(), null, List.of(),
+                        item.stale() ? Boolean.TRUE : null, Boolean.TRUE)));
+        return new StepCards("found", cards);
+    }
+
+    static final int MAX_LOCATION_LOOKUPS = 4;
+    static final int MAX_CODE_CHARS = 2500;     // current code for all cards of one answer together
+    static final int MAX_EXCERPT_LINES = 40;
+    static final int MAX_OUTLINE_FILES = 3;
+    static final int MAX_OUTLINE_ENTRIES = 12;
+
+    /** A symbol locator found in the current code: its label and the symbol whose lines are current. */
+    private record Located(String label,
+            com.mbworldwideapps.aiorchestration.modules.scanner.CodeSymbolRecord symbol, List<String> lines) {
+    }
+
+    /**
+     * Where a card's symbol locator is in the current code: {@code path:start-end ref (kind)} when the code map has it
+     * and the file on disk is still the scanned one (same SHA-256); if the symbol itself is gone but its class is
+     * there, the class, labelled as a class with the symbol named as missing. Null (the card keeps the declared path)
+     * when nothing current can be said: no code map, a changed file, or neither symbol nor class found.
+     */
+    String currentLocation(String projectKey, String ref, String path) {
+        Located located = locate(projectKey, ref, path);
+        return located == null ? null : located.label();
+    }
+
+    private Located locate(String projectKey, String ref, String path) {
+        if (baseline == null || ref == null || ref.isBlank()) {
+            return null;
+        }
+        try {
+            var symbol = symbolIn(projectKey, ref, path);
+            if (symbol != null) {
+                var lines = currentLines(projectKey, symbol.fileId());
+                return lines == null ? null : new Located(path + ":" + symbol.startLine() + "-" + symbol.endLine()
+                        + " " + ref + " (" + symbol.symbolKind() + ")", symbol, lines);
+            }
+            int member = ref.indexOf('#');
+            if (member > 0) {
+                String owner = ref.substring(0, member);
+                var type = symbolIn(projectKey, owner, path);
+                var lines = type != null && "class".equals(type.symbolKind())
+                        ? currentLines(projectKey, type.fileId()) : null;
+                if (lines != null) {
+                    return new Located(path + ":" + type.startLine() + "-" + type.endLine() + " " + owner
+                            + " (class; " + ref.substring(member + 1) + " is not in the current code)", type, lines);
+                }
+            }
+        } catch (RuntimeException e) {
+            return null;  // a location is an aid, never a reason to lose the card
+        }
+        return null;
+    }
+
+    private com.mbworldwideapps.aiorchestration.modules.scanner.CodeSymbolRecord symbolIn(String projectKey, String ref,
+            String path) {
+        for (var symbol : baseline.findSymbolsByRef(projectKey, ref, 5)) {
+            if (!ref.equals(symbol.fqn()) || symbol.startLine() == null || symbol.endLine() == null) {
+                continue;
+            }
+            var file = baseline.findFileById(projectKey, symbol.fileId());
+            if (file.isPresent() && file.get().filePath().equals(path)) {
+                return symbol;
+            }
+        }
+        return partiallyQualified(projectKey, ref, path);
+    }
+
+    /**
+     * A ref written with part of its module path ({@code models.Post#to_dict} for the scanner's
+     * {@code app.models.Post#to_dict}): the one symbol of the declared file whose name ends with {@code "." + ref}.
+     * Nothing when no symbol or more than one matches; a symbol is never guessed across files.
+     */
+    private com.mbworldwideapps.aiorchestration.modules.scanner.CodeSymbolRecord partiallyQualified(String projectKey,
+            String ref, String path) {
+        var file = baseline.findFileByPath(projectKey, path).orElse(null);
+        if (file == null) {
+            return null;
+        }
+        var matches = baseline.findSymbolsForFile(projectKey, file.id(), 500).stream()
+                .filter(symbol -> symbol.fqn() != null && symbol.fqn().endsWith("." + ref)
+                        && symbol.startLine() != null && symbol.endLine() != null)
+                .limit(2)
+                .toList();
+        return matches.size() == 1 ? matches.get(0) : null;
+    }
+
+    /**
+     * The lines of a scanned file when the file on disk is still the scanned one (same SHA-256): only then are the
+     * code map's line numbers, and these lines, current. Null otherwise.
+     */
+    private List<String> currentLines(String projectKey, java.util.UUID fileId) {
+        var file = baseline.findFileById(projectKey, fileId).orElse(null);
+        return file == null ? null : currentLines(projectKey, file);
+    }
+
+    private List<String> currentLines(String projectKey,
+            com.mbworldwideapps.aiorchestration.modules.scanner.CodeFileRecord file) {
+        if (file.contentHash() == null) {
+            return null;
+        }
+        var run = baseline.findRun(projectKey, file.scanRunId()).orElse(null);
+        if (run == null || run.rootPath() == null) {
+            return null;
+        }
+        try {
+            byte[] bytes = java.nio.file.Files.readAllBytes(java.nio.file.Path.of(run.rootPath()).resolve(file.filePath()));
+            if (!file.contentHash().equals(java.util.HexFormat.of().formatHex(
+                    java.security.MessageDigest.getInstance("SHA-256").digest(bytes)))) {
+                return null;
+            }
+            return new String(bytes, java.nio.charset.StandardCharsets.UTF_8).lines().toList();
+        } catch (java.io.IOException | java.security.NoSuchAlgorithmException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    /**
+     * The current lines of a located symbol, numbered, within {@code budget} characters and
+     * {@link #MAX_EXCERPT_LINES}; a cut excerpt says which lines it shows and where the symbol ends, so it is never
+     * taken for the whole symbol. Null when not even the header fits.
+     */
+    static String excerpt(String label, int start, int end, List<String> lines, int budget) {
+        StringBuilder out = new StringBuilder("Current code, ").append(label).append(":\n");
+        int last = Math.min(end, lines.size());
+        int shown = start - 1;
+        for (int n = start; n <= last && n - start < MAX_EXCERPT_LINES; n++) {
+            String line = n + "│ " + lines.get(n - 1) + "\n";
+            if (out.length() + line.length() + 60 > budget) {
+                break;
+            }
+            out.append(line);
+            shown = n;
+        }
+        if (shown < start) {
+            return null;
+        }
+        if (shown < end) {
+            out.append("… cut: lines ").append(start).append("-").append(shown).append(" shown; the symbol ends at line ")
+                    .append(end).append("\n");
+        }
+        return out.toString();
+    }
+
+    /** Members of a type; everything else (classes, top-level functions such as Python's {@code module#f}) is listed. */
+    private static final java.util.Set<String> MEMBER_KINDS = java.util.Set.of("method", "property");
+
+    /** The top-level classes and functions of a current file with their lines (no source), or null. */
+    private String outline(String projectKey, String path, int budget) {
+        if (baseline == null || budget < 80) {
+            return null;
+        }
+        try {
+            var file = baseline.findFileByPath(projectKey, path).orElse(null);
+            if (file == null || currentLines(projectKey, file) == null) {
+                return null;
+            }
+            var entries = baseline.findSymbolsForFile(projectKey, file.id(), 200).stream()
+                    .filter(sym -> sym.startLine() != null && sym.endLine() != null
+                            && !MEMBER_KINDS.contains(sym.symbolKind()))
+                    .toList();
+            if (entries.isEmpty()) {
+                return null;
+            }
+            StringBuilder out = new StringBuilder("Current outline, ").append(path).append(":\n");
+            int listed = 0;
+            for (var sym : entries) {
+                String line = "  " + sym.startLine() + "-" + sym.endLine() + " " + sym.symbolKind() + " "
+                        + (sym.name() != null ? sym.name() : sym.fqn()) + "\n";
+                if (listed == MAX_OUTLINE_ENTRIES || out.length() + line.length() + 40 > budget) {
+                    break;
+                }
+                out.append(line);
+                listed++;
+            }
+            if (listed == 0) {
+                return null;
+            }
+            if (listed < entries.size()) {
+                out.append("  … ").append(entries.size() - listed).append(" more not listed\n");
+            }
+            return out.toString();
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** Full cards (text and the files they point to) for selected memories. */
+    private List<Card> full(List<com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextItem> items,
+            String projectKey) {
+        {
             java.util.Map<java.util.UUID, List<String>> anchorFiles = new java.util.HashMap<>();
             if (learned != null) {
                 for (var route : learned.findDiscoveryRoutes(projectKey,
@@ -279,15 +564,42 @@ public class AgentSessionMcpTool {
                 }
             }
             List<Card> cards = new ArrayList<>();
+            int[] lookups = {0};
+            int[] codeLeft = {MAX_CODE_CHARS};
+            int[] outlines = {0};
             for (var item : items) {
                 java.util.LinkedHashSet<String> files = new java.util.LinkedHashSet<>(
                         anchorFiles.getOrDefault(item.memoryId(), List.of()));
+                List<String> code = new ArrayList<>();
                 if (memories != null) {
                     memories.findById(item.memoryId()).ifPresent(m -> {
                         try {
-                            com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryCodeLocatorMetadata
-                                    .read(m.metadata()).items()
-                                    .forEach(l -> files.add(l.path() != null && !l.path().isBlank() ? l.path() : l.ref()));
+                            for (var l : com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryCodeLocatorMetadata
+                                    .read(m.metadata()).items()) {
+                                String path = l.path() != null && !l.path().isBlank() ? l.path() : l.ref();
+                                var kind = l.kind();
+                                Located found = kind == com.mbworldwideapps.aiorchestration.modules.memoryai
+                                        .MemoryCodeLocatorKind.SYMBOL && lookups[0]++ < MAX_LOCATION_LOOKUPS
+                                        ? locate(projectKey, l.ref(), path) : null;
+                                if (found != null) {
+                                    files.remove(path + " (" + l.ref() + ")");  // the same target, now with its place
+                                    String lines = excerpt(found.label(), found.symbol().startLine(),
+                                            found.symbol().endLine(), found.lines(), codeLeft[0]);
+                                    if (lines != null) {
+                                        code.add(lines);
+                                        codeLeft[0] -= lines.length();
+                                    }
+                                } else if (kind == com.mbworldwideapps.aiorchestration.modules.memoryai
+                                        .MemoryCodeLocatorKind.FILE && outlines[0] < MAX_OUTLINE_FILES) {
+                                    String listed = outline(projectKey, path, codeLeft[0]);
+                                    if (listed != null) {
+                                        outlines[0]++;
+                                        code.add(listed);
+                                        codeLeft[0] -= listed.length();
+                                    }
+                                }
+                                files.add(found != null ? found.label() : path);
+                            }
                         } catch (IllegalArgumentException ignored) {
                             // malformed locator metadata: the card still carries the text
                         }
@@ -296,29 +608,49 @@ public class AgentSessionMcpTool {
                 String text = item.text() == null ? "" : item.text().trim();
                 if (text.length() > 700) text = text.substring(0, 700) + "…";
                 cards.add(new Card(item.memoryId().toString(), item.summary(), text,
-                        files.stream().limit(8).toList(), item.stale() ? Boolean.TRUE : null));
+                        files.stream().limit(8).toList(), item.stale() ? Boolean.TRUE : null, null,
+                        code.isEmpty() ? null : String.join("", code).stripTrailing()));
             }
             return cards;
-        } catch (RuntimeException e) {
-            return List.of();  // memory cards are a best-effort accelerator, never a startup failure
         }
     }
 
     private List<com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextItem> relevant(String query,
-            String projectKey) {
-        // The injection path gates on raw semantic similarity (min-injection-similarity): exactly the
-        // "is this relevant enough to put in front of the agent" question. Nothing relevant => no cards.
-        var ranked = retrieval.retrieveForInjection(query, projectKey, null).items().stream()
-                .filter(item -> item.semanticScore() >= cardMinScore)
+            String projectKey, boolean verificationOnly) {
+        return band(ranked(query, projectKey, cardMinScore, verificationOnly));
+    }
+
+    /** Injection candidates at or above {@code floor}, best first (the retrieval's own min similarity still applies). */
+    private List<com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextItem> ranked(String query,
+            String projectKey, double floor, boolean verificationOnly) {
+        return retrieval.retrieveForInjection(query, projectKey, null).items().stream()
+                .filter(item -> item.semanticScore() >= floor)
+                .filter(item -> !verificationOnly || isVerificationKnowledge(item.memoryId()))
                 .sorted(java.util.Comparator.comparingDouble(
                         (com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextItem i) ->
                                 i.semanticScore()).reversed())
                 .toList();
-        if (ranked.isEmpty()) return List.of();
-        // A missed card costs a whole exploration, a spare card a few hundred tokens: the absolute floor is
-        // low, and only cards close to the best match are shown so a clear winner is not diluted.
-        double best = ranked.get(0).semanticScore();
-        return ranked.stream().filter(item -> item.semanticScore() >= best - CARD_BAND).limit(3).toList();
+    }
+
+    /** Full cards: at or above the card floor (abstain otherwise), and only those near the best match, at most 3. */
+    private List<com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextItem> band(
+            List<com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextItem> ranked) {
+        var above = ranked.stream().filter(item -> item.semanticScore() >= cardMinScore).toList();
+        if (above.isEmpty()) return List.of();
+        double best = above.get(0).semanticScore();
+        return above.stream().filter(item -> item.semanticScore() >= best - CARD_BAND).limit(3).toList();
+    }
+
+    private static boolean hasKind(com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryItem item,
+            Set<String> kinds) {
+        return kinds.stream().anyMatch(kind -> kind.equals(item.metadata().get("discoveryKind"))
+                || item.tags().contains(kind));
+    }
+
+    private boolean isVerificationKnowledge(java.util.UUID memoryId) {
+        if (memories == null) return false;
+        return memories.findById(memoryId).map(item -> VERIFICATION_KINDS.stream().anyMatch(kind ->
+                kind.equals(item.metadata().get("discoveryKind")) || item.tags().contains(kind))).orElse(false);
     }
 
     @McpTool(name = "memory.learn", metaProvider = AlwaysLoadToolMeta.class, description = "Once at task end, save knowledge a later task in this repo would otherwise rediscover (1-3 candidates). Skip it when nothing durable was learned. Duplicates are detected by the server.")
@@ -417,6 +749,7 @@ public class AgentSessionMcpTool {
     }
 
     static final double CARD_BAND = 0.10;
+    static final int MAX_POINTERS = 1;
     static final int MAX_INLINE_PATH_RULES = 1_500;
     static final int MAX_SUMMARY = 160;
     static final int MAX_CONTENT = 700;

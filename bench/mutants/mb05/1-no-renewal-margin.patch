@@ -1,0 +1,13 @@
+diff --git a/app/models.py b/app/models.py
+index db447d8..3dc5d62 100644
+--- a/app/models.py
++++ b/app/models.py
+@@ -259,7 +259,7 @@ class User(PaginatedAPIMixin, UserMixin, db.Model):
+     def get_token(self, expires_in=3600):
+         now = datetime.now(timezone.utc)
+         if self.token and self.token_expiration.replace(
+-                tzinfo=timezone.utc) > now + timedelta(seconds=60):
++                tzinfo=timezone.utc) > now:
+             return self.token
+         self.token = secrets.token_hex(16)
+         self.token_expiration = now + timedelta(seconds=expires_in)

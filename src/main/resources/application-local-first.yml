@@ -28,6 +28,14 @@ spring:
         initialize-schema: true
 
 ai-orchestration:
+  agent:
+    # bge-m3 bootstrap delivery: calibrated on the card diagnostic's related/unrelated development queries.
+    # Keep explicit memory.search's lower floor so agents can investigate weaker matches on demand.
+    card-min-score: ${AI_ORCH_CARD_MIN_SCORE:0.65}
+    # Task matches between this and card-min-score go out as one pointer line (id + summary, no text); the agent
+    # opens it with extras(op="memory.get") when it fits. Same development queries: keeps 17/18 related follow-ups
+    # reachable (14 full + 3 pointer) at 4/43 unrelated full cards + 5/43 pointer lines.
+    card-pointer-min-score: ${AI_ORCH_CARD_POINTER_MIN_SCORE:0.60}
   learning:
     enabled: ${AI_ORCH_LEARNING_ENABLED:true}
     capture-enabled: ${AI_ORCH_LEARNING_CAPTURE_ENABLED:true}

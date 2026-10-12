@@ -3,10 +3,14 @@
 
 Owned artifacts only:
 
-* the dedicated preToolUse hook JSON,
+* the dedicated hook JSON (preToolUse guard; userPromptSubmitted memory gate + cards; postToolUse step memory;
+  agentStop learning ask),
 * the ``ai-orch-memory`` and ``ai_orch`` launcher symlinks,
 * one marked managed block inside the Copilot user instructions file,
 * checkout-linked Copilot skill directories,
+* the ``ai-orchestration`` custom agent (``agents/ai-orchestration.agent.md``): Copilot with a compact tool set
+  and no subagents, started with ``copilot --agent ai-orchestration`` (Copilot has no setting that makes an agent
+  the default; plain ``copilot`` keeps its full tool set and still gets the hooks),
 * a private request-staging directory,
 * an ownership manifest describing exactly the above.
 
@@ -40,6 +44,13 @@ MANIFEST_VERSION = 2
 BEGIN = "<!-- ai-orchestration:copilot:begin -->"
 END = "<!-- ai-orchestration:copilot:end -->"
 STAGING_DIRNAME = "copilot-staging"
+AGENT_NAME = "ai-orchestration"
+AGENT_FILENAME = f"{AGENT_NAME}.agent.md"
+# Copilot's own tools the agent keeps: edit, search and shell (with background shells), skills, web fetch and the
+# question tool. Left out: subagents (task, read/list/write_agent; ~4.9k input tokens per model call on their own),
+# session SQL, the CLI documentation and code-search subagent tools.
+AGENT_TOOLS = ("bash", "read_bash", "write_bash", "stop_bash", "list_bash", "view", "edit", "create", "grep", "glob",
+               "skill", "web_fetch", "ask_user")
 
 
 class InstallError(RuntimeError):
@@ -88,7 +99,8 @@ def bootstrap_source() -> Path:
     return path
 
 
-def expected_hook(guard: Path) -> dict:
+def legacy_hook(guard: Path) -> dict:
+    """The hook file of earlier installs (guard only): still ours, replaced by `expected_hook`."""
     return {
         "version": 1,
         "hooks": {
@@ -103,12 +115,55 @@ def expected_hook(guard: Path) -> dict:
     }
 
 
+def gate_only_hook(guard: Path) -> dict:
+    """The hook file of the install before memory delivery: guard + the search record reset per prompt."""
+    value = legacy_hook(guard)
+    value["hooks"]["userPromptSubmitted"] = [
+        {
+            "type": "command",
+            "bash": str(guard.with_name("copilot_memory_gate.py")),
+            "timeoutSec": 5,
+        }
+    ]
+    return value
+
+
+def stop_hook_shape(guard: Path) -> dict:
+    """The hook file of the install before step memory: guard, prompt cards and the stop learning ask."""
+    value = gate_only_hook(guard)
+    value["hooks"]["agentStop"] = [
+        {
+            "type": "command",
+            "bash": f"{guard.with_name('copilot_memory_gate.py')} stop",
+            "timeoutSec": 15,
+        }
+    ]
+    return value
+
+
+def expected_hook(guard: Path) -> dict:
+    """The guard; at every prompt the memory gate starts a new request and delivers the prompt's memory cards; after
+    a shell command it delivers memory for that step (first check, new failure); at agent stop it asks once for the
+    learning step when the task left a learning signal and saved nothing."""
+    value = stop_hook_shape(guard)
+    value["hooks"]["postToolUse"] = [
+        {
+            "type": "command",
+            "bash": f"{guard.with_name('copilot_memory_gate.py')} post",
+            "timeoutSec": 5,
+        }
+    ]
+    return value
+
+
 def bootstrap_block() -> str:
     workflow = bootstrap_source()
     body = (
         "## AI Orchestration (Copilot runtime)\n"
         "\n"
-        "At the first request of every new session, use Copilot's built-in "
+        "The AI Orchestration prompt hook applies the saved rules preference: approved rules arrive with "
+        "your prompt, or the prompt says they were skipped. Only when the prompt says no rules preference is "
+        "saved (and the session is not unattended), at the first request use Copilot's built-in "
         "`ask_user` tool to ask `Bu oturum için AI Orchestration global ve proje "
         "kurallarını yükleyeyim mi?` with choices `Evet, yükle (Recommended)` and "
         "`Hayır, bu oturumda atla`. On yes, load them as stated below; on no, skip effective and module "
@@ -139,6 +194,23 @@ def bootstrap_block() -> str:
         "runtime: the Copilot terminal protocol still applies.\n"
     )
     return f"{BEGIN}\n{body}{END}"
+
+
+def agent_text() -> str:
+    """The custom agent: a compact tool set (each tool's schema is sent with every model call), nothing else."""
+    return ("---\n"
+            f"name: {AGENT_NAME}\n"
+            "description: Coding agent for repositories with AI Orchestration memory; compact tool set, no subagents\n"
+            f"tools: {json.dumps(list(AGENT_TOOLS))}\n"
+            "---\n"
+            "You are a coding agent working in the user's repository.\n"
+            "\n"
+            "Work in few model turns. When reads or searches do not depend on each other, request them together in "
+            "one turn. Once you know the current text, make edits to different files that do not depend on each "
+            "other together in one turn. Keep dependent steps in order: create a file before you run it, and make "
+            "edits to the same file one after another.\n"
+            "Run the tests and checks the task needs. Do not repeat a check that already passed when the files it "
+            "covers have not changed since.\n")
 
 
 # --------------------------------------------------------------------------
@@ -217,7 +289,7 @@ def _symlink_matches(link: Path, target: Path) -> bool:
 
 
 def _owned_hook(value: object, guard: Path) -> bool:
-    return value == expected_hook(guard)
+    return value in (expected_hook(guard), stop_hook_shape(guard), gate_only_hook(guard), legacy_hook(guard))
 
 
 def _reject_redirected_directory(path: Path) -> None:
@@ -335,6 +407,7 @@ def install(
     )
     hook_value = expected_hook(guard)
     bootstrap_path = home / BOOTSTRAP_FILENAME
+    agent_path = home / "agents" / AGENT_FILENAME
     skills_dir = home / "skills"
     sources = skill_sources() if with_skills else []
     prior_manifest = load_manifest(home)
@@ -368,6 +441,7 @@ def install(
             guard,
             plan,
             dry_run=dry_run,
+            agent_path=agent_path,
         )
 
     if check:
@@ -397,6 +471,8 @@ def install(
                 raise InstallError(
                     "the managed Copilot bootstrap block has drifted from this checkout"
                 )
+        if agent_path.is_symlink() or _read_text(agent_path) != agent_text():
+            raise InstallError(f"the {AGENT_NAME} custom agent is missing or has drifted: {agent_path}")
         if with_skills:
             if stale_owned_skill_links:
                 raise InstallError(
@@ -424,6 +500,11 @@ def install(
         elif launcher_path.exists():
             raise InstallError(f"refusing to replace an existing launcher file: {launcher_path}")
 
+    if agent_path.is_symlink():
+        raise InstallError(f"refusing to replace a symlinked agent file: {agent_path}")
+    if (_exists(agent_path) and _read_text(agent_path) != agent_text()
+            and prior_manifest.get("agent") != str(agent_path)):
+        raise InstallError(f"refusing to replace a custom agent not owned by this integration: {agent_path}")
     bootstrap_before = _read_text(bootstrap_path) if with_bootstrap else ""
     bootstrap_after = (
         _apply_block(bootstrap_before, bootstrap_block()) if with_bootstrap else ""
@@ -444,6 +525,8 @@ def install(
                 plan.record(f"link skill: {link} -> {source}")
         for link in stale_owned_skill_links:
             plan.record(f"remove retired skill: {link}")
+        if _read_text(agent_path) != agent_text():
+            plan.record(f"write custom agent: {agent_path}")
         plan.record(f"ensure staging directory: {staging_directory()}")
         plan.record(f"write manifest: {home / MANIFEST_FILENAME}")
         return hook_path, memory_launcher_path, ai_orch_launcher_path
@@ -468,7 +551,12 @@ def install(
         "links": [],
         "instructions": [],
         "staging": str(staging_directory()),
+        "agent": str(agent_path),
     }
+    if _read_text(agent_path) != agent_text():
+        agent_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        _atomic_write(agent_path, agent_text(), 0o600)
+    plan.record(f"custom agent: {agent_path} (start with `copilot --agent {AGENT_NAME}`)")
 
     if with_bootstrap and bootstrap_after != bootstrap_before:
         if bootstrap_before:
@@ -541,8 +629,16 @@ def _uninstall(
     plan: Plan,
     *,
     dry_run: bool,
+    agent_path: Path,
 ) -> tuple[Path, Path, Path]:
     manifest = load_manifest(home)
+    if manifest.get("agent") == str(agent_path) and not agent_path.is_symlink() \
+            and _read_text(agent_path) == agent_text():
+        plan.record(f"remove custom agent: {agent_path}")
+        if not dry_run:
+            agent_path.unlink()
+    elif _exists(agent_path):
+        plan.record(f"kept unowned or changed custom agent: {agent_path}")
     owned_links = {row.get("target") for row in manifest["links"] if isinstance(row, dict)}
 
     if hook_path.exists() and not hook_path.is_symlink():

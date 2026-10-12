@@ -1,0 +1,27 @@
+diff --git a/app/models.py b/app/models.py
+index db447d8..ff29576 100644
+--- a/app/models.py
++++ b/app/models.py
+@@ -65,19 +65,20 @@ class PaginatedAPIMixin(object):
+     def to_collection_dict(query, page, per_page, endpoint, **kwargs):
+         resources = db.paginate(query, page=page, per_page=per_page,
+                                 error_out=False)
++        total_pages = resources.total // per_page
+         data = {
+             'items': [item.to_dict() for item in resources.items],
+             '_meta': {
+                 'page': page,
+                 'per_page': per_page,
+-                'total_pages': resources.pages,
++                'total_pages': total_pages,
+                 'total_items': resources.total
+             },
+             '_links': {
+                 'self': url_for(endpoint, page=page, per_page=per_page,
+                                 **kwargs),
+                 'next': url_for(endpoint, page=page + 1, per_page=per_page,
+-                                **kwargs) if resources.has_next else None,
++                                **kwargs) if page < total_pages else None,
+                 'prev': url_for(endpoint, page=page - 1, per_page=per_page,
+                                 **kwargs) if resources.has_prev else None
+             }

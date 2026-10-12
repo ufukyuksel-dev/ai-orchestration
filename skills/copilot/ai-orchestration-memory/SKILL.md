@@ -11,9 +11,15 @@ Use only one direct terminal command:
 ai_orch memory search --query "<specific component, symbol, endpoint, or error>" --top-k 3
 ```
 
-Retrieval is selective, not a session preflight. Skip it for mechanical edits,
-status checks, translation/summarization, and self-contained tasks. Make at most
-one focused retry with a concrete alternative term.
+The memory cards that match your prompt arrive by themselves with it (the block
+that starts with "AI Orchestration, memory for this request"); start from them
+and drop one if the code disagrees. Search only when you are stuck or a missing
+project decision, convention or known issue could change the work, and skip it
+for mechanical edits, status checks, translation/summarization, and
+self-contained tasks. If a search returns
+nothing, memory has nothing for this task: do not search memory again in this
+task and continue from the code. Never repeat a query. The command refuses both
+locally until your next prompt.
 
 The response already contains bounded previews. There is no Copilot `memory
 get`. If more preview text is genuinely needed, add `--excerpt-max-chars` in the
@@ -28,8 +34,8 @@ ai_orch reference read --path "<linkedReferences.relativePath>"
 
 For a linked directory, use one bounded `reference list`, then read only the
 relevant file. Do not replace a relevant linked-reference read with a guessed
-keyword query such as a message key or class constant. Retry `memory search`
-only when the link is irrelevant, unavailable, or still leaves a concrete gap.
+keyword query such as a message key or class constant. Search again only when
+the earlier search found something and a concrete gap remains.
 `evidenceStale` means verify changeable claims against current code or
 configuration; it does not mean ignore the reference.
 

@@ -508,6 +508,21 @@ public class JdbcCodeBaselineRepository implements CodeBaselineRepository {
     }
 
     @Override
+    public List<CodeSymbolRecord> findSymbolsForFile(String projectKey, UUID fileId, int limit) {
+        if (projectKey == null || projectKey.isBlank() || fileId == null) {
+            return List.of();
+        }
+        return jdbcTemplate.query("""
+                SELECT *
+                FROM code_symbols
+                WHERE project_key = ?
+                  AND file_id = ?
+                ORDER BY start_line NULLS LAST, id
+                LIMIT ?
+                """, symbolMapper, projectKey.trim(), fileId, Math.max(1, limit));
+    }
+
+    @Override
     public Optional<CodeFileRecord> findFileByPath(String projectKey, String filePath) {
         String normalizedPath = filePath == null ? "" : filePath.trim().replace('\\', '/');
         if (projectKey == null || projectKey.isBlank() || normalizedPath.isBlank()) {

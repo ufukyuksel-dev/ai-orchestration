@@ -1,0 +1,96 @@
+diff --git a/users/middlewares_test.go b/users/middlewares_test.go
+new file mode 100644
+index 0000000..a6614ad
+--- /dev/null
++++ b/users/middlewares_test.go
+@@ -0,0 +1,90 @@
++package users
++
++import (
++	"net/http"
++	"net/http/httptest"
++	"strconv"
++	"testing"
++	"time"
++
++	"github.com/gin-gonic/gin"
++	"github.com/golang-jwt/jwt/v5"
++	"github.com/gothinkster/golang-gin-realworld-example-app/common"
++)
++
++// authRouter mirrors the wiring in hello.go: /anon is served after AuthMiddleware(false), /auth after
++// AuthMiddleware(true). Both answer the id the middleware stored, or 0 for an anonymous request.
++func authRouter() *gin.Engine {
++	r := gin.New()
++	answer := func(c *gin.Context) {
++		c.String(http.StatusOK, strconv.Itoa(int(c.MustGet("my_user_id").(uint))))
++	}
++	r.Use(AuthMiddleware(false))
++	r.GET("/anon", answer)
++	r.Use(AuthMiddleware(true))
++	r.GET("/auth", answer)
++	return r
++}
++
++func signedToken(t *testing.T, id uint, expires time.Time, secret string) string {
++	t.Helper()
++	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
++		"id":  id,
++		"exp": expires.Unix(),
++	}).SignedString([]byte(secret))
++	if err != nil {
++		t.Fatal(err)
++	}
++	return token
++}
++
++func callAuth(r *gin.Engine, path, header string) (int, string) {
++	req, _ := http.NewRequest("GET", path, nil)
++	if header != "" {
++		req.Header.Set("Authorization", header)
++	}
++	w := httptest.NewRecorder()
++	r.ServeHTTP(w, req)
++	return w.Code, w.Body.String()
++}
++
++func TestAuthTokenSources(t *testing.T) {
++	r := authRouter()
++	token7 := common.GenToken(7)
++	token9 := common.GenToken(9)
++	for _, prefix := range []string{"Token ", "token ", "TOKEN ", "ToKeN "} {
++		for _, path := range []string{"/anon", "/auth"} {
++			if code, body := callAuth(r, path, prefix+token7); code != http.StatusOK || body != "7" {
++				t.Fatalf("%s with prefix %q: %d %q, want 200 \"7\"", path, prefix, code, body)
++			}
++		}
++	}
++	if code, body := callAuth(r, "/auth?access_token="+token9, ""); code != http.StatusOK || body != "9" {
++		t.Fatalf("query token: %d %q, want 200 \"9\"", code, body)
++	}
++	if code, body := callAuth(r, "/auth?access_token="+token9, "Token "+token7); code != http.StatusOK || body != "7" {
++		t.Fatalf("header and query token: %d %q, want the header's user 7", code, body)
++	}
++}
++
++func TestAuthInvalidTokens(t *testing.T) {
++	r := authRouter()
++	invalid := map[string]string{
++		"malformed":    "Token not.a.jwt",
++		"wrong secret": "Token " + signedToken(t, 7, time.Now().Add(time.Hour), "some other secret"),
++		"expired":      "Token " + signedToken(t, 7, time.Now().Add(-time.Hour), common.JWTSecret),
++		"none":         "",
++	}
++	for name, header := range invalid {
++		if code, body := callAuth(r, "/anon", header); code != http.StatusOK || body != "0" {
++			t.Fatalf("anonymous endpoint, %s token: %d %q, want 200 as anonymous (\"0\")", name, code, body)
++		}
++		if code, _ := callAuth(r, "/auth", header); code != http.StatusUnauthorized {
++			t.Fatalf("authenticated endpoint, %s token: %d, want 401", name, code)
++		}
++	}
++	valid := "Token " + signedToken(t, 5, time.Now().Add(time.Hour), common.JWTSecret)
++	if code, body := callAuth(r, "/auth", valid); code != http.StatusOK || body != "5" {
++		t.Fatalf("valid token signed with the secret: %d %q, want 200 \"5\"", code, body)
++	}
++}

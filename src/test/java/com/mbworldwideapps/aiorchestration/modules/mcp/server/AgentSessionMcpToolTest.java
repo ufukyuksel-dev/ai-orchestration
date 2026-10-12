@@ -3,6 +3,7 @@ package com.mbworldwideapps.aiorchestration.modules.mcp.server;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyMap;
@@ -15,6 +16,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import com.mbworldwideapps.aiorchestration.modules.agentlearning.AgentLearningModels.CaptureCandidate;
@@ -251,18 +253,405 @@ class AgentSessionMcpToolTest {
         var retrieval = mock(com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryRetrievalService.class);
         var feature = card("csv export of owners", 0.60);
         var verify = card("run the tests with JAVA_HOME set to JDK 21", 0.58);
+        var memories = mock(com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryRepository.class);
+        when(memories.findById(verify.memoryId())).thenReturn(java.util.Optional.of(
+                storedCard(verify, List.of("learned", "procedure"))));
+        when(memories.findById(feature.memoryId())).thenReturn(java.util.Optional.of(
+                storedCard(feature, List.of("discovery", "change_point"))));
         when(retrieval.retrieveForInjection("add a vets csv export", "P", null)).thenReturn(
                 new com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextResponse(
                         List.of(feature), List.of(), 1, 30, java.util.Map.of(), 0, 0, 0L));
         when(retrieval.retrieveForInjection(AgentSessionMcpTool.VERIFY_QUERY, "P", null)).thenReturn(
                 new com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextResponse(
                         List.of(verify, feature), List.of(), 2, 30, java.util.Map.of(), 0, 0, 0L));
-        tool.setSessionSupport(retrieval, null, emptyProvider(), null, 0.0);
+        tool.setSessionSupport(retrieval, memories, emptyProvider(), null, 0.0);
 
         var response = tool.bootstrap("/repo", "add a vets csv export", null, null, null, null);
 
         assertThat(response.memory()).extracting(AgentSessionMcpTool.Card::summary)
                 .containsExactly("csv export of owners", "run the tests with JAVA_HOME set to JDK 21");
+    }
+
+    @Test
+    void unrelatedTaskDoesNotReceiveStrongNonProcedureVerificationMatches() {
+        McpClientContextHolder.set(context(List.of("scanner.scan")));
+        resolves();
+        var retrieval = mock(com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryRetrievalService.class);
+        var unrelated = card("csv implementation details", 0.90);
+        var memories = mock(com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryRepository.class);
+        when(memories.findById(unrelated.memoryId())).thenReturn(java.util.Optional.of(
+                storedCard(unrelated, List.of("discovery", "behavior"))));
+        when(retrieval.retrieveForInjection("rename a stylesheet", "P", null)).thenReturn(
+                com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextResponse.empty());
+        when(retrieval.retrieveForInjection(AgentSessionMcpTool.VERIFY_QUERY, "P", null)).thenReturn(
+                contextCards(List.of(unrelated)));
+        tool.setSessionSupport(retrieval, memories, emptyProvider(), null, 0.45);
+
+        assertThat(tool.bootstrap("/repo", "rename a stylesheet", null, null, null, null).memory()).isEmpty();
+    }
+
+    @Test
+    void procedureFillerIsFilteredBeforeTheRelativeBand() {
+        McpClientContextHolder.set(context(List.of("scanner.scan")));
+        resolves();
+        var retrieval = mock(com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryRetrievalService.class);
+        var unrelated = card("csv implementation details", 0.90);
+        var procedure = card("run the unit tests with JAVA_HOME set", 0.65);
+        var memories = mock(com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryRepository.class);
+        when(memories.findById(unrelated.memoryId())).thenReturn(java.util.Optional.of(
+                storedCard(unrelated, List.of("discovery", "behavior"))));
+        when(memories.findById(procedure.memoryId())).thenReturn(java.util.Optional.of(
+                storedCard(procedure, List.of("learned", "procedure"))));
+        when(retrieval.retrieveForInjection("rename a stylesheet", "P", null)).thenReturn(
+                com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextResponse.empty());
+        when(retrieval.retrieveForInjection(AgentSessionMcpTool.VERIFY_QUERY, "P", null)).thenReturn(
+                contextCards(List.of(unrelated, procedure)));
+        tool.setSessionSupport(retrieval, memories, emptyProvider(), null, 0.55);
+
+        assertThat(tool.bootstrap("/repo", "rename a stylesheet", null, null, null, null).memory())
+                .extracting(AgentSessionMcpTool.Card::summary).containsExactly(procedure.summary());
+    }
+
+    @Test
+    void absoluteFloorRejectsEvenTheBestTaskMatch() {
+        McpClientContextHolder.set(context(List.of("scanner.scan")));
+        resolves();
+        var retrieval = mock(com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryRetrievalService.class);
+        when(retrieval.retrieveForInjection("unrelated task", "P", null)).thenReturn(
+                contextCards(List.of(card("weak match", 0.60))));
+        when(retrieval.retrieveForInjection(AgentSessionMcpTool.VERIFY_QUERY, "P", null)).thenReturn(
+                com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextResponse.empty());
+        tool.setSessionSupport(retrieval, null, emptyProvider(), null, 0.65);
+
+        assertThat(tool.bootstrap("/repo", "unrelated task", null, null, null, null).memory()).isEmpty();
+    }
+
+    @Test
+    void stepCardsAskRetrievalForTheStepsKindsOnlyAndSkipCardsAlreadyShown() {
+        var retrieval = mock(com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryRetrievalService.class);
+        var changePoint = card("controller pattern", 0.92);
+        var procedure = card("run the tests with the boot 4 imports", 0.70);
+        var shown = card("formatter before tests", 0.80);
+        var stored = java.util.Map.of(
+                changePoint, storedCard(changePoint, List.of("discovery", "change_point")),
+                procedure, storedCard(procedure, List.of(), java.util.Map.of("discoveryKind", "procedure")),
+                shown, storedCard(shown, List.of("discovery", "procedure")));
+        stepAnswers(retrieval, "./mvnw test", List.of(changePoint, shown, procedure), stored);
+        when(retrieval.injectionEnabled()).thenReturn(true);
+        tool.setSessionSupport(retrieval, null, emptyProvider(), null, 0.65);
+
+        var step = tool.stepCards("./mvnw test", "P", Set.of("procedure", "test_address"),
+                Set.of(shown.memoryId().toString()));
+        // the change_point (0.92) is not even a candidate: it would have set the band at 0.82 and pushed 0.70 out;
+        // the card shown before (0.80) is left out before packing, so it cannot push 0.70 out either
+        assertThat(step.outcome()).isEqualTo("found");
+        assertThat(step.cards()).extracting(AgentSessionMcpTool.Card::summary).containsExactly(procedure.summary());
+    }
+
+    @Test
+    void aStepLookupIsEmptyOnlyWhenRetrievalFoundNoMatch() {
+        var retrieval = mock(com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryRetrievalService.class);
+        var shown = card("formatter before tests", 0.80);
+        when(retrieval.retrieveForStep(eq("./mvnw test"), eq("P"), any(), any(), anyDouble())).thenReturn(
+                new com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryRetrievalService.StepRetrieval(
+                        contextCards(List.of()), true));
+        when(retrieval.retrieveForStep(eq("go test ./..."), eq("P"), any(), any(), anyDouble())).thenReturn(
+                new com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryRetrievalService.StepRetrieval(
+                        contextCards(List.of()), false));
+        when(retrieval.retrieveForStep(eq("broken"), eq("P"), any(), any(), anyDouble()))
+                .thenThrow(new IllegalStateException("index down"));
+        when(retrieval.injectionEnabled()).thenReturn(true);
+        tool.setSessionSupport(retrieval, null, emptyProvider(), null, 0.65);
+
+        // matches that were all shown before or did not fit the budget: found, no cards
+        var allShown = tool.stepCards("./mvnw test", "P", Set.of("procedure"), Set.of(shown.memoryId().toString()));
+        assertThat(allShown.outcome()).isEqualTo("found");
+        assertThat(allShown.cards()).isEmpty();
+        assertThat(tool.stepCards("go test ./...", "P", Set.of("procedure"), Set.of()).outcome()).isEqualTo("empty");
+        assertThatThrownBy(() -> tool.stepCards("broken", "P", Set.of("procedure"), Set.of()))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void aStepLookupWithInjectionOffIsSkippedNotEmpty() {
+        var retrieval = mock(com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryRetrievalService.class);
+        when(retrieval.injectionEnabled()).thenReturn(false);
+        tool.setSessionSupport(retrieval, null, emptyProvider(), null, 0.65);
+
+        // memory was not searched, so nothing may conclude that it has nothing (no search gets closed)
+        assertThat(tool.stepCards("./mvnw test", "P", Set.of("procedure"), Set.of()).outcome()).isEqualTo("skipped");
+        verify(retrieval, org.mockito.Mockito.never()).retrieveForStep(any(), any(), any(), any(), anyDouble());
+    }
+
+    @Test
+    void aSymbolLocatorShowsWhereItIsNowAndAMissingMethodShowsOnlyItsClassLabelledAsAClass(
+            @org.junit.jupiter.api.io.TempDir java.nio.file.Path root) throws Exception {
+        java.nio.file.Files.createDirectories(root.resolve("app"));
+        byte[] source = "class User:\n    def to_dict(self): pass\nclass Post:\n    pass\n".getBytes();
+        java.nio.file.Files.write(root.resolve("app/models.py"), source);
+        String hash = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(source));
+        var baseline = mock(com.mbworldwideapps.aiorchestration.modules.scanner.CodeBaselineRepository.class);
+        java.util.UUID fileId = java.util.UUID.randomUUID();
+        java.util.UUID runId = java.util.UUID.randomUUID();
+        var file = new com.mbworldwideapps.aiorchestration.modules.scanner.CodeFileRecord(fileId, "P", "app/models.py",
+                hash, "python", runId, java.util.Map.of());
+        when(baseline.findFileById("P", fileId)).thenReturn(java.util.Optional.of(file));
+        when(baseline.findRun("P", runId)).thenReturn(java.util.Optional.of(
+                new com.mbworldwideapps.aiorchestration.modules.scanner.CodeScanRunRecord(runId, "P", root.toString(),
+                        "completed", java.time.Instant.now(), java.time.Instant.now(), java.util.Map.of())));
+        when(baseline.findSymbolsByRef(eq("P"), eq("app.models.User#to_dict"), anyInt())).thenReturn(List.of(
+                symbol(fileId, "method", "app.models.User#to_dict", 231, 250)));
+        when(baseline.findSymbolsByRef(eq("P"), eq("app.models.Post#to_dict"), anyInt())).thenReturn(List.of());
+        when(baseline.findSymbolsByRef(eq("P"), eq("app.models.Post"), anyInt())).thenReturn(List.of(
+                symbol(fileId, "class", "app.models.Post", 287, 300)));
+        tool.setCodeBaseline(baseline);
+
+        assertThat(tool.currentLocation("P", "app.models.User#to_dict", "app/models.py"))
+                .isEqualTo("app/models.py:231-250 app.models.User#to_dict (method)");
+        // the follow-up's code has no Post#to_dict: never shown as present, only its class, labelled as a class
+        assertThat(tool.currentLocation("P", "app.models.Post#to_dict", "app/models.py"))
+                .isEqualTo("app/models.py:287-300 app.models.Post (class; to_dict is not in the current code)");
+        // another file than the declared one: not this symbol
+        assertThat(tool.currentLocation("P", "app.models.User#to_dict", "app/other.py")).isNull();
+        // the file changed since the scan: the line numbers are not current, nothing is said
+        java.nio.file.Files.writeString(root.resolve("app/models.py"), "# edited\n" + new String(source));
+        assertThat(tool.currentLocation("P", "app.models.User#to_dict", "app/models.py")).isNull();
+        assertThat(tool.currentLocation("P", "app.models.Post#to_dict", "app/models.py")).isNull();
+    }
+
+    @Test
+    void aCardBringsTheCurrentLinesOfItsSymbolAndTheOutlineOfItsFileOnlyWhileTheFileIsTheScannedOne(
+            @org.junit.jupiter.api.io.TempDir java.nio.file.Path root) throws Exception {
+        McpClientContextHolder.set(context(List.of("scanner.scan")));
+        resolves();
+        java.nio.file.Files.createDirectories(root.resolve("app/api"));
+        byte[] models = "class User:\n    def to_dict(self):\n        return {'id': self.id}\nclass Post:\n    pass\n"
+                .getBytes();
+        byte[] init = "from flask import Blueprint\nbp = Blueprint('api', __name__)\ndef register():\n    pass\n".getBytes();
+        java.nio.file.Files.write(root.resolve("app/models.py"), models);
+        java.nio.file.Files.write(root.resolve("app/api/__init__.py"), init);
+        var baseline = mock(com.mbworldwideapps.aiorchestration.modules.scanner.CodeBaselineRepository.class);
+        java.util.UUID runId = java.util.UUID.randomUUID();
+        when(baseline.findRun("P", runId)).thenReturn(java.util.Optional.of(
+                new com.mbworldwideapps.aiorchestration.modules.scanner.CodeScanRunRecord(runId, "P", root.toString(),
+                        "completed", java.time.Instant.now(), java.time.Instant.now(), java.util.Map.of())));
+        java.util.UUID modelsId = java.util.UUID.randomUUID();
+        java.util.UUID initId = java.util.UUID.randomUUID();
+        var modelsFile = new com.mbworldwideapps.aiorchestration.modules.scanner.CodeFileRecord(modelsId, "P",
+                "app/models.py", sha256(models), "python", runId, java.util.Map.of());
+        var initFile = new com.mbworldwideapps.aiorchestration.modules.scanner.CodeFileRecord(initId, "P",
+                "app/api/__init__.py", sha256(init), "python", runId, java.util.Map.of());
+        when(baseline.findFileById("P", modelsId)).thenReturn(java.util.Optional.of(modelsFile));
+        when(baseline.findFileByPath("P", "app/api/__init__.py")).thenReturn(java.util.Optional.of(initFile));
+        when(baseline.findSymbolsByRef(eq("P"), eq("app.models.User#to_dict"), anyInt())).thenReturn(List.of(
+                symbol(modelsId, "method", "app.models.User#to_dict", 2, 3)));
+        // the scanner's real Python forms: a top-level function is `module#name` (kind function), a method
+        // `module.Class#name` (kind method)
+        when(baseline.findSymbolsForFile(eq("P"), eq(initId), anyInt())).thenReturn(List.of(
+                symbol(initId, "class", "app.api.Blueprint2", 2, 2), symbol(initId, "function", "app.api#register", 3, 4),
+                symbol(initId, "method", "app.api.Blueprint2#m", 9, 9),
+                symbol(initId, "property", "app.api.Blueprint2#p", 10, 10)));
+        tool.setCodeBaseline(baseline);
+        var retrieval = mock(com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryRetrievalService.class);
+        var recipe = card("add an API route", 0.90);
+        var memories = mock(com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryRepository.class);
+        var locators = com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryCodeLocatorMetadata.replace(
+                java.util.Map.of(), List.of(
+                        new com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryCodeLocator(
+                                com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryCodeLocatorKind.SYMBOL,
+                                "app.models.User#to_dict", null, null, "app/models.py", "supporting"),
+                        new com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryCodeLocator(
+                                com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryCodeLocatorKind.FILE,
+                                "app/api/__init__.py", null, null, null, "primary_change_point")),
+                com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryScope.PROJECT, "P");
+        when(memories.findById(recipe.memoryId())).thenReturn(java.util.Optional.of(
+                storedCard(recipe, List.of("learned", "procedure"), locators)));
+        when(retrieval.retrieveForInjection(any(), eq("P"), isNull())).thenReturn(contextCards(List.of(recipe)));
+        tool.setSessionSupport(retrieval, memories, emptyProvider(), null, 0.65);
+
+        var card = tool.bootstrap("/repo", "add a posts endpoint", null, null, null, null).memory().get(0);
+
+        assertThat(card.files()).contains("app/models.py:2-3 app.models.User#to_dict (method)", "app/api/__init__.py");
+        assertThat(card.code()).isEqualTo("""
+                Current code, app/models.py:2-3 app.models.User#to_dict (method):
+                2│     def to_dict(self):
+                3│         return {'id': self.id}
+                Current outline, app/api/__init__.py:
+                  2-2 class Blueprint2
+                  3-4 function register""");
+        // a changed file: neither its lines nor its outline are shown as current
+        java.nio.file.Files.writeString(root.resolve("app/api/__init__.py"), "# edited\n" + new String(init));
+        java.nio.file.Files.writeString(root.resolve("app/models.py"), "# edited\n" + new String(models));
+        assertThat(tool.bootstrap("/repo", "add a posts endpoint", null, null, null, null).memory().get(0).code())
+                .isNull();
+    }
+
+    @Test
+    void aRefWrittenWithPartOfItsModulePathResolvesOnlyToTheOneMatchingSymbolOfItsFile(
+            @org.junit.jupiter.api.io.TempDir java.nio.file.Path root) throws Exception {
+        java.nio.file.Files.createDirectories(root.resolve("app"));
+        byte[] source = "class Post:\n    def to_dict(self):\n        return {}\n".getBytes();
+        java.nio.file.Files.write(root.resolve("app/models.py"), source);
+        var baseline = mock(com.mbworldwideapps.aiorchestration.modules.scanner.CodeBaselineRepository.class);
+        java.util.UUID fileId = java.util.UUID.randomUUID();
+        java.util.UUID runId = java.util.UUID.randomUUID();
+        var file = new com.mbworldwideapps.aiorchestration.modules.scanner.CodeFileRecord(fileId, "P", "app/models.py",
+                sha256(source), "python", runId, java.util.Map.of());
+        when(baseline.findFileById("P", fileId)).thenReturn(java.util.Optional.of(file));
+        when(baseline.findFileByPath("P", "app/models.py")).thenReturn(java.util.Optional.of(file));
+        when(baseline.findRun("P", runId)).thenReturn(java.util.Optional.of(
+                new com.mbworldwideapps.aiorchestration.modules.scanner.CodeScanRunRecord(runId, "P", root.toString(),
+                        "completed", java.time.Instant.now(), java.time.Instant.now(), java.util.Map.of())));
+        when(baseline.findSymbolsByRef(eq("P"), any(), anyInt())).thenReturn(List.of());  // no exact name
+        var toDict = symbol(fileId, "method", "app.models.Post#to_dict", 2, 3);
+        when(baseline.findSymbolsForFile(eq("P"), eq(fileId), anyInt())).thenReturn(List.of(
+                symbol(fileId, "class", "app.models.Post", 1, 3), toDict));
+        tool.setCodeBaseline(baseline);
+
+        assertThat(tool.currentLocation("P", "models.Post#to_dict", "app/models.py"))
+                .isEqualTo("app/models.py:2-3 models.Post#to_dict (method)");
+        assertThat(tool.currentLocation("P", "Post#to_dict", "app/models.py"))
+                .isEqualTo("app/models.py:2-3 Post#to_dict (method)");
+        // a name that only ends like it ("xmodels.Post#to_dict") or another file: nothing
+        assertThat(tool.currentLocation("P", "dels.Post#to_dict", "app/models.py")).isNull();
+        when(baseline.findFileByPath("P", "app/other.py")).thenReturn(java.util.Optional.empty());
+        assertThat(tool.currentLocation("P", "models.Post#to_dict", "app/other.py")).isNull();
+        // two symbols of the file end with the ref: ambiguous, nothing
+        when(baseline.findSymbolsForFile(eq("P"), eq(fileId), anyInt())).thenReturn(List.of(toDict,
+                symbol(fileId, "method", "app.legacy.models.Post#to_dict", 5, 6)));
+        assertThat(tool.currentLocation("P", "models.Post#to_dict", "app/models.py")).isNull();
+    }
+
+    @Test
+    void aCutExcerptSaysWhichLinesItShowsAndWhereTheSymbolEnds() {
+        List<String> lines = java.util.stream.IntStream.rangeClosed(1, 100).mapToObj(i -> "line " + i).toList();
+        String cut = AgentSessionMcpTool.excerpt("a.py:5-90 f (function)", 5, 90, lines, 10_000);
+        assertThat(cut).contains("5│ line 5\n", "44│ line 44\n").doesNotContain("45│")
+                .endsWith("… cut: lines 5-44 shown; the symbol ends at line 90\n");
+        String small = AgentSessionMcpTool.excerpt("a.py:5-90 f (function)", 5, 90, lines, 150);
+        assertThat(small).contains("5│ line 5").contains("… cut: lines 5-");
+        assertThat(small.length()).isLessThanOrEqualTo(150);
+        assertThat(AgentSessionMcpTool.excerpt("a.py:5-90 f (function)", 5, 90, lines, 40)).isNull();
+        assertThat(AgentSessionMcpTool.excerpt("a.py:5-6 f (function)", 5, 6, lines, 10_000))
+                .doesNotContain("cut");
+    }
+
+    private static String sha256(byte[] bytes) throws Exception {
+        return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes));
+    }
+
+    private static com.mbworldwideapps.aiorchestration.modules.scanner.CodeSymbolRecord symbol(java.util.UUID fileId,
+            String kind, String fqn, int start, int end) {
+        return new com.mbworldwideapps.aiorchestration.modules.scanner.CodeSymbolRecord(java.util.UUID.randomUUID(), "P",
+                fileId, kind, fqn.replaceAll(".*[#.]", ""), fqn, "", kind, start, end, "h", null, java.util.Map.of());
+    }
+
+    /** Retrieval as the service does it: admit (kinds) and show (not shown before) applied to the candidates. */
+    @SuppressWarnings("unchecked")
+    private static void stepAnswers(com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryRetrievalService retrieval,
+            String query, List<com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextItem> candidates,
+            java.util.Map<com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextItem,
+                    com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryItem> stored) {
+        when(retrieval.retrieveForStep(eq(query), eq("P"), any(), any(), anyDouble())).thenAnswer(call -> {
+            java.util.function.Predicate<com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryItem> admit =
+                    call.getArgument(2);
+            java.util.function.Predicate<com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryItem> show =
+                    call.getArgument(3);
+            var admitted = candidates.stream().filter(c -> admit.test(stored.get(c))).toList();
+            return new com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryRetrievalService.StepRetrieval(
+                    contextCards(admitted.stream().filter(c -> show.test(stored.get(c))).toList()),
+                    !admitted.isEmpty());
+        });
+    }
+
+    @Test
+    void aTaskMatchBetweenThePointerFloorAndTheCardFloorGoesOutAsOnePointerWithoutText() {
+        McpClientContextHolder.set(context(List.of("scanner.scan")));
+        resolves();
+        var retrieval = mock(com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryRetrievalService.class);
+        var full = card("csv export pattern", 0.70);
+        var near = card("csv helper quoting", 0.63);
+        var nearer = card("owner csv controller", 0.62);
+        var weak = card("unrelated page", 0.55);
+        when(retrieval.retrieveForInjection("export vets as csv", "P", null)).thenReturn(
+                contextCards(List.of(full, near, nearer, weak)));
+        when(retrieval.retrieveForInjection(AgentSessionMcpTool.VERIFY_QUERY, "P", null)).thenReturn(
+                com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextResponse.empty());
+        tool.setSessionSupport(retrieval, null, emptyProvider(), null, 0.65);
+        tool.setCardPointerMinScore(0.60);
+
+        var memory = tool.bootstrap("/repo", "export vets as csv", null, null, null, null).memory();
+        assertThat(memory).extracting(AgentSessionMcpTool.Card::summary)
+                .containsExactly("csv export pattern", "csv helper quoting");  // one pointer, the best below the floor
+        assertThat(memory.get(0).pointer()).isNull();
+        assertThat(memory.get(1).pointer()).isTrue();
+        assertThat(memory.get(1).text()).isNull();
+    }
+
+    @Test
+    void withoutAFullCardOnlyThePointerGoesOutAndNothingBelowThePointerFloor() {
+        McpClientContextHolder.set(context(List.of("scanner.scan")));
+        resolves();
+        var retrieval = mock(com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryRetrievalService.class);
+        when(retrieval.retrieveForInjection("rename a column", "P", null)).thenReturn(
+                contextCards(List.of(card("migration naming", 0.61))));
+        when(retrieval.retrieveForInjection("unrelated task", "P", null)).thenReturn(
+                contextCards(List.of(card("weak match", 0.59))));
+        when(retrieval.retrieveForInjection(AgentSessionMcpTool.VERIFY_QUERY, "P", null)).thenReturn(
+                com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextResponse.empty());
+        tool.setSessionSupport(retrieval, null, emptyProvider(), null, 0.65);
+        tool.setCardPointerMinScore(0.60);
+
+        assertThat(tool.bootstrap("/repo", "rename a column", null, null, null, null).memory())
+                .singleElement().satisfies(c -> assertThat(c.pointer()).isTrue());
+        assertThat(tool.bootstrap("/repo", "unrelated task", null, null, null, null).memory()).isEmpty();
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void testAddressFillerSurvivesAStrongerChangePointMatch(boolean kindInMetadata) {
+        McpClientContextHolder.set(context(List.of("scanner.scan")));
+        resolves();
+        var retrieval = mock(com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryRetrievalService.class);
+        var changePoint = card("implementation entry point", 0.90);
+        var testAddress = card("tests covering stylesheet changes", 0.65);
+        var memories = mock(com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryRepository.class);
+        when(memories.findById(changePoint.memoryId())).thenReturn(java.util.Optional.of(
+                storedCard(changePoint, List.of("discovery", "change_point"))));
+        when(memories.findById(testAddress.memoryId())).thenReturn(java.util.Optional.of(
+                storedCard(testAddress, kindInMetadata ? List.of() : List.of("discovery", "test_address"),
+                        kindInMetadata ? java.util.Map.of("discoveryKind", "test_address") : java.util.Map.of())));
+        when(retrieval.retrieveForInjection("rename a stylesheet", "P", null)).thenReturn(
+                com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextResponse.empty());
+        when(retrieval.retrieveForInjection(AgentSessionMcpTool.VERIFY_QUERY, "P", null)).thenReturn(
+                contextCards(List.of(changePoint, testAddress)));
+        tool.setSessionSupport(retrieval, memories, emptyProvider(), null, 0.65);
+
+        assertThat(tool.bootstrap("/repo", "rename a stylesheet", null, null, null, null).memory())
+                .extracting(AgentSessionMcpTool.Card::summary).containsExactly(testAddress.summary());
+    }
+
+    private static com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextResponse contextCards(
+            List<com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextItem> items) {
+        return new com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextResponse(
+                items, List.of(), items.size(), 30, java.util.Map.of(), 0, 0, 0L);
+    }
+
+    private static com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryItem storedCard(
+            com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextItem item, List<String> tags) {
+        return storedCard(item, tags, java.util.Map.of());
+    }
+
+    private static com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryItem storedCard(
+            com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextItem item, List<String> tags,
+            java.util.Map<String, Object> metadata) {
+        return new com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryItem(
+                item.memoryId(), item.vectorId(), item.scope(), item.projectKey(), item.memoryType(),
+                item.summary(), item.text(), tags, item.confidence(),
+                com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryStatus.ACTIVE,
+                com.mbworldwideapps.aiorchestration.modules.memoryai.MemorySourceType.MCP_EXTERNAL,
+                "memory.learn", "test", metadata, java.time.Instant.now(), java.time.Instant.now(),
+                null, java.time.Instant.now(), null);
     }
 
     private static com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextItem card(String summary,

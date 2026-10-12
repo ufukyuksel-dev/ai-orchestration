@@ -14,3 +14,5 @@ fetch() {
   echo "$name @ $(git -C "$repos/$name" rev-parse --short HEAD)"
 }
 fetch spring-petclinic https://github.com/spring-projects/spring-petclinic.git a6efbed773f61a271c071461326940786998722e
+bash "$here/setup/microblog.sh"   # Python suite: clone + virtualenv (bench/tasks/py-holdout.json)
+bash "$here/setup/golang-gin-realworld-example-app.sh"   # Go suite (bench/tasks/go-holdout.json)

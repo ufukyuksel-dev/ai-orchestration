@@ -1,0 +1,13 @@
+diff --git a/src/main/java/org/springframework/samples/petclinic/owner/Owner.java b/src/main/java/org/springframework/samples/petclinic/owner/Owner.java
+index 79ac22e..480a7a6 100644
+--- a/src/main/java/org/springframework/samples/petclinic/owner/Owner.java
++++ b/src/main/java/org/springframework/samples/petclinic/owner/Owner.java
+@@ -135,7 +135,7 @@ public class Owner extends Person {
+ 	public Pet getPet(String name, boolean ignoreNew) {
+ 		for (Pet pet : getPets()) {
+ 			String compName = pet.getName();
+-			if (compName != null && compName.equals(name)) {
++			if (compName != null && compName.equalsIgnoreCase(name)) {
+ 				if (!ignoreNew || !pet.isNew()) {
+ 					return pet;
+ 				}

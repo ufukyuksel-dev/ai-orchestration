@@ -1,0 +1,136 @@
+{
+  "suite": "v2-petclinic",
+  "note": "v2 scored suite for spring-petclinic (plan-harness-benchmark-v2 §4.1: B×2, I×2, R×1, T×1, F×1). Seven independent tasks, one family each, no memory chains. Every position starts from a parentless snapshot of the pinned sha plus the task's baseline patch (B tasks inject their bug there). Hidden checks: bench/hidden/<task>/, references: bench/reference/<task>.patch or .answer.md, answer keys: bench/answers/, mutants: bench/mutants/pc06/. Details, pitfalls and why each check is objective: bench/v2-petclinic-notes.md.",
+  "repo": "spring-petclinic",
+  "sha": "a6efbed773f61a271c071461326940786998722e",
+  "hiddenTarget": "src/test/java/org/springframework/samples/petclinic",
+  "qualityCommand": [
+    "./mvnw",
+    "-q",
+    "-DskipTests",
+    "validate"
+  ],
+  "families": [
+    {
+      "id": "PC01",
+      "title": "Owner search lists too few owners",
+      "tasks": [
+        {
+          "id": "pc01",
+          "type": "B",
+          "kind": "code",
+          "prompt": "The owner search does not list all owners. On the Find Owners page, searching with an empty last name (`GET /owners?lastName=`) shows only four owners (George Franklin, Betty Davis, Eduardo Rodriquez and Harold Davis) and no links to further pages, although the clinic has ten owners. Listing all owners must show every owner exactly once, five per page, on two pages (`page=1` and `page=2`), with a total of 10 owners. Searches by a last-name prefix must keep working as before: a single match opens that owner's page, several matches are listed, and no match shows 'has not been found'. Make sure the project's build and tests still pass.",
+          "hidden": [
+            "BenchPc01Test.java"
+          ],
+          "tests": "!MySqlIntegrationTests,!PostgresIntegrationTests",
+          "baseline": {
+            "patch": "baselines/pc01.patch"
+          }
+        }
+      ]
+    },
+    {
+      "id": "PC02",
+      "title": "Telephone validation message shown raw",
+      "tasks": [
+        {
+          "id": "pc02",
+          "type": "B",
+          "kind": "code",
+          "prompt": "On the owner form (both 'Add Owner' and 'Edit Owner'), an invalid telephone number such as `12345` is rejected, but the message shown under the Telephone field is the raw text `{telephone.invalid}` instead of the readable message `Telephone must be a 10-digit number`. Invalid telephone numbers must still be rejected and not saved, and the readable message must be shown in the language the user has selected (for example the German message after switching the language with `?lang=de`). Other validation messages must stay as they are. Make sure the project's build and tests still pass.",
+          "hidden": [
+            "BenchPc02Test.java"
+          ],
+          "tests": "!MySqlIntegrationTests,!PostgresIntegrationTests",
+          "baseline": {
+            "patch": "baselines/pc02.patch"
+          }
+        }
+      ]
+    },
+    {
+      "id": "PC03",
+      "title": "Add-visit page for another owner's pet",
+      "tasks": [
+        {
+          "id": "pc03",
+          "type": "I",
+          "kind": "investigation",
+          "prompt": "A user opens `GET /owners/1/pets/7/visits/new` (the 'Add Visit' page for pet 7 under owner 1). Pet 7 exists in the database, but it belongs to another owner. Answer from the code what happens. Do not change any files. End your reply with a block that starts with a line `ANSWER:` followed by one `key: value` line per key: `status` (the HTTP status code the browser receives), `exception` (the simple class name of the exception that causes this response), `thrownIn` (the method that throws it, as `Class.method`), `lookup` (the method, as `Class.method`, whose result for pet 7 makes the throwing method fail)."
+        }
+      ]
+    },
+    {
+      "id": "PC04",
+      "title": "Second page of an owner search",
+      "tasks": [
+        {
+          "id": "pc04",
+          "type": "I",
+          "kind": "investigation",
+          "prompt": "With the seed data loaded, a user requests `GET /owners?lastName=Davis&page=2` (the second page of the owner search for the last name Davis). Answer from the code what the application responds with. Do not change any files. End your reply with a block that starts with a line `ANSWER:` followed by one `key: value` line per key: `view` (the view name the controller returns), `errorCode` (the error code registered on the search form, or `none`), `field` (the form field that error is registered on, or `none`)."
+        }
+      ]
+    },
+    {
+      "id": "PC05",
+      "title": "Owner service layer",
+      "tasks": [
+        {
+          "id": "pc05",
+          "type": "R",
+          "kind": "code",
+          "prompt": "Introduce a service layer for owners. Add the public class `org.springframework.samples.petclinic.owner.OwnerService`, a Spring `@Service` with a public constructor taking an `OwnerRepository`, and these public methods: `Owner findOwner(int ownerId)` returns the owner with that id and throws `IllegalArgumentException` for an unknown id; `Page<Owner> findOwnersByLastName(String lastNamePrefix, int page)` returns the given 1-based page (5 owners per page) of the owners whose last name starts with the prefix, exactly as the owner search pages today; `Owner save(Owner owner)` saves the owner and returns the saved owner. `OwnerController`, `PetController` and `VisitController` must do all their owner lookups and saves through `OwnerService` and must no longer depend on `OwnerRepository` directly (no field or constructor parameter of that type). This is a refactoring: every page, redirect, validation result and error case must behave exactly as before. Make sure the project's build and tests still pass.",
+          "hidden": [
+            "BenchPc05Test.java"
+          ],
+          "tests": "!MySqlIntegrationTests,!PostgresIntegrationTests"
+        }
+      ]
+    },
+    {
+      "id": "PC06",
+      "title": "Tests for an owner's pets",
+      "tasks": [
+        {
+          "id": "pc06",
+          "type": "T",
+          "kind": "tests",
+          "prompt": "Add unit tests that pin down how an `Owner` manages its pets: looking up a pet by name (the default lookup, and the lookup with and without ignoring pets that have not been saved yet), looking up a pet by id, adding a pet, and adding a visit to one of its pets by pet id (including invalid arguments). Only add or change test code under `src/test/java`; do not change production code. The new tests must pass on the current code, and the project's build and whole test suite must still pass.",
+          "allowedPaths": [
+            "src/test/java/*"
+          ],
+          "testCommand": "./mvnw -q -Dspring-javaformat.skip=true -Dcheckstyle.skip test -Dtest='!MySqlIntegrationTests,!PostgresIntegrationTests' -Dsurefire.failIfNoSpecifiedTests=false",
+          "mutants": [
+            "1-name-case.patch",
+            "2-ignore-new-ignored.patch",
+            "3-get-by-name-skips-new.patch",
+            "4-add-pet-twice.patch",
+            "5-add-visit-unknown-pet.patch"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "PC07",
+      "title": "Visit date before birth date",
+      "tasks": [
+        {
+          "id": "pc07",
+          "type": "F",
+          "kind": "code",
+          "prompt": "When booking a visit for a pet (the 'Add Visit' form, `POST /owners/{ownerId}/pets/{petId}/visits/new`), a visit date before the pet's birth date must be rejected: the form is shown again with the message `Visit date must not be before the birth date of the pet` on the date field, and the visit is not saved. A visit on the birth date itself or later is booked as before, and the existing checks of the form (for example a missing description) keep working and are reported together with the new one. Make sure the project's build and tests still pass.",
+          "hidden": [
+            "BenchPc07Test.java"
+          ],
+          "tests": "!MySqlIntegrationTests,!PostgresIntegrationTests",
+          "probe": [
+            "BenchPc07ProbeTest.java"
+          ],
+          "probeTests": "BenchPc07ProbeTest"
+        }
+      ]
+    }
+  ]
+}

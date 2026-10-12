@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
-"""Adds or removes AI Orchestration's Claude Code prompt hook in a settings.json (install.sh / --uninstall).
+"""Adds or removes AI Orchestration's hooks in a Claude Code settings.json or a Codex hooks.json (same format), used
+by install.sh and --uninstall.
 
-  python3 scripts/claude_hook_config.py set    ~/.claude/settings.json "<prompt hook command>" "<stop hook command>"
+  python3 scripts/claude_hook_config.py set    ~/.claude/settings.json "<hook command>"... [--lean]
+  python3 scripts/claude_hook_config.py set    ~/.codex/hooks.json "<hook command>"...
   python3 scripts/claude_hook_config.py remove ~/.claude/settings.json
 
 Each command goes to the event of the script it runs (`ai_orch_prompt_context.py`: UserPromptSubmit,
-`ai_orch_learn_reminder.py`: Stop). Only entries running those scripts are ours; every other setting and hook is kept.
-The file is written atomically and a copy of the previous version is kept next to it (settings.json.ai-orch.bak).
+`ai_orch_command_hook.py`: PreToolUse on Bash, `ai_orch_search_hook.py`: PostToolUse on Grep/Bash,
+`ai_orch_memory_gate.py pre|post`: PreToolUse/PostToolUse on the memory-search MCP tools, `ai_orch_stop.py` and the
+older `ai_orch_learn_reminder.py`: Stop).
+Only entries running those scripts are ours; every other setting and hook is kept. `--lean` also hides the Claude Code
+tools a coding session does not use (permissions.deny), which shrinks the context every model call re-reads; `remove`
+takes exactly those entries out again. The file is written atomically and a copy of the previous version is kept next
+to it (<name>.ai-orch.bak).
 """
 from __future__ import annotations
 
@@ -17,10 +24,23 @@ import sys
 import tempfile
 from pathlib import Path
 
-EVENTS = {"ai_orch_prompt_context.py": "UserPromptSubmit", "ai_orch_learn_reminder.py": "Stop"}
+EVENTS = {"ai_orch_prompt_context.py": "UserPromptSubmit", "ai_orch_command_hook.py": "PreToolUse",
+          "ai_orch_search_hook.py": "PostToolUse", "ai_orch_stop.py": "Stop", "ai_orch_learn_reminder.py": "Stop",
+          "ai_orch_memory_gate.py": "PreToolUse"}  # `... post` runs on PostToolUse
+MATCHERS = {"ai_orch_command_hook.py": "Bash", "ai_orch_search_hook.py": "Grep|Bash",
+            "ai_orch_memory_gate.py": "mcp__ai-orchestration__memory_search|mcp__ai-orchestration__extras"}
+# the Stop hook may run the project's formatter and tests on an unchecked final tree
+TIMEOUTS = {"ai_orch_prompt_context.py": 15, "ai_orch_command_hook.py": 20, "ai_orch_search_hook.py": 5,
+            "ai_orch_stop.py": 960, "ai_orch_memory_gate.py": 5}
+LEAN_DENY = ["CronCreate", "CronDelete", "CronList", "DesignSync", "EnterWorktree", "ExitWorktree", "ListAgents",
+             "Monitor", "NotebookEdit", "PushNotification", "RemoteTrigger", "ReportFindings", "ScheduleWakeup",
+             "SendMessage", "TaskCreate", "TaskGet", "TaskList", "TaskStop", "TaskUpdate", "Workflow", "Skill",
+             "ListMcpResourcesTool", "ReadMcpResourceTool", "ReadMcpResourceDirTool"]
 
 
 def event_of(command: str) -> str | None:
+    if "ai_orch_memory_gate.py" in command:
+        return "PostToolUse" if command.rstrip().endswith(" post") else "PreToolUse"
     return next((event for marker, event in EVENTS.items() if marker in command), None)
 
 
@@ -41,6 +61,13 @@ def strip(settings: dict) -> dict:
             settings["hooks"].pop(event, None)
     if "hooks" in settings and not settings["hooks"]:
         settings.pop("hooks")
+    deny = settings.get("permissions", {}).get("deny")
+    if isinstance(deny, list) and all(d in deny for d in LEAN_DENY):  # the full set is ours; a user's own entry is not
+        settings["permissions"]["deny"] = [d for d in deny if d not in LEAN_DENY]
+        if not settings["permissions"]["deny"]:
+            settings["permissions"].pop("deny")
+        if not settings["permissions"]:
+            settings.pop("permissions")
     return settings
 
 
@@ -56,6 +83,8 @@ def write(path: Path, settings: dict) -> None:
 
 
 def main(argv: list[str]) -> int:
+    lean = "--lean" in argv
+    argv = [a for a in argv if a != "--lean"]
     if len(argv) < 3 or argv[1] not in ("set", "remove") or (argv[1] == "set" and len(argv) < 4):
         print(__doc__, file=sys.stderr)
         return 2
@@ -73,8 +102,14 @@ def main(argv: list[str]) -> int:
             if event is None:
                 print(f"not an AI Orchestration hook: {command}", file=sys.stderr)
                 return 2
-            entry = {"hooks": [{"type": "command", "command": command, "timeout": 10}]}
+            script = next(marker for marker in EVENTS if marker in command)
+            entry = {"hooks": [{"type": "command", "command": command, "timeout": TIMEOUTS.get(script, 10)}]}
+            if script in MATCHERS:
+                entry = {"matcher": MATCHERS[script], **entry}
             settings.setdefault("hooks", {}).setdefault(event, []).append(entry)
+        if lean:
+            deny = settings.setdefault("permissions", {}).setdefault("deny", [])
+            deny += [d for d in LEAN_DENY if d not in deny]
     if json.dumps(settings, sort_keys=True) != before:
         write(path, settings)
     return 0

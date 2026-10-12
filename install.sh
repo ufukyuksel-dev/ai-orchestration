@@ -169,10 +169,19 @@ register_claude() {
     claude mcp add-json --scope user ai-orchestration "{\"type\":\"http\",\"url\":\"$MCP_URL\",\"alwaysLoad\":true,\"headers\":{\"X-AI-Orch-Client\":\"claude-code\",\"X-AI-Orch-Tools\":\"minimal\"}}" >/dev/null
     ok "Claude Code registered ($MCP_URL)"
   fi
+  # prompt: rules, cards, build profile and code map; command: formatter before checks + compact check output;
+  # memory gate: once a memory search found nothing, memory is not searched again in that request;
+  # stop: checks an unchecked final tree and saves what the task taught. AI_ORCH_LEAN_TOOLS=1 also hides the Claude
+  # Code tools a coding session does not use (scheduling, multi-agent messaging, workflows), a smaller context per call.
   if python3 "$REPO/scripts/claude_hook_config.py" set "$HOME/.claude/settings.json" \
       "AI_ORCH_URL=$BASE python3 $REPO/scripts/hooks/ai_orch_prompt_context.py" \
-      "python3 $REPO/scripts/hooks/ai_orch_learn_reminder.py"
-  then ok "Claude Code hooks installed (memory and rules arrive with each request; learning is asked for at task end)"
+      "python3 $REPO/scripts/hooks/ai_orch_command_hook.py" \
+      "python3 $REPO/scripts/hooks/ai_orch_search_hook.py" \
+      "python3 $REPO/scripts/hooks/ai_orch_memory_gate.py pre" \
+      "python3 $REPO/scripts/hooks/ai_orch_memory_gate.py post" \
+      "AI_ORCH_URL=$BASE python3 $REPO/scripts/hooks/ai_orch_stop.py" \
+      ${AI_ORCH_LEAN_TOOLS:+--lean}
+  then ok "Claude Code hooks installed (memory, rules and the build profile arrive with each request; checks are formatted and compacted; learning happens at task end)"
   else warn "Claude Code hooks not installed: ~/.claude/settings.json is not valid JSON"
   fi
 }
@@ -183,6 +192,14 @@ register_codex() {
   then ok "Codex registered ($CODEX_CONFIG)"
   else die "a different 'ai-orchestration' server is configured in $CODEX_CONFIG; not touching it" "remove that table, then re-run ./install.sh"
   fi
+  if python3 "$REPO/scripts/claude_hook_config.py" set "$(dirname "$CODEX_CONFIG")/hooks.json" \
+      "AI_ORCH_URL=$BASE AI_ORCH_CLIENT=codex python3 $REPO/scripts/hooks/ai_orch_prompt_context.py" \
+      "python3 $REPO/scripts/hooks/ai_orch_command_hook.py --client codex" \
+      "python3 $REPO/scripts/hooks/ai_orch_search_hook.py" \
+      "AI_ORCH_URL=$BASE AI_ORCH_CLIENT=codex python3 $REPO/scripts/hooks/ai_orch_stop.py"
+  then ok "Codex hooks installed; trust them once in Codex with /hooks"
+  else warn "Codex hooks not installed: $(dirname "$CODEX_CONFIG")/hooks.json is not valid JSON"
+  fi
 }
 
 unregister_agents() {
@@ -192,6 +209,10 @@ unregister_agents() {
   fi
   if [ -f "$HOME/.claude/settings.json" ] && grep -q "ai_orch_" "$HOME/.claude/settings.json"; then
     python3 "$REPO/scripts/claude_hook_config.py" remove "$HOME/.claude/settings.json" && ok "Claude Code hooks removed"
+  fi
+  local codex_hooks; codex_hooks="$(dirname "$CODEX_CONFIG")/hooks.json"
+  if [ -f "$codex_hooks" ] && grep -q "ai_orch_" "$codex_hooks"; then
+    python3 "$REPO/scripts/claude_hook_config.py" remove "$codex_hooks" && ok "Codex hooks removed"
   fi
   if [ -f "$CODEX_CONFIG" ] && grep -q "# managed by AI Orchestration install.sh" "$CODEX_CONFIG"; then
     python3 "$REPO/scripts/codex_mcp_config.py" remove "$CODEX_CONFIG"

@@ -1,0 +1,79 @@
+diff --git a/articles/articles_csv.go b/articles/articles_csv.go
+new file mode 100644
+index 0000000..dec7235
+--- /dev/null
++++ b/articles/articles_csv.go
+@@ -0,0 +1,32 @@
++package articles
++
++import (
++	"sort"
++	"strconv"
++	"strings"
++
++	"github.com/gin-gonic/gin"
++	"github.com/gothinkster/golang-gin-realworld-example-app/common"
++)
++
++// ArticlesCSV exports every article (no paging), oldest first.
++func ArticlesCSV(c *gin.Context) {
++	var models []ArticleModel
++	common.GetDB().Preload("Author.UserModel").Preload("Tags").Order("created_at ASC, id ASC").Find(&models)
++	ids := make([]uint, 0, len(models))
++	for _, m := range models {
++		ids = append(ids, m.ID)
++	}
++	counts := BatchGetFavoriteCounts(ids)
++	records := [][]string{{"slug", "title", "author", "tagList", "favoritesCount", "createdAt"}}
++	for _, m := range models {
++		tags := make([]string, 0, len(m.Tags))
++		for _, t := range m.Tags {
++			tags = append(tags, t.Tag)
++		}
++		sort.Strings(tags)
++		records = append(records, []string{m.Slug, m.Title, m.Author.UserModel.Username, strings.Join(tags, ";"),
++			strconv.FormatUint(uint64(counts[m.ID]), 10), m.CreatedAt.UTC().Format(csvDateFormat)})
++	}
++	writeCSV(c, records)
++}
+diff --git a/articles/csv.go b/articles/csv.go
+new file mode 100644
+index 0000000..752ef7d
+--- /dev/null
++++ b/articles/csv.go
+@@ -0,0 +1,23 @@
++package articles
++
++import (
++	"bytes"
++	"encoding/csv"
++	"net/http"
++
++	"github.com/gin-gonic/gin"
++)
++
++// csvDateFormat is the timestamp format of the JSON API (createdAt/updatedAt).
++const csvDateFormat = "2006-01-02T15:04:05.999Z"
++
++// writeCSV answers with the records as RFC 4180 CSV (encoding/csv quotes commas, quotes and line breaks).
++func writeCSV(c *gin.Context, records [][]string) {
++	var buf bytes.Buffer
++	w := csv.NewWriter(&buf)
++	if err := w.WriteAll(records); err != nil {
++		c.AbortWithStatus(http.StatusInternalServerError)
++		return
++	}
++	c.Data(http.StatusOK, "text/csv; charset=utf-8", buf.Bytes())
++}
+diff --git a/hello.go b/hello.go
+index 4ff36d3..fe4ce48 100644
+--- a/hello.go
++++ b/hello.go
+@@ -41,6 +41,7 @@ func main() {
+ 	v1 := r.Group("/api")
+ 	users.UsersRegister(v1.Group("/users"))
+ 	v1.Use(users.AuthMiddleware(false))
++	v1.GET("/articles.csv", articles.ArticlesCSV)
+ 	articles.ArticlesAnonymousRegister(v1.Group("/articles"))
+ 	articles.TagsAnonymousRegister(v1.Group("/tags"))
+ 	users.ProfileRetrieveRegister(v1.Group("/profiles"))

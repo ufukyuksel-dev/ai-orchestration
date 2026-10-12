@@ -1,0 +1,36 @@
+diff --git a/app/main/routes.py b/app/main/routes.py
+index 103bbc7..277e1c5 100644
+--- a/app/main/routes.py
++++ b/app/main/routes.py
+@@ -1,5 +1,8 @@
++import csv
++import io
+ from datetime import datetime, timezone
+ from flask import render_template, flash, redirect, url_for, request, g, \
++    Response, \
+     current_app
+ from flask_login import current_user, login_required
+ from flask_babel import _, get_locale
+@@ -239,3 +242,22 @@ def notifications():
+         'data': n.get_data(),
+         'timestamp': n.timestamp
+     } for n in notifications]
++
++
++def csv_response(rows, filename):
++    out = io.StringIO()
++    csv.writer(out).writerows(rows)
++    return Response(out.getvalue(), mimetype='text/csv', headers={
++        'Content-Disposition': f'attachment; filename={filename}'})
++
++
++@bp.route('/export/posts.csv')
++@login_required
++def export_posts_csv():
++    query = current_user.posts.select().order_by(Post.timestamp.asc(),
++                                                 Post.id.asc())
++    rows = [['id', 'timestamp', 'body']]
++    for post in db.session.scalars(query):
++        rows.append([post.id, post.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
++                     post.body])
++    return csv_response(rows, 'posts.csv')

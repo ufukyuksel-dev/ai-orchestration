@@ -1,0 +1,64 @@
+diff --git a/articles/article_stats.go b/articles/article_stats.go
+new file mode 100644
+index 0000000..d651669
+--- /dev/null
++++ b/articles/article_stats.go
+@@ -0,0 +1,46 @@
++package articles
++
++import (
++	"errors"
++	"net/http"
++	"sort"
++
++	"github.com/gin-gonic/gin"
++	"github.com/gothinkster/golang-gin-realworld-example-app/common"
++)
++
++// ArticleStats returns comment and favorite statistics of one article.
++func ArticleStats(c *gin.Context) {
++	articleModel, err := FindOneArticle(&ArticleModel{Slug: c.Param("slug")})
++	if err != nil {
++		c.JSON(http.StatusNotFound, common.NewError("articles", errors.New("Invalid slug")))
++		return
++	}
++	db := common.GetDB()
++
++	var comments []CommentModel
++	db.Preload("Author.UserModel").Where(&CommentModel{ArticleID: articleModel.ID}).Find(&comments)
++	var favorites []FavoriteModel
++	db.Preload("FavoriteBy.UserModel").Where(&FavoriteModel{FavoriteID: articleModel.ID}).Find(&favorites)
++
++	c.JSON(http.StatusOK, gin.H{"stats": gin.H{
++		"slug":           articleModel.Slug,
++		"commentsCount":  len(comments),
++		"favoritesCount": len(favorites),
++		"commenters":     distinctSorted(len(comments), func(i int) string { return comments[i].Author.UserModel.Username }),
++		"favoritedBy":    distinctSorted(len(favorites), func(i int) string { return favorites[i].FavoriteBy.UserModel.Username }),
++	}})
++}
++
++func distinctSorted(n int, name func(int) string) []string {
++	seen := map[string]bool{}
++	out := []string{}
++	for i := 0; i < n; i++ {
++		if v := name(i); !seen[v] {
++			seen[v] = true
++			out = append(out, v)
++		}
++	}
++	sort.Strings(out)
++	return out
++}
+diff --git a/articles/routers.go b/articles/routers.go
+index 3aea0b5..65fcf4d 100644
+--- a/articles/routers.go
++++ b/articles/routers.go
+@@ -28,6 +28,7 @@ func ArticlesAnonymousRegister(router *gin.RouterGroup) {
+ 	router.GET("/", ArticleList)
+ 	router.GET("/:slug", ArticleRetrieve)
+ 	router.GET("/:slug/comments", ArticleCommentList)
++	router.GET("/:slug/stats", ArticleStats)
+ }
+ 
+ func TagsAnonymousRegister(router *gin.RouterGroup) {

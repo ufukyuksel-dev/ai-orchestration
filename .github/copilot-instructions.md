@@ -32,7 +32,9 @@ use the relevant direct `--help` command.
 
 ## Session rules
 
-At the first request of a new session, use Copilot's `ask_user` tool to ask:
+When the AI Orchestration prompt hook is installed it applies the saved rules preference itself: approved rules arrive with your prompt ("AI Orchestration rules for this repository"), or it says that rules were skipped. Ask the question below only when the prompt says no rules preference is saved; never ask when it says the session is unattended.
+
+Otherwise, at the first request of a new session, use Copilot's `ask_user` tool to ask:
 
 > Bu oturum için AI Orchestration global ve proje kurallarını yükleyeyim mi?
 
@@ -80,8 +82,11 @@ status and verify changeable facts against current code or configuration.
 
 ## Learning capture
 
-At task end, if the work produced durable reusable project knowledge, create
-one request with at most three candidates and make exactly one capture call:
+At task end, if the work produced durable reusable project knowledge, end the
+final answer with the hidden `<!-- ai-orch-learn {...} -->` comment the prompt's
+learning line describes (no tool call; the stop hook submits it). To save at
+another moment, create one request with at most three candidates and make
+exactly one capture call:
 
 ```bash
 ai_orch memory learn --file memory-learn.json --consume

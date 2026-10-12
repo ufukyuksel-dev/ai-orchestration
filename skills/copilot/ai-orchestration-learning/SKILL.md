@@ -1,20 +1,28 @@
 ---
 name: ai-orchestration-learning
-description: Use when Copilot has found durable project knowledge that should be saved with one final typed ai_orch terminal command.
+description: Only when the user explicitly asks to save project knowledge with a command. Normally knowledge is saved by the hidden ai-orch-learn comment at the end of the final answer, with no tool call and no need to open this skill.
 ---
 
-# Project learning — Copilot terminal flow
+# Project learning — Copilot
 
-Copilot uses only direct `ai_orch` terminal commands for AI Orchestration. It has no native MCP or
-lifecycle-hook learning path. Never rely on `.github/hooks`, a final-response sidecar, raw HTTP or a
-model-visible persistence tool.
+The usual way needs no tool call. When a task taught something reusable about this repository, end the
+final answer with one HTML comment, as each prompt's "AI Orchestration learning" line describes:
+`<!-- ai-orch-learn {"learningCandidates":[...]} -->` (the request shape below). Copilot's terminal does
+not display it; the installed stop hook reads it from the session transcript, checks it exactly as
+`ai_orch memory learn` does and submits it once per request. It is visible only where raw output is
+printed (`copilot -p`, `renderMarkdown: false`). Knowledge about this machine or sandbox (paths outside
+the repository) is not saved. Only when you fixed a failing check yourself and wrote no comment does the
+stop hook ask once for the comment alone: reply with it, or with `none`.
 
-If the task produced no durable reusable finding, do not write anything. Otherwise create one bounded
-request containing zero to three candidates and make one final learning command:
+To save at another moment, or when the user asks, use the one terminal command:
 
 ```bash
 ai_orch memory learn --file memory-learn.json --consume
 ```
+
+Copilot has no native MCP learning path: never write through `.github/hooks`, raw HTTP or a
+model-visible persistence tool. If the task produced
+no durable reusable finding, write nothing.
 
 Create `memory-learn.json` inside the current repository and pass that repository-local path. Do not
 place the request in Copilot's session workspace or another temporary directory.
@@ -56,7 +64,10 @@ distinct locators. Never invent scanner/database IDs, line ranges, persistence I
 workspace bindings, runtime names or endpoint fields. The `ai_orch` bridge owns those values.
 
 Use only these locator roles: `primary_change_point`, `supporting`, `validation`, `configuration`,
-and `entry_point`. Keep `summary` at most 160 characters and `content` at most 700 characters.
+and `entry_point`. Keep `summary` at most 160 characters and `content` at most 700 characters; a
+longer text is shortened by the bridge and reported in `warnings`, so there is no need to resubmit.
+Write the request file with your file-creation tool, not a shell heredoc. The same locator may
+serve several candidates.
 `appliesWhen`, `limitations`, and `reusableFor` may each contain at most six unique, nonblank items;
 each item is at most 160 characters.
 

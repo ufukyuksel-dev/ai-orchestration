@@ -1,0 +1,8 @@
+{
+  "keys": {
+    "defaultlimit": {"kind": "text", "accept": ["20"]},
+    "invalidlimit": {"kind": "text", "accept": ["20"]},
+    "function": {"kind": "symbol", "accept": ["FindManyArticle", "articles.FindManyArticle"]}
+  },
+  "contradict": ["GetArticleFeed", "ArticleList"]
+}

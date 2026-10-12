@@ -45,8 +45,12 @@ def profile_claude(events: list[dict]) -> dict:
                 if isinstance(c, dict) and c.get("type") == "tool_result":
                     result_chars[names_by_id.get(c.get("tool_use_id"), "?")] += _text_len(c.get("content"))
         elif e.get("type") == "result":
-            usage = e.get("usage") or {}
-            turns = e.get("num_turns") or 0
+            # A session can end more than once: a background task finishing wakes it for another turn. Each result
+            # carries the usage of its own segment (summed here); the cost is cumulative (the last one counts).
+            for key, value in (e.get("usage") or {}).items():
+                if isinstance(value, int):
+                    usage[key] = usage.get(key, 0) + value
+            turns += e.get("num_turns") or 0
             cost = e.get("total_cost_usd")
             final = e.get("result")
     fresh = usage.get("input_tokens", 0)
@@ -94,5 +98,51 @@ def profile_codex(events: list[dict]) -> dict:
             "finalAnswerChars": len(final or "")}
 
 
+def profile_copilot(events: list[dict]) -> dict:
+    """GitHub Copilot CLI (`--output-format json` events + the `--usage-output-file` the harness appends as `_usage`).
+    Usage per model: inputTokens = fresh + cache write + cache read (checked: 4 + 21926 + 21491 = 43421)."""
+    calls: Counter = Counter()
+    result_chars: Counter = Counter()
+    names_by_id: dict[str, str] = {}
+    memory_searches = refused = turns = 0
+    final, usage = "", None
+    for e in events:
+        data = e.get("data") or {}
+        t = e.get("type")
+        if t == "tool.execution_start":
+            name = str(data.get("toolName") or "?")
+            names_by_id[data.get("toolCallId")] = name
+            calls[name] += 1
+            if "ai_orch memory search" in json.dumps(data.get("arguments") or {}):
+                memory_searches += 1
+        elif t == "tool.execution_complete":
+            content = (data.get("result") or {}).get("content")
+            result_chars[names_by_id.get(data.get("toolCallId"), "?")] += _text_len(content)
+            if '"refused": true' in str(content):
+                refused += 1
+        elif t == "assistant.turn_end":
+            turns += 1
+        elif t == "assistant.message" and data.get("content"):
+            final = data["content"]
+        elif t == "_usage":
+            usage = e.get("usage")
+    fresh = cache_write = cache_read = output = 0
+    for metrics in ((usage or {}).get("modelMetrics") or {}).values():
+        u = metrics.get("usage") or {}
+        cache_read += u.get("cacheReadTokens", 0)
+        cache_write += u.get("cacheWriteTokens", 0)
+        fresh += u.get("inputTokens", 0) - u.get("cacheReadTokens", 0) - u.get("cacheWriteTokens", 0)
+        output += u.get("outputTokens", 0)
+    return {"inputTokens": fresh + cache_write if usage else None, "cachedInputTokens": cache_read if usage else None,
+            "outputTokens": output if usage else None,
+            "totalTokens": fresh + cache_write + cache_read + output if usage else None, "turns": turns,
+            "costUsd": None, "premiumRequests": (usage or {}).get("totalPremiumRequestCost"),
+            "toolCalls": dict(calls), "toolResultChars": dict(result_chars), "mcpCalls": 0,
+            "memorySearches": memory_searches, "memorySearchesRefused": refused,
+            "finalAnswerChars": len(final or "")}
+
+
 def profile(agent: str, events: list[dict]) -> dict:
+    if agent == "copilot":
+        return profile_copilot(events)
     return profile_claude(events) if agent == "claude" else profile_codex(events)

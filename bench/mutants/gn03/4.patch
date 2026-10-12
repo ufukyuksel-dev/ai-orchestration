@@ -1,0 +1,13 @@
+diff --git a/users/middlewares.go b/users/middlewares.go
+index 1ad59dd..b9ee9d7 100644
+--- a/users/middlewares.go
++++ b/users/middlewares.go
+@@ -58,7 +58,7 @@ func AuthMiddleware(auto401 bool) gin.HandlerFunc {
+ 				return nil, jwt.ErrSignatureInvalid
+ 			}
+ 			return []byte(common.JWTSecret), nil
+-		})
++		}, jwt.WithoutClaimsValidation())
+ 
+ 		if err != nil {
+ 			if auto401 {

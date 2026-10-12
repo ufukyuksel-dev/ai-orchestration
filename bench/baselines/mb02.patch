@@ -1,0 +1,13 @@
+diff --git a/app/main/routes.py b/app/main/routes.py
+index 103bbc7..d4261b8 100644
+--- a/app/main/routes.py
++++ b/app/main/routes.py
+@@ -16,7 +16,7 @@ from app.main import bp
+ @bp.before_app_request
+ def before_request():
+     if current_user.is_authenticated:
+-        current_user.last_seen = datetime.now(timezone.utc)
++        current_user.last_seen = datetime.now().astimezone()
+         db.session.commit()
+         g.search_form = SearchForm()
+     g.locale = str(get_locale())
