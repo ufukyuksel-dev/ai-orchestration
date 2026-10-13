@@ -355,6 +355,8 @@ def copilot_product(arm: str) -> Path:
     shutil.copytree(ROOT / "contracts" / "agent-learning", copy / "contracts" / "agent-learning")
     # the step-memory hook runs the repository's shared hook modules (scripts/hooks), as a real install does
     shutil.copytree(ROOT / "scripts" / "hooks", copy / "scripts" / "hooks", ignore=shutil.ignore_patterns("__pycache__"))
+    # the installer registers the MCP server through the repository's helper
+    shutil.copy(ROOT / "scripts" / "copilot_mcp_config.py", copy / "scripts" / "copilot_mcp_config.py")
     scripts = copy / "skills" / "copilot" / "ai-orchestration-memory" / "scripts"
     for name in COPILOT_PORTED:
         path = scripts / name
@@ -378,8 +380,12 @@ def copilot_cmd(prompt: str, wt: Path, arm: str, model: str) -> tuple[list[str],
         bin_dir = WORK / "copilot-home" / f"bin-{tag}"
         shutil.rmtree(bin_dir, ignore_errors=True)
         subprocess.run([sys.executable, str(scripts / "install_user_integration.py"), "--copilot-home", str(home),
-                        "--bin-dir", str(bin_dir)], check=True, capture_output=True, text=True)
+                        "--bin-dir", str(bin_dir),
+                        # BENCH_COPILOT_MCP=off: Copilot reaches the product only through the `ai_orch` command
+                        *(["--no-mcp"] if os.environ.get("BENCH_COPILOT_MCP") == "off" else ["--mcp-url", f"{BASE}/mcp"])],
+                       check=True, capture_output=True, text=True)
         env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
+        env["AI_ORCH_URL"] = BASE  # the shared hook modules (step memory, trails) reach the bench server too
     usage = copilot_usage_file(wt)
     usage.unlink(missing_ok=True)
     cmd = ["copilot", "-p", prompt, "--output-format", "json", "--usage-output-file", str(usage),

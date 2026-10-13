@@ -230,6 +230,22 @@ class ProjectInstallerTest(unittest.TestCase):
         self.assertEqual((foreign / 'SKILL.md').read_text(), 'someone else\n')
         self.assertFalse(self.target.exists())
 
+    def test_skill_links_of_another_checkout_are_relinked_and_retired_ones_removed(self):
+        old = Path(self.tmp.name) / 'old-checkout'
+        (old / 'skills' / 'copilot').mkdir(parents=True)
+        (old / 'skills' / 'session-instructions.md').write_text('old\n')
+        directory = self.project / '.github' / 'skills'
+        directory.mkdir(parents=True)
+        for name in (self.skill_names[0], 'retired-skill'):
+            (old / 'skills' / 'copilot' / name).mkdir()
+            (directory / name).symlink_to(old / 'skills' / 'copilot' / name, target_is_directory=True)
+        code, _ = self.install()
+        self.assertEqual(code, 0)
+        self.assertEqual((directory / self.skill_names[0]).resolve(),
+                         (self.repo / 'skills' / 'copilot' / self.skill_names[0]).resolve())
+        self.assertFalse((directory / 'retired-skill').is_symlink())
+        self.assertTrue((old / 'skills' / 'copilot' / 'retired-skill').is_dir())  # only the link goes
+
     def test_relocated_skill_symlink_conflicts(self):
         directory = self.project / '.github' / 'skills'
         directory.mkdir(parents=True)
@@ -304,7 +320,7 @@ class ProjectInstallerTest(unittest.TestCase):
         return self.project / '.github' / 'hooks' / 'ai-orchestration.json', \
             self.project / '.github' / 'agents' / 'ai-orchestration.agent.md'
 
-    def test_installs_the_copilot_hooks_and_the_compact_agent(self):
+    def test_installs_the_copilot_hooks_and_no_custom_agent(self):
         import json
         hooks, agent = self.runtime()
         code, _ = self.install()
@@ -314,12 +330,24 @@ class ProjectInstallerTest(unittest.TestCase):
         self.assertEqual(value['hooks']['agentStop'][0]['bash'], f"{scripts / 'copilot_memory_gate.py'} stop")
         self.assertEqual(value['hooks']['postToolUse'][0]['bash'], f"{scripts / 'copilot_memory_gate.py'} post")
         self.assertEqual(value['hooks']['userPromptSubmitted'][0]['bash'], str(scripts / 'copilot_memory_gate.py'))
-        self.assertTrue(agent.read_text().startswith('---\nname: ai-orchestration\n'))
+        # the CLI agent's tool names would leave an IDE that reads .github/agents without its terminal tool
+        self.assertFalse(agent.exists())
         self.assertEqual(self.install('--check')[0], 0)  # idempotent: nothing to do
-        agent.write_text(agent.read_text() + 'edited\n')
+        hooks.write_text(hooks.read_text().replace('"timeoutSec": 5', '"timeoutSec": 6', 1))
         self.assertEqual(self.install('--check')[0], 1)  # drift of an owned file is reported
         self.assertEqual(self.install()[0], 0)
-        self.assertNotIn('edited', agent.read_text())
+        self.assertNotIn('"timeoutSec": 6', hooks.read_text())
+
+    def test_an_earlier_installs_custom_agent_is_removed_and_a_foreign_one_kept(self):
+        _, agent = self.runtime()
+        agent.parent.mkdir(parents=True)
+        agent.write_text('---\nname: ai-orchestration\ndescription: Coding agent for repositories with AI '
+                         'Orchestration memory; compact tool set\n---\n')
+        self.assertEqual(self.install()[0], 0)
+        self.assertFalse(agent.exists())
+        agent.write_text('---\nname: ai-orchestration\ndescription: mine\n---\n')
+        self.assertEqual(self.install()[0], 0)
+        self.assertEqual(agent.read_text(), '---\nname: ai-orchestration\ndescription: mine\n---\n')
 
     def test_foreign_hook_or_agent_files_are_refused_and_kept(self):
         hooks, agent = self.runtime()
@@ -332,11 +360,10 @@ class ProjectInstallerTest(unittest.TestCase):
         hooks.unlink()
         agent.parent.mkdir(parents=True)
         agent.write_text('---\nname: ai-orchestration\ndescription: mine\n---\n')
-        self.assertEqual(self.install()[0], 2)
         self.assertEqual(self.install('--uninstall')[0], 0)
         self.assertEqual(agent.read_text(), '---\nname: ai-orchestration\ndescription: mine\n---\n')
 
-    def test_uninstall_removes_the_owned_hooks_and_agent(self):
+    def test_uninstall_removes_the_owned_hooks(self):
         hooks, agent = self.runtime()
         self.install()
         self.assertEqual(self.install('--uninstall')[0], 0)

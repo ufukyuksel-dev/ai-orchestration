@@ -195,8 +195,9 @@ instructions, every file read so far and every earlier step. A task's cost is th
   the hooks, skills, startup instructions, the `ai_orch` launcher and the `ai-orchestration` agent into
   `~/.copilot`.
 - **Per repository:** `ai_orch project add <repo> --copilot`. It writes into `<repo>/.github` the instructions, the
-  skill links, `hooks/ai-orchestration.json` and `agents/ai-orchestration.agent.md`. Copilot CLI loads the
-  repository's hooks once the folder is trusted.
+  skill links and `hooks/ai-orchestration.json`. Copilot CLI loads the repository's hooks once the folder is
+  trusted. The custom agent stays in `~/.copilot/agents` only: its tool list uses CLI tool names, and an IDE that
+  read it from `.github/agents` lost its terminal tool.
 - **Start with:** `copilot --agent ai-orchestration`.
 - **Bench:**
   ```

@@ -9,9 +9,12 @@ installer owns two things inside the target repository:
 * one marked block in .github/copilot-instructions.md,
 * checkout-linked symlinks under .github/skills/ for every Copilot skill,
 * the Copilot hooks in .github/hooks/ai-orchestration.json (memory cards and rules with each prompt, memory at
-  the failing check, the learning saved from the final answer; scripts of this checkout), and
-* the compact custom agent .github/agents/ai-orchestration.agent.md (start it with
-  `copilot --agent ai-orchestration`).
+  the failing check, the learning saved from the final answer; scripts of this checkout).
+
+The compact custom agent is not placed here: its tool list uses Copilot CLI tool names, so an IDE that picks it up
+from .github/agents is left without its terminal tool. It is installed for the CLI by install_user_integration.py
+(~/.copilot/agents); an earlier install's .github/agents/ai-orchestration.agent.md is removed. Skill links that
+point to another checkout of this project are relinked to this one.
 
 Run it with no arguments from inside the target repository; it installs into the
 nearest .git root of the working directory. --target is only for driving other
@@ -28,6 +31,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -163,17 +167,37 @@ def plan_skills(root: Path, repo: Path, uninstall: bool) -> list[tuple]:
             if entry.is_symlink() and entry.name in sources and entry.resolve() == sources[entry.name]:
                 actions.append(('unlink', entry, None))
         return actions
+    if directory.is_dir():  # links of skills this project no longer ships, left by another checkout's install
+        for entry in sorted(directory.iterdir()):
+            if entry.name not in sources and _other_checkout_skill(entry, repo):
+                actions.append(('unlink', entry, None))
     for name, source in sources.items():
         link = directory / name
         if link.is_symlink():
             if link.resolve() != source:
-                raise Conflict(f'foreign or relocated skill symlink: {link}')
+                if not _other_checkout_skill(link, repo):
+                    raise Conflict(f'foreign or relocated skill symlink: {link}')
+                actions += [('unlink', link, None), ('link', link, source)]  # the checkout moved
+                continue
             print(f'in sync: {link}')
             continue
         if exists(link):
             raise Conflict(f'skill path exists and is not an owned symlink: {link}')
         actions.append(('link', link, source))
     return actions
+
+
+def _other_checkout_skill(link: Path, repo: Path) -> bool:
+    """A symlink to <root>/skills/copilot/<its name> of another checkout of this project (recognised by its session
+    workflow file), the shape this installer writes."""
+    if not link.is_symlink():
+        return False
+    target = Path(os.readlink(link))
+    target = target if target.is_absolute() else link.parent / target
+    if target.name != link.name or target.parent.name != 'copilot' or target.parent.parent.name != 'skills':
+        return False
+    old_root = target.parent.parent.parent
+    return old_root.resolve() != repo.resolve() and (old_root / 'skills' / 'session-instructions.md').is_file()
 
 
 def user_integration(repo: Path):
@@ -187,16 +211,17 @@ def user_integration(repo: Path):
 
 
 def plan_runtime(root: Path, repo: Path, uninstall: bool) -> list[tuple]:
-    """The hook file and the custom agent: written when missing or ours (an earlier shape included), refused when
-    another file sits there, removed on uninstall only when ours."""
+    """The hook file: written when missing or ours (an earlier shape included), refused when another file sits there,
+    removed on uninstall only when ours. The custom agent of an earlier install is removed when it is ours."""
     if root.resolve() == repo.resolve():
         return []  # this checkout's own .github ships no machine-bound hook paths
     installer, gate = user_integration(repo)
     hook_text = json.dumps(installer.expected_hook(gate), indent=2) + '\n'
     actions: list[tuple] = []
-    for target, desired, owned in (
-            (root / HOOKS, hook_text, lambda text: _owned_hook_text(installer, text)),
-            (root / AGENT, installer.agent_text(), lambda text: text.startswith(AGENT_MARK))):
+    agent = text_file(root / AGENT)
+    if agent and agent.startswith(AGENT_MARK):
+        actions.append(('remove', root / AGENT, None))
+    for target, desired, owned in ((root / HOOKS, hook_text, lambda text: _owned_hook_text(installer, text)),):
         current = text_file(target)
         if uninstall:
             if current and owned(current):
