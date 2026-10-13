@@ -320,7 +320,7 @@ class ProjectInstallerTest(unittest.TestCase):
         return self.project / '.github' / 'hooks' / 'ai-orchestration.json', \
             self.project / '.github' / 'agents' / 'ai-orchestration.agent.md'
 
-    def test_installs_the_copilot_hooks_and_no_custom_agent(self):
+    def test_installs_the_copilot_hooks_and_the_compact_agent(self):
         import json
         hooks, agent = self.runtime()
         code, _ = self.install()
@@ -330,23 +330,28 @@ class ProjectInstallerTest(unittest.TestCase):
         self.assertEqual(value['hooks']['agentStop'][0]['bash'], f"{scripts / 'copilot_memory_gate.py'} stop")
         self.assertEqual(value['hooks']['postToolUse'][0]['bash'], f"{scripts / 'copilot_memory_gate.py'} post")
         self.assertEqual(value['hooks']['userPromptSubmitted'][0]['bash'], str(scripts / 'copilot_memory_gate.py'))
-        # the CLI agent's tool names would leave an IDE that reads .github/agents without its terminal tool
-        self.assertFalse(agent.exists())
+        # the compact agent lists both clients' tool names, so IntelliJ's chat keeps its terminal and edit tools
+        text = agent.read_text()
+        self.assertTrue(text.startswith('---\nname: ai-orchestration\n'))
+        for tool in ('"bash"', '"view"', '"edit"', '"run_in_terminal"', '"read_file"', '"insert_edit_into_file"'):
+            self.assertIn(tool, text)
         self.assertEqual(self.install('--check')[0], 0)  # idempotent: nothing to do
         hooks.write_text(hooks.read_text().replace('"timeoutSec": 5', '"timeoutSec": 6', 1))
         self.assertEqual(self.install('--check')[0], 1)  # drift of an owned file is reported
         self.assertEqual(self.install()[0], 0)
         self.assertNotIn('"timeoutSec": 6', hooks.read_text())
 
-    def test_an_earlier_installs_custom_agent_is_removed_and_a_foreign_one_kept(self):
+    def test_an_earlier_installs_agent_is_refreshed_and_a_foreign_one_refused(self):
         _, agent = self.runtime()
         agent.parent.mkdir(parents=True)
         agent.write_text('---\nname: ai-orchestration\ndescription: Coding agent for repositories with AI '
                          'Orchestration memory; compact tool set\n---\n')
         self.assertEqual(self.install()[0], 0)
-        self.assertFalse(agent.exists())
+        self.assertIn('"run_in_terminal"', agent.read_text())
         agent.write_text('---\nname: ai-orchestration\ndescription: mine\n---\n')
-        self.assertEqual(self.install()[0], 0)
+        code, out = self.install()
+        self.assertEqual(code, 2)
+        self.assertIn('not owned by AI Orchestration', out)
         self.assertEqual(agent.read_text(), '---\nname: ai-orchestration\ndescription: mine\n---\n')
 
     def test_foreign_hook_or_agent_files_are_refused_and_kept(self):

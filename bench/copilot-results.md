@@ -218,9 +218,14 @@ instructions, every file read so far and every earlier step. A task's cost is th
   defaults to the current one). It indexes the code and writes into `.github` what Copilot uses: the instructions,
   the skill links, `hooks/ai-orchestration.json` and the `ai-orchestration` server in `mcp.json` (other servers in
   that file are kept). Copilot CLI, and the Copilot CLI sessions of IntelliJ's Copilot chat, load the hooks and the
-  MCP server once the folder is trusted. Checked live with plain `copilot` and an empty user home: the prompt hook
-  delivered a card the stop hook had saved in the previous task. The custom agent stays in `~/.copilot/agents`
-  only: its tool list uses CLI tool names, and an IDE that read it from `.github/agents` lost its terminal tool.
+  MCP server once the folder is trusted. It also writes the compact agent to `.github/agents`, its tool list in
+  both Copilot CLI's names (`bash`, `view`, `edit`, …) and the JetBrains agent's names (`run_in_terminal`,
+  `read_file`, `insert_edit_into_file`, …): each client ignores the other's names, so neither loses its terminal or
+  edit tools (an earlier CLI-only list left the IDE without its terminal). In IntelliJ chat pick the
+  `ai-orchestration` agent. Checked live with an empty user home, everything from `.github` only: the agent's first
+  call was 12.4k tokens (default agent 26.0k), it worked with `bash`/`view`/`edit`, the prompt hook added its
+  context, and the stop hook saved the task's learning; in another run a card saved by the stop hook was delivered
+  by the next task's prompt hook.
 - **Start with:** `copilot --agent ai-orchestration`.
 - **Bench:**
   ```

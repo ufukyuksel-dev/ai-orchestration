@@ -64,6 +64,12 @@ AGENT_FILENAME = f"{AGENT_NAME}.agent.md"
 # session SQL, the CLI documentation and code-search subagent tools.
 AGENT_TOOLS = ("bash", "read_bash", "write_bash", "stop_bash", "list_bash", "view", "edit", "create", "grep", "glob",
                "skill", "web_fetch", "ask_user")
+# The same compact set under the names the JetBrains Copilot agent uses (its built-in agents list them this way). A
+# repository's .github/agents file is read by Copilot CLI and by IntelliJ's chat; each client ignores the other's
+# names, so with both lists neither loses its terminal or edit tools.
+IDE_AGENT_TOOLS = ("run_in_terminal", "get_terminal_output", "read_file", "list_dir", "file_search", "grep_search",
+                   "get_errors", "insert_edit_into_file", "replace_string_in_file", "multi_replace_string_in_file",
+                   "create_file", "create_directory", "apply_patch", "fetch_webpage")
 
 
 class InstallError(RuntimeError):
@@ -164,12 +170,12 @@ def bootstrap_block() -> str:
     return f"{BEGIN}\n{body}{END}"
 
 
-def agent_text() -> str:
+def agent_text(tools: tuple[str, ...] = AGENT_TOOLS) -> str:
     """The custom agent: a compact tool set (each tool's schema is sent with every model call), nothing else."""
     return ("---\n"
             f"name: {AGENT_NAME}\n"
             "description: Coding agent for repositories with AI Orchestration memory; compact tool set, no subagents\n"
-            f"tools: {json.dumps(list(AGENT_TOOLS))}\n"
+            f"tools: {json.dumps(list(tools))}\n"
             "---\n"
             "You are a coding agent working in the user's repository.\n"
             "\n"

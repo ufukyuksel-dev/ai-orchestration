@@ -13,10 +13,10 @@ installer owns two things inside the target repository:
 * the `ai-orchestration` entry in .github/mcp.json (the workspace MCP file of Copilot CLI and of the Copilot CLI
   sessions in JetBrains IDEs; other servers in that file are kept). The URL is $AI_ORCH_URL/mcp or the local default.
 
-The compact custom agent is not placed here: its tool list uses Copilot CLI tool names, so an IDE that picks it up
-from .github/agents is left without its terminal tool. It is installed for the CLI by install_user_integration.py
-(~/.copilot/agents); an earlier install's .github/agents/ai-orchestration.agent.md is removed. Skill links that
-point to another checkout of this project are relinked to this one.
+* the compact custom agent in .github/agents/ai-orchestration.agent.md, its tool list in both Copilot CLI's and the
+  JetBrains agent's tool names (each client ignores the other's), so IntelliJ's chat gets the same small tool set.
+
+Skill links that point to another checkout of this project are relinked to this one.
 
 Run it with no arguments from inside the target repository; it installs into the
 nearest .git root of the working directory. --target is only for driving other
@@ -214,17 +214,16 @@ def user_integration(repo: Path):
 
 
 def plan_runtime(root: Path, repo: Path, uninstall: bool) -> list[tuple]:
-    """The hook file: written when missing or ours (an earlier shape included), refused when another file sits there,
-    removed on uninstall only when ours. The custom agent of an earlier install is removed when it is ours."""
+    """The hook file and the compact agent: written when missing or ours (an earlier shape included), refused when
+    another file sits there, removed on uninstall only when ours."""
     if root.resolve() == repo.resolve():
         return []  # this checkout's own .github ships no machine-bound hook paths
     installer, gate = user_integration(repo)
     hook_text = json.dumps(installer.expected_hook(gate), indent=2) + '\n'
     actions: list[tuple] = []
-    agent = text_file(root / AGENT)
-    if agent and agent.startswith(AGENT_MARK):
-        actions.append(('remove', root / AGENT, None))
-    for target, desired, owned in ((root / HOOKS, hook_text, lambda text: _owned_hook_text(installer, text)),):
+    agent_text = installer.agent_text(installer.AGENT_TOOLS + installer.IDE_AGENT_TOOLS)
+    for target, desired, owned in ((root / HOOKS, hook_text, lambda text: _owned_hook_text(installer, text)),
+                                   (root / AGENT, agent_text, lambda text: text.startswith(AGENT_MARK))):
         current = text_file(target)
         if uninstall:
             if current and owned(current):
@@ -357,7 +356,7 @@ def main() -> int:
     parser.add_argument('--no-skills', action='store_true',
                         help='do not link the Copilot skills')
     parser.add_argument('--no-runtime', action='store_true',
-                        help='do not install the Copilot hooks and the MCP server entry')
+                        help='do not install the Copilot hooks, the compact agent and the MCP server entry')
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument('--check', action='store_true')
     mode.add_argument('--dry-run', action='store_true')
@@ -371,12 +370,12 @@ def main() -> int:
             return 1 if args.check and actions else 0
         apply(actions)
         if actions and not args.uninstall:
-            print('note: .github/copilot-instructions.md, .github/skills, .github/hooks/ai-orchestration.json and '
-                  '.github/mcp.json are inside the target repository, so git sees them; the skills and hook commands '
+            print('note: .github/copilot-instructions.md, .github/skills, .github/hooks/ai-orchestration.json, '
+                  '.github/agents/ai-orchestration.agent.md and .github/mcp.json are inside the target repository, so git sees them; the skills and hook commands '
                   'point into this checkout (keep them out of shared commits if others use the repository). Copilot '
                   '(CLI, and the Copilot CLI sessions of IntelliJ chat) loads the hooks and the MCP server once the '
-                  'folder is trusted; in the terminal start it with `copilot --agent ai-orchestration` for the '
-                  'compact tool set. A written file is not proof the client loaded it; verify in a real session.')
+                  'folder is trusted. For the compact tool set pick the ai-orchestration agent (IntelliJ chat: agent '
+                  'picker; terminal: `copilot --agent ai-orchestration`). A written file is not proof the client loaded it; verify in a real session.')
         return 0
     except (Conflict, OSError) as exc:
         print(f'CONFLICT: {exc}', file=sys.stderr)
