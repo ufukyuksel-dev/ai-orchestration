@@ -9,7 +9,9 @@ installer owns two things inside the target repository:
 * one marked block in .github/copilot-instructions.md,
 * checkout-linked symlinks under .github/skills/ for every Copilot skill,
 * the Copilot hooks in .github/hooks/ai-orchestration.json (memory cards and rules with each prompt, memory at
-  the failing check, the learning saved from the final answer; scripts of this checkout).
+  the failing check, the learning saved from the final answer; scripts of this checkout),
+* the `ai-orchestration` entry in .github/mcp.json (the workspace MCP file of Copilot CLI and of the Copilot CLI
+  sessions in JetBrains IDEs; other servers in that file are kept). The URL is $AI_ORCH_URL/mcp or the local default.
 
 The compact custom agent is not placed here: its tool list uses Copilot CLI tool names, so an IDE that picks it up
 from .github/agents is left without its terminal tool. It is installed for the CLI by install_user_integration.py
@@ -40,6 +42,7 @@ END = '<!-- ai-orchestration:copilot-project:end -->'
 INSTRUCTIONS = Path('.github') / 'copilot-instructions.md'
 SKILLS = Path('.github') / 'skills'
 HOOKS = Path('.github') / 'hooks' / 'ai-orchestration.json'
+MCP = Path('.github') / 'mcp.json'
 AGENT = Path('.github') / 'agents' / 'ai-orchestration.agent.md'
 
 
@@ -105,7 +108,7 @@ def resolve_root(raw: Path, allow_non_git: bool) -> Path:
     if not allow_non_git and not exists(root / '.git'):
         raise Conflict(f'target is not a git repository (use --allow-non-git): {root}')
     # Do not follow a redirected configuration directory while mutating it.
-    for relative in (INSTRUCTIONS, SKILLS, HOOKS, AGENT):
+    for relative in (INSTRUCTIONS, SKILLS, HOOKS, AGENT, MCP):
         for parent in list((root / relative).parents)[:len(relative.parts) - 1]:
             if parent.is_symlink():
                 raise Conflict(f'configuration parent is a symlink: {parent}')
@@ -235,7 +238,28 @@ def plan_runtime(root: Path, repo: Path, uninstall: bool) -> list[tuple]:
         if exists(target.with_name(target.name + '.ai-orch-tmp')):
             raise Conflict(f'temporary file already exists for {target}')
         actions.append(('write', target, desired))
-    return actions
+    return actions + plan_mcp(root, installer, uninstall)
+
+
+def plan_mcp(root: Path, installer, uninstall: bool) -> list[tuple]:
+    """Our server entry in the workspace .github/mcp.json: added or refreshed, other servers kept; a different
+    (non-local) server under our name is refused; on uninstall only our entry goes (the file too when it held only
+    ours)."""
+    import copilot_mcp_config as mcp  # next to this script
+    target = root / MCP
+    try:
+        current, wanted = mcp.without(target) if uninstall else mcp.desired(target, installer.default_mcp_url())
+    except mcp.ConfigError as exc:
+        raise Conflict(str(exc)) from exc
+    if current == wanted:
+        if not uninstall and target.exists():
+            print(f'in sync: {target}')
+        return []
+    if exists(target.with_name(target.name + '.ai-orch-tmp')):
+        raise Conflict(f'temporary file already exists for {target}')
+    if uninstall and not wanted.get('mcpServers') and set(wanted) <= {'mcpServers'}:
+        return [('remove', target, None)]
+    return [('write', target, mcp.render(wanted))]
 
 
 AGENT_MARK = '---\nname: ai-orchestration\ndescription: Coding agent for repositories with AI Orchestration memory'
@@ -333,7 +357,7 @@ def main() -> int:
     parser.add_argument('--no-skills', action='store_true',
                         help='do not link the Copilot skills')
     parser.add_argument('--no-runtime', action='store_true',
-                        help='do not install the Copilot hooks and the compact custom agent')
+                        help='do not install the Copilot hooks and the MCP server entry')
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument('--check', action='store_true')
     mode.add_argument('--dry-run', action='store_true')
@@ -348,12 +372,11 @@ def main() -> int:
         apply(actions)
         if actions and not args.uninstall:
             print('note: .github/copilot-instructions.md, .github/skills, .github/hooks/ai-orchestration.json and '
-                  '.github/agents/ai-orchestration.agent.md are inside the target repository, so git sees them; '
-                  'the skills and hook commands point into this checkout (keep them out of shared commits if '
-                  'others use the repository). Copilot CLI loads the hooks once you trust the folder; start it '
-                  'with `copilot --agent ai-orchestration` for the compact tool set. In the IDE enable Settings > '
-                  'GitHub Copilot > Chat > Agent > Agent Skills. A written file is not proof the plugin loaded '
-                  'it; verify in a real session.')
+                  '.github/mcp.json are inside the target repository, so git sees them; the skills and hook commands '
+                  'point into this checkout (keep them out of shared commits if others use the repository). Copilot '
+                  '(CLI, and the Copilot CLI sessions of IntelliJ chat) loads the hooks and the MCP server once the '
+                  'folder is trusted; in the terminal start it with `copilot --agent ai-orchestration` for the '
+                  'compact tool set. A written file is not proof the client loaded it; verify in a real session.')
         return 0
     except (Conflict, OSError) as exc:
         print(f'CONFLICT: {exc}', file=sys.stderr)

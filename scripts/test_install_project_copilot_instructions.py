@@ -378,5 +378,34 @@ class ProjectInstallerTest(unittest.TestCase):
         run('--target', str(self.repo), '--repo', str(self.repo))
         self.assertFalse((self.repo / '.github' / 'hooks').exists())
 
+    def test_registers_the_mcp_server_in_the_workspace_and_keeps_other_servers(self):
+        import json
+        mcp = self.project / '.github' / 'mcp.json'
+        mcp.parent.mkdir(parents=True)
+        mcp.write_text('{"mcpServers": {"other": {"type": "http", "url": "https://example.com/mcp"}}}')
+        self.assertEqual(self.install()[0], 0)
+        servers = json.loads(mcp.read_text())['mcpServers']
+        self.assertEqual(servers['other']['url'], 'https://example.com/mcp')
+        self.assertEqual(servers['ai-orchestration']['type'], 'http')
+        self.assertTrue(servers['ai-orchestration']['url'].endswith('/mcp'))
+        self.assertEqual(self.install('--check')[0], 0)
+        self.assertEqual(self.install('--uninstall')[0], 0)
+        self.assertEqual(list(json.loads(mcp.read_text())['mcpServers']), ['other'])
+        mcp.unlink()
+        self.install()
+        self.assertEqual(self.install('--uninstall')[0], 0)
+        self.assertFalse(mcp.exists())  # it held only ours
+
+    def test_a_foreign_ai_orchestration_server_is_refused(self):
+        mcp = self.project / '.github' / 'mcp.json'
+        mcp.parent.mkdir(parents=True)
+        foreign = '{"mcpServers": {"ai-orchestration": {"type": "http", "url": "https://team.example/mcp"}}}'
+        mcp.write_text(foreign)
+        code, out = self.install()
+        self.assertEqual(code, 2)
+        self.assertEqual(mcp.read_text(), foreign)
+        self.assertFalse(self.target.exists())
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

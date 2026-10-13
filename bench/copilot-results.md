@@ -214,10 +214,13 @@ instructions, every file read so far and every earlier step. A task's cost is th
 - **User level:** `python3 skills/copilot/ai-orchestration-memory/scripts/install_user_integration.py`. It writes
   the hooks, skills, startup instructions, the `ai_orch` launcher and the `ai-orchestration` agent into
   `~/.copilot`.
-- **Per repository:** `ai_orch project add <repo> --copilot`. It writes into `<repo>/.github` the instructions, the
-  skill links and `hooks/ai-orchestration.json`. Copilot CLI loads the repository's hooks once the folder is
-  trusted. The custom agent stays in `~/.copilot/agents` only: its tool list uses CLI tool names, and an IDE that
-  read it from `.github/agents` lost its terminal tool.
+- **Per repository (also IntelliJ):** in the repository's terminal, `ai_orch project add --copilot` (the folder
+  defaults to the current one). It indexes the code and writes into `.github` what Copilot uses: the instructions,
+  the skill links, `hooks/ai-orchestration.json` and the `ai-orchestration` server in `mcp.json` (other servers in
+  that file are kept). Copilot CLI, and the Copilot CLI sessions of IntelliJ's Copilot chat, load the hooks and the
+  MCP server once the folder is trusted. Checked live with plain `copilot` and an empty user home: the prompt hook
+  delivered a card the stop hook had saved in the previous task. The custom agent stays in `~/.copilot/agents`
+  only: its tool list uses CLI tool names, and an IDE that read it from `.github/agents` lost its terminal tool.
 - **Start with:** `copilot --agent ai-orchestration`.
 - **Bench:**
   ```

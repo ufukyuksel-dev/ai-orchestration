@@ -2,7 +2,7 @@
 """`ai_orch doctor` and `ai_orch project add`: the two commands a person runs by hand.
 
   ai_orch doctor                       # is everything installed and reachable? one line per check
-  ai_orch project add <folder> [--copilot]
+  ai_orch project add [<folder>] [--copilot]
                                        # index a repository (structural, no LLM) under the key agents resolve;
                                        # --copilot also installs the Copilot instructions into <folder>/.github
 
@@ -216,7 +216,7 @@ def project_add(args: argparse.Namespace) -> int:
                               "--target", str(folder)], text=True)
         if out.returncode != 0:
             return out.returncode
-        print(f"Copilot instructions installed in {folder}/.github")
+        print(f"Copilot set up in {folder}/.github: instructions, skills, hooks, MCP server (.github/mcp.json)")
     return 0
 
 
@@ -227,9 +227,10 @@ def main(argv: list[str] | None = None) -> int:
     project = groups.add_parser("project", help="add a repository")
     actions = project.add_subparsers(dest="action", required=True)
     add = actions.add_parser("add", help="index a repository (structural, no LLM)")
-    add.add_argument("folder")
+    add.add_argument("folder", nargs="?", default=".", help="the repository (default: this folder)")
     add.add_argument("--copilot", action="store_true",
-                     help="also install the Copilot instructions into <folder>/.github")
+                     help="also install into <folder>/.github what Copilot CLI and IntelliJ's Copilot use: "
+                          "instructions, skills, hooks and the MCP server")
     add.set_defaults(run=project_add)
     args = parser.parse_args(argv)
     try:
