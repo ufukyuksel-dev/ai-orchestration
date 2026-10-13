@@ -537,7 +537,7 @@ class McpServerIT {
 
     @Test
     void localScannerScanReusesTheKeyAlreadyBoundToTheCheckout() throws Exception {
-        Path boundRoot = Files.createDirectories(tempDir.resolve("mobil-worldmobile-be")).toRealPath();
+        Path boundRoot = Files.createDirectories(tempDir.resolve("billing-service-be")).toRealPath();
         McpClientContextHolder.set(new McpClientContext("AI_ORCHESTRATION", "claude-code", "local",
                 List.of("scanner.scan")));
         ScannerService scannerService = mock(ScannerService.class);
@@ -548,13 +548,13 @@ class McpServerIT {
         });
         ProjectWorkspaceResolver resolver = unboundWorkspaceResolver();
         when(resolver.resolveByPath(any(Path.class)))
-                .thenReturn(new ProjectWorkspace("MOBIL_WORLDMOBILE_BE", boundRoot, "a".repeat(64)));
+                .thenReturn(new ProjectWorkspace("BILLING_SERVICE_BE", boundRoot, "a".repeat(64)));
         ScannerMcpTool tool = new ScannerMcpTool(scannerService, auditLogger, new ProviderOverrideSanitizer(),
                 resolver);
 
         ScanCodebaseResponse response = tool.scan(boundRoot.toString(), false, null, null, false);
 
-        assertThat(response.projectKey()).isEqualTo("MOBIL_WORLDMOBILE_BE");
+        assertThat(response.projectKey()).isEqualTo("BILLING_SERVICE_BE");
     }
 
     @Test

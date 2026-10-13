@@ -88,6 +88,26 @@ Two things this chain shows:
 | dev 2 | 0.824 | + test command up front: removed the failure that used to trigger learning, so one chain learned nothing |
 | dev 3 | 0.647 | + one-call fallback for a change with no knowledge to go on, symbol and code-map fixes |
 
+### A private Kotlin Multiplatform game (pilot, no build or test in the tasks)
+A real client project (636 Kotlin files, ~40 Gradle modules). Tasks are a bug fix, a code change and a question about
+the code; every prompt says not to build, compile or run tests, and grading (hidden tests / answer key) runs only after
+the agent finished. The agent ran no build or test in any run. Three arms: A plain Copilot, Bnomem the product with
+memory cleared before every task, B the product with memory. **One repetition per arm**: a pilot, not a claim.
+
+| chain | follow-up tasks (2–3): A | Bnomem | **B** | B / Bnomem |
+|---|---|---|---|---|
+| text input (bug fix → change → question) | 458,412 | 279,423 | **174,170** | 0.62 |
+| coin rewards (dev chain, before the fix below) | 249,764 | 365,118 | **235,758** | 0.65 |
+
+- In the follow-up change and question of the first chain, B made **no search** before its edit or answer: the card
+  learned in the bug fix named the one shared helper and arrived with the file outline (`209-210 function …`), and
+  the agent read exactly those lines. Plain Copilot searched 14 and 17 times.
+- Unrelated control tasks got no card; B and Bnomem cost the same there (105,104 vs 105,736).
+- **Bug found and fixed:** Copilot writes Kotlin member locators with their parameter list
+  (`Repo#save(Lang,Int)`), the code map keeps the parameters in the signature. Those cards did not bind, so the prompt
+  showed the first 40 lines of the class instead of the member. The member now binds (same parameters, or the only
+  member of that name in the file; overloads are never guessed).
+
 ## How the savings come about
 
 Copilot sends the **whole conversation again with every model call**: the system prompt, every tool's schema, the

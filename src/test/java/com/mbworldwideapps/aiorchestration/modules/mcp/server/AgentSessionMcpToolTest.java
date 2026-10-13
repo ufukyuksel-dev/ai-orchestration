@@ -551,6 +551,51 @@ class AgentSessionMcpToolTest {
     }
 
     @Test
+    void aMemberRefWithItsParameterListFindsTheScannedMember() throws Exception {
+        java.nio.file.Path root = java.nio.file.Files.createTempDirectory("kt-params");
+        java.nio.file.Files.createDirectories(root.resolve("data"));
+        byte[] source = "class Repo {\n  fun save(l: Lang, s: Int) {}\n  fun save(s: Int) {}\n  fun load() {}\n}\n"
+                .getBytes();
+        java.nio.file.Files.write(root.resolve("data/Repo.kt"), source);
+        var baseline = mock(com.mbworldwideapps.aiorchestration.modules.scanner.CodeBaselineRepository.class);
+        java.util.UUID fileId = java.util.UUID.randomUUID();
+        java.util.UUID runId = java.util.UUID.randomUUID();
+        var file = new com.mbworldwideapps.aiorchestration.modules.scanner.CodeFileRecord(fileId, "P", "data/Repo.kt",
+                sha256(source), "kotlin", runId, java.util.Map.of());
+        when(baseline.findFileById("P", fileId)).thenReturn(java.util.Optional.of(file));
+        when(baseline.findFileByPath("P", "data/Repo.kt")).thenReturn(java.util.Optional.of(file));
+        when(baseline.findRun("P", runId)).thenReturn(java.util.Optional.of(
+                new com.mbworldwideapps.aiorchestration.modules.scanner.CodeScanRunRecord(runId, "P", root.toString(),
+                        "completed", java.time.Instant.now(), java.time.Instant.now(), java.util.Map.of())));
+        var save2 = withSignature(symbol(fileId, "method", "p.Repo#save", 2, 2), "save(Lang, Int)");
+        var save1 = withSignature(symbol(fileId, "method", "p.Repo#save", 3, 3), "save(Int)");
+        var load = withSignature(symbol(fileId, "method", "p.Repo#load", 4, 4), "load()");
+        when(baseline.findSymbolsByRef(eq("P"), any(), anyInt())).thenReturn(List.of());
+        when(baseline.findSymbolsByRef(eq("P"), eq("p.Repo#save"), anyInt())).thenReturn(List.of(save2, save1));
+        when(baseline.findSymbolsByRef(eq("P"), eq("p.Repo#load"), anyInt())).thenReturn(List.of(load));
+        tool.setCodeBaseline(baseline);
+
+        assertThat(tool.currentLocation("P", "p.Repo#save(Lang,Int)", "data/Repo.kt"))
+                .isEqualTo("data/Repo.kt:2-2 p.Repo#save(Lang,Int) (method)");
+        assertThat(tool.currentLocation("P", "p.Repo#save(Int)", "data/Repo.kt"))
+                .isEqualTo("data/Repo.kt:3-3 p.Repo#save(Int) (method)");
+        // a differently written parameter list still finds the only member of that name
+        assertThat(tool.currentLocation("P", "p.Repo#load(Unit)", "data/Repo.kt"))
+                .isEqualTo("data/Repo.kt:4-4 p.Repo#load(Unit) (method)");
+        // overloads and no parameter list that matches: not guessed
+        assertThat(tool.currentLocation("P", "p.Repo#save(String)", "data/Repo.kt")).isNull();
+        assertThat(AgentSessionMcpTool.withoutParameters("a.B#c(D)")).isEqualTo("a.B#c");
+        assertThat(AgentSessionMcpTool.withoutParameters("a.B(x)")).isEqualTo("a.B(x)");
+    }
+
+    private static com.mbworldwideapps.aiorchestration.modules.scanner.CodeSymbolRecord withSignature(
+            com.mbworldwideapps.aiorchestration.modules.scanner.CodeSymbolRecord s, String signature) {
+        return new com.mbworldwideapps.aiorchestration.modules.scanner.CodeSymbolRecord(s.id(), s.projectKey(),
+                s.fileId(), s.symbolKind(), s.name(), s.fqn(), signature, s.role(), s.startLine(), s.endLine(),
+                s.contentHash(), s.scanRunId(), s.metadata());
+    }
+
+    @Test
     void aCutExcerptSaysWhichLinesItShowsAndWhereTheSymbolEnds() {
         List<String> lines = java.util.stream.IntStream.rangeClosed(1, 100).mapToObj(i -> "line " + i).toList();
         String cut = AgentSessionMcpTool.excerpt("a.py:5-90 f (function)", 5, 90, lines, 10_000);

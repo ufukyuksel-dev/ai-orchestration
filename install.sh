@@ -305,7 +305,7 @@ if ollama list 2>/dev/null | awk '{print $1}' | grep -q '^bge-m3'; then ok "bge-
 if [ "$LOCAL_LLM" = 1 ]; then ollama pull qwen3:8b; ok "qwen3:8b pulled (optional local model)"; fi
 
 step "Building the server"
-(cd "$REPO" && ./mvnw -q -DskipTests package)
+(cd "$REPO" && ./mvnw -q -DskipTests clean package)
 mkdir -p "$DATA" "$STATE_DIR" "$REF_ROOT"
 cp "$(ls "$REPO"/target/ai-orchestration-*.jar | grep -v original | head -1)" "$JAR.new"
 

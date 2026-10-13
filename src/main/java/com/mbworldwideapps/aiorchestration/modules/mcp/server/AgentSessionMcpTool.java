@@ -434,16 +434,41 @@ public class AgentSessionMcpTool {
 
     private com.mbworldwideapps.aiorchestration.modules.scanner.CodeSymbolRecord symbolIn(String projectKey, String ref,
             String path) {
-        for (var symbol : baseline.findSymbolsByRef(projectKey, ref, 5)) {
-            if (!ref.equals(symbol.fqn()) || symbol.startLine() == null || symbol.endLine() == null) {
+        // a member ref may carry its parameter list ("Repo#save(Lang,Int)"); the code map keeps it in the signature
+        String bare = withoutParameters(ref);
+        String parameters = bare.equals(ref) ? null : ref.substring(bare.length()).replaceAll("\\s+", "");
+        List<com.mbworldwideapps.aiorchestration.modules.scanner.CodeSymbolRecord> inFile = new ArrayList<>();
+        for (var symbol : baseline.findSymbolsByRef(projectKey, bare, 5)) {
+            if (!bare.equals(symbol.fqn()) || symbol.startLine() == null || symbol.endLine() == null) {
                 continue;
             }
             var file = baseline.findFileById(projectKey, symbol.fileId());
             if (file.isPresent() && file.get().filePath().equals(path)) {
-                return symbol;
+                if (parameters == null || parameters.equals(parametersOf(symbol.signature()))) {
+                    return symbol;
+                }
+                inFile.add(symbol);
             }
         }
-        return partiallyQualified(projectKey, ref, path);
+        if (inFile.size() == 1) {
+            return inFile.get(0);  // the only member of that name in the file: the parameter list was written differently
+        }
+        return inFile.isEmpty() ? partiallyQualified(projectKey, bare, path) : null;
+    }
+
+    /** {@code pkg.Class#name(A,B)} without its parameter list; any other ref unchanged. */
+    static String withoutParameters(String ref) {
+        int member = ref.indexOf('#');
+        int open = ref.indexOf('(', Math.max(member, 0));
+        return member > 0 && open > member && ref.endsWith(")") ? ref.substring(0, open) : ref;
+    }
+
+    private static String parametersOf(String signature) {
+        if (signature == null) {
+            return "";
+        }
+        int open = signature.indexOf('(');
+        return open < 0 ? "" : signature.substring(open).replaceAll("\\s+", "");
     }
 
     /**

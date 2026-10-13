@@ -643,6 +643,16 @@ class ProfileAdviceTest(FlowTestCase):
                 self.assertNotIn("Tests:", self.prompt(question, cards=[])["additionalContext"])
         self.assertIn("Tests:", self.prompt("Fix the posts pagination", cards=[])["additionalContext"])
 
+    def test_a_prompt_that_rules_out_checks_gets_no_test_advice(self) -> None:
+        for prompt in ("Fix the posts pagination. Do not build, compile, write tests or run tests; only make the change.",
+                       "Question about posts. Which function pages them? Do not change any files.",
+                       "Add a JSON endpoint for posts, don't run the tests", "Sayfalamayı düzelt, derleme yapma."):
+            with self.subTest(prompt=prompt):
+                self.assertNotIn("Tests:", self.prompt(prompt, cards=[])["additionalContext"])
+        for prompt in ("Fix the build of the posts module", "Add tests for the posts pagination"):
+            with self.subTest(prompt=prompt):
+                self.assertIsNone(gate.NO_CHECKS.search(prompt))
+
     def test_a_change_request_phrased_as_a_question_gets_the_advice(self) -> None:
         for request in ("Can you fix the posts pagination?", "Could you add a JSON endpoint for posts?",
                         "Posts için sayfalama ekler misin?", "Bu hatayı düzeltebilir misin?"):

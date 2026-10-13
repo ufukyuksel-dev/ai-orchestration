@@ -340,12 +340,19 @@ def is_question(prompt: str) -> bool:
     return shaped and not CHANGE.search(text)
 
 
+# a prompt that rules out building or running checks, or any change ("Do not build, compile or run tests",
+# "Do not change any files", "derleme yapma"): no advice on how to check
+NO_CHECKS = re.compile(r"\b(?:do not|don't|never|without)\b[^.\n]{0,30}?\b(?:build|compil\w*|run\w*\s+(?:the\s+)?"
+                       r"(?:\w+\s+)?(?:tests?|checks?)|change any files?)\b|(?<!\w)(?:derleme|test çalıştırma)\s*"
+                       r"(?:yapma|yapmayın|yok)|(?<!\w)derlemeyin|test(?:leri)? çalıştırmayın", re.I)
+
+
 def profile_text(root: str, prompt: str, timeout: float) -> str:
     """How to check a change here, read from the repository's build files (the shared `ai_orch_profile`), for a task
-    that asks for a change: advice, not a test result. Nothing when the build files are being changed in the working
+    that asks for a change and does not rule checks out: advice, not a test result. Nothing when the build files are being changed in the working
     tree (the declared command may be in flux), nothing is declared, or the work does not finish within `timeout`
     (it runs in a daemon thread that is abandoned at the deadline, like the bootstrap call)."""
-    if timeout <= 0 or is_question(prompt):
+    if timeout <= 0 or is_question(prompt) or NO_CHECKS.search(prompt):
         return ""
     found: list[str] = []
     worker = threading.Thread(target=lambda: found.append(_profile(root, timeout)), daemon=True)
