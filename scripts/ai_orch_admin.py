@@ -202,6 +202,16 @@ def project_add(args: argparse.Namespace) -> int:
     if not folder.is_dir():
         print(f"not a folder: {folder}", file=sys.stderr)
         return 2
+    top = subprocess.run(["git", "-C", str(folder), "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+    if top.returncode == 0:
+        folder = Path(top.stdout.strip()).resolve()  # run anywhere inside the repository: its root is the project
+    else:
+        nested = sorted(p.parent.name for p in folder.glob("*/.git"))
+        hint = (f" It contains the git repository {', '.join(nested)}: run the command there"
+                f" (cd {folder / nested[0]}) and open that folder in the IDE, so Copilot works inside it."
+                if nested else " Run it inside a git repository (or `git init` this folder first).")
+        print(f"{folder} is not a git repository.{hint}", file=sys.stderr)
+        return 2
     # the same key an agent's session.bootstrap resolves for this folder
     key = mcp_call("scanner.project.resolve", {"rootPath": str(folder)})["projectKey"]
     print(f"indexing {folder} as {key} (structural, no LLM)…", flush=True)
