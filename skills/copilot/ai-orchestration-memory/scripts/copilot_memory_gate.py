@@ -119,7 +119,7 @@ def reset(session_id: str, tree: str | None = None) -> None:
     _save(path, {"empty": None, "queries": [], "tree": tree, "learned": False, "asked": False,
                  "request": int(old.get("request") or 0) + 1, "receipt": None,
                  "shown": old.get("shown", []), "pointers": old.get("pointers", []), "card_files": [],
-                 "rules_etag": old.get("rules_etag"), "profile_shown": old.get("profile_shown", False),
+                 "profile_shown": old.get("profile_shown", False),
                  "check_failed": False, "fixed_after_failure": False,
                  "fixed_from_memory": False, "delivered": [], "memory_fixes": [], "full_delivered": False})
 
@@ -221,15 +221,15 @@ def render(cards: list[dict[str, Any]], shown: set[str], pointers: set[str] = fr
     return (HEADER + "\n".join(lines), ids) if lines else ("", [])
 
 
-def fetch_bootstrap(root: str, prompt: str, timeout: float = DEADLINE, known_etag: str | None = None) -> dict:
-    """`session.bootstrap` for the prompt, through the pinned bridge: the memory cards and the rules as the saved
-    preference decides them; {} on any failure or when the whole exchange (initialize, call, close) does not finish
+def fetch_bootstrap(root: str, prompt: str, timeout: float = DEADLINE) -> dict:
+    """`session.bootstrap` for the prompt, through the pinned bridge: the memory cards only (Copilot never loads
+    rules, so the server neither sends them nor asks about them); {} on any failure or when the whole exchange (initialize, call, close) does not finish
     within `timeout`: it runs in a daemon thread that is abandoned at the deadline (the hook process exits right after,
     so nothing outlives it)."""
     if timeout <= 0:
         return {}
     found: list[dict] = []
-    worker = threading.Thread(target=lambda: found.append(_bootstrap(root, prompt, timeout, known_etag)), daemon=True)
+    worker = threading.Thread(target=lambda: found.append(_bootstrap(root, prompt, timeout)), daemon=True)
     worker.start()
     worker.join(timeout)
     return found[0] if found and not worker.is_alive() else {}
@@ -240,45 +240,17 @@ def fetch_cards(root: str, prompt: str, timeout: float = DEADLINE) -> list[dict[
     return cards if isinstance(cards, list) else []
 
 
-def _bootstrap(root: str, prompt: str, timeout: float, known_etag: str | None) -> dict:
+def _bootstrap(root: str, prompt: str, timeout: float) -> dict:
     import memory_bridge
-    arguments = {"rootPath": root, "task": prompt[:2000]}
-    if known_etag:
-        arguments["knownEtag"] = known_etag  # the rules this session already has are not sent again
+    arguments = {"rootPath": root, "task": prompt[:2000], "loadRules": False}
     try:
         with memory_bridge.McpHttpClient(token=os.environ.get("AI_ORCH_MCP_TOKEN"), timeout=timeout) as client:
             client.initialize()
             response = client._rpc("tools/call", {"name": "session.bootstrap", "arguments": arguments})
             result = memory_bridge.decode_tool_result(response)
-    except Exception:  # noqa: BLE001 - fail-open: the prompt goes on without cards or rules
+    except Exception:  # noqa: BLE001 - fail-open: the prompt goes on without cards
         return {}
     return result if isinstance(result, dict) else {}
-
-
-UNATTENDED_ENV = "AI_ORCH_UNATTENDED"  # set by unattended runners (CI, benchmarks): no user to ask
-
-
-def rules_block(result: dict[str, Any], state: dict[str, Any]) -> str:
-    """The rules part of the prompt block, as the saved preference decided it on the server: the approved rules, all of
-    them that the server sent (never cut); or, with no saved preference, one line that says to ask the user
-    (interactive) or that rules were skipped (unattended, `AI_ORCH_UNATTENDED=1`, where no one could answer). Nothing
-    when the preference is to skip, or the session already has these rules (same etag). The etag is kept only when the
-    server says the rules are complete (`rulesLoaded`, no `nextCursor`); otherwise the next prompt asks again."""
-    rules = [r for r in result.get("rules") or [] if isinstance(r, dict) and r.get("statement")]
-    if rules:
-        complete = bool(result.get("rulesLoaded")) and not result.get("nextCursor")
-        state["rules_etag"] = result.get("rulesEtag") if complete else None
-        lines = [f"- {r['statement']}" + (f" ({r['scope']})" if r.get("scope") else "") for r in rules]
-        more = "" if complete else ("\nMore approved rules exist than were sent here: load them with the bare command "
-                                    "`ai_orch rule instructions --scope effective`.")
-        return "AI Orchestration rules for this repository (approved; follow them):\n" + "\n".join(lines) + more
-    if result.get("askUser"):
-        if os.environ.get(UNATTENDED_ENV, "").strip() in ("1", "true", "yes"):
-            return ("AI Orchestration rules not loaded: no saved rules preference and this session is unattended; "
-                    "do not ask about rules.")
-        return ("AI Orchestration: no saved rules preference. Ask the user once with ask_user whether to load the "
-                "rules for this session, as your instructions describe.")
-    return ""
 
 
 FILES = re.compile(r" Files: (.+)\.$")
@@ -413,14 +385,13 @@ def prompt_hook(payload: dict[str, Any]) -> dict[str, Any]:
         return {}
     _reset_steps(session_id, root)
     path = state_file(session_id)
-    result = fetch_bootstrap(root, prompt, left(), _load(path).get("rules_etag"))  # bounded by the time left
+    result = fetch_bootstrap(root, prompt, left())  # bounded by the time left
     profile = "" if _load(path).get("profile_shown") else profile_text(root, prompt, left())
     if left() <= 0:
         return {"additionalContext": LEARN_LINE}  # too late: no card or advice is shown or recorded as shown
     state = _load(path)
     cards = result.get("memory") if isinstance(result.get("memory"), list) else []
     text, shown = render(cards, set(state.get("shown", [])), set(state.get("pointers", [])))
-    rules = rules_block(result, state)
     if profile:
         state["profile_shown"] = True
     if text:
@@ -431,7 +402,7 @@ def prompt_hook(payload: dict[str, Any]) -> dict[str, Any]:
     _save(path, state)
     if text:
         _remember_delivery(session_id, text, at_failure=False)
-    return {"additionalContext": "\n\n".join(part for part in (rules, profile, text, LEARN_LINE) if part)}
+    return {"additionalContext": "\n\n".join(part for part in (profile, text, LEARN_LINE) if part)}
 
 
 def _reset_steps(session_id: str, root: str) -> None:

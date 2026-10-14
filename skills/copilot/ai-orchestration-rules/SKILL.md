@@ -1,23 +1,12 @@
 ---
 name: ai-orchestration-rules
-description: Use when Copilot must load approved rules or the user wants a durable behavior instruction drafted, previewed, and promoted through ai_orch.
+description: Use only when the user asks for a durable behavior instruction (a rule) to be drafted, previewed and promoted through ai_orch. Rules are never loaded in Copilot sessions.
 ---
 
-# Rules and instructions — Copilot terminal
+# Rule authoring — Copilot terminal
 
 Use the `ai_orch` commands below or the native `rules.*` MCP tools; both reach
 the same server.
-
-## Load
-
-```bash
-ai_orch rule instructions --scope effective
-ai_orch rule instructions --scope module --module-path "<listed directory>"
-```
-
-Read the complete statements. The effective response's module list is an index,
-not loaded policy. Load only listed module paths. Fail closed on incomplete
-responses and never substitute a memory search.
 
 ## Author
 
@@ -28,7 +17,7 @@ agree exact text and scope with the user
   -> show the complete server confirmation card
   -> receive explicit approval in the current conversation
   -> ai_orch rule promote --approval-file approval.json [--global]
-  -> verify returned status and reload applicable instructions
+  -> verify the returned status
 ```
 
 The candidate is an instruction rule, for example:

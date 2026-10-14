@@ -5,37 +5,12 @@ which model Copilot uses.
 
 ## Surface
 
-Copilot reaches AI Orchestration through the native `ai-orchestration` MCP tools
-or the `ai_orch` terminal command; both use the same server as Claude Code and
-Codex. `ai_orch --help` lists every command (memory, rules, codebase, scan,
-references, jobs, personal memory). Scan (`ai_orch scan start`) when the code map
-is missing or out of date.
-
-## Session rules
-
-When the AI Orchestration prompt hook is installed it applies the saved rules preference itself: approved rules arrive with your prompt ("AI Orchestration rules for this repository"), or it says that rules were skipped. Ask the question below only when the prompt says no rules preference is saved; never ask when it says the session is unattended.
-
-Otherwise, at the first request of a new session, use Copilot's `ask_user` tool to ask:
-
-> Bu oturum için AI Orchestration global ve proje kurallarını yükleyeyim mi?
-
-Offer `Evet, yükle (Recommended)` and `Hayır, bu oturumda atla`. Remember the
-answer for that session/project. On yes, run:
-
-```bash
-ai_orch rule instructions --scope effective
-```
-
-Read the returned statements. Before work in a module explicitly listed by that
-response, load its module rules with `--scope module --module-path <dir>`. On
-failure, report the real error; do not substitute memory search or another
-transport.
-
-If the user chooses `Hayır, bu oturumda atla`, skip only the global/project and
-module rule-instruction calls for that session/project. This choice does not
-disable AI Orchestration as a whole: keep using the other capabilities,
-including `memory search` and `memory learn`. Do not ask again
-during the same session/project.
+Copilot reaches AI Orchestration through the `ai_orch` terminal command (or the
+native `ai-orchestration` MCP tools when they are registered); both use the same
+server as Claude Code and Codex. The prompt hook adds the memory cards that match
+each request: start from them. Rules are never loaded in Copilot sessions: do not
+load or ask about them, and do not run `ai_orch --help`; the commands you need are
+written out below.
 
 ## Retrieval
 

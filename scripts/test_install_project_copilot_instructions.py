@@ -69,23 +69,21 @@ class ProjectInstallerTest(unittest.TestCase):
         self.assertIn('latest', text)
         self.assertNotIn('# Canonical Copilot instructions', text)
 
-    def test_repository_copilot_entrypoints_share_ask_user_gates(self):
+    def test_repository_copilot_entrypoints_never_load_rules(self):
         root = Path(__file__).resolve().parents[1]
         entrypoints = [
             root / '.github' / 'copilot-instructions.md',
             root / 'skills' / 'copilot' / 'session-instructions.md',
         ]
-        # The shared contract points Copilot to its workflow; no runtime is restricted.
         shared = (root / 'skills' / 'session-instructions.md').read_text(encoding='utf-8')
         self.assertIn('`ai_orch`', shared)
-        self.assertIn('`ask_user`', shared)
         self.assertIn('skills/copilot/session-instructions.md', shared)
         for path in entrypoints:
             text = path.read_text(encoding='utf-8')
-            self.assertIn('`ask_user`', text, path)
-            self.assertIn('global ve proje kurallarını yükleyeyim mi?', text, path)
-            self.assertIn('Hayır, bu oturumda atla', text, path)
-            self.assertIn('do not ask again', text.lower(), path)
+            self.assertNotIn('ask_user', text, path)
+            self.assertNotIn('rule instructions', text, path)
+            self.assertNotIn('lists every command', text, path)
+            self.assertIn('ai_orch memory search --query', text, path)
 
     def test_preserves_personal_text_byte_for_byte(self):
         self.target.parent.mkdir(parents=True)
@@ -245,6 +243,15 @@ class ProjectInstallerTest(unittest.TestCase):
                          (self.repo / 'skills' / 'copilot' / self.skill_names[0]).resolve())
         self.assertFalse((directory / 'retired-skill').is_symlink())
         self.assertTrue((old / 'skills' / 'copilot' / 'retired-skill').is_dir())  # only the link goes
+
+    def test_a_link_to_a_skill_this_checkout_no_longer_ships_is_removed(self):
+        directory = self.project / '.github' / 'skills'
+        for flag in ('', '--uninstall'):
+            directory.mkdir(parents=True, exist_ok=True)
+            retired = directory / 'changing-code-safely'
+            retired.symlink_to(self.repo / 'skills' / 'copilot' / 'changing-code-safely', target_is_directory=True)
+            self.assertEqual(self.install(*([flag] if flag else []))[0], 0)
+            self.assertFalse(retired.is_symlink(), flag)
 
     def test_relocated_skill_symlink_conflicts(self):
         directory = self.project / '.github' / 'skills'

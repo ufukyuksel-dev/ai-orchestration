@@ -167,12 +167,14 @@ def plan_skills(root: Path, repo: Path, uninstall: bool) -> list[tuple]:
         if not directory.is_dir():
             return []
         for entry in sorted(directory.iterdir()):
-            if entry.is_symlink() and entry.name in sources and entry.resolve() == sources[entry.name]:
+            if entry.is_symlink() and (entry.name in sources and entry.resolve() == sources[entry.name]
+                                       or _retired_skill(entry, repo, sources)):
                 actions.append(('unlink', entry, None))
         return actions
-    if directory.is_dir():  # links of skills this project no longer ships, left by another checkout's install
+    if directory.is_dir():  # links of skills this project no longer ships (this checkout's or another's)
         for entry in sorted(directory.iterdir()):
-            if entry.name not in sources and _other_checkout_skill(entry, repo):
+            if entry.name not in sources and (_other_checkout_skill(entry, repo)
+                                              or _retired_skill(entry, repo, sources)):
                 actions.append(('unlink', entry, None))
     for name, source in sources.items():
         link = directory / name
@@ -188,6 +190,15 @@ def plan_skills(root: Path, repo: Path, uninstall: bool) -> list[tuple]:
             raise Conflict(f'skill path exists and is not an owned symlink: {link}')
         actions.append(('link', link, source))
     return actions
+
+
+def _retired_skill(link: Path, repo: Path, sources: dict) -> bool:
+    """A symlink this installer wrote to <repo>/skills/copilot/<its name>, for a skill this checkout no longer ships."""
+    if not link.is_symlink() or link.name in sources:
+        return False
+    target = Path(os.readlink(link))
+    target = target if target.is_absolute() else link.parent / target
+    return target.name == link.name and target.parent.resolve(strict=False) == (repo / 'skills' / 'copilot').resolve()
 
 
 def _other_checkout_skill(link: Path, repo: Path) -> bool:
@@ -374,7 +385,9 @@ def main() -> int:
                   '.github/agents/ai-orchestration.agent.md and .github/mcp.json are inside the target repository, so git sees them; the skills and hook commands '
                   'point into this checkout (keep them out of shared commits if others use the repository). Copilot '
                   '(CLI, and the Copilot CLI sessions of IntelliJ chat) loads the hooks and the MCP server once the '
-                  'folder is trusted. For the compact tool set pick the ai-orchestration agent (IntelliJ chat: agent '
+                  'folder is trusted. In IntelliJ chat choose Copilot CLI as the agent provider (`/migrate:workspace` '
+                  'moves an old session): the older local harness skips the agentStop hook, so no learning is saved. '
+                  'For the compact tool set pick the ai-orchestration agent (IntelliJ chat: agent '
                   'picker; terminal: `copilot --agent ai-orchestration`). A written file is not proof the client loaded it; verify in a real session.')
         return 0
     except (Conflict, OSError) as exc:

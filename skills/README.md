@@ -7,7 +7,7 @@ Ortak skill'ler aynı iş akışını taşır. Claude Code, Codex ve Copilot ayn
 ## Skill'ler
 - `debugging-this-project` — bir hata / test failure debug ederken.
 - `adding-an-mcp-tool` — yeni bir MCP tool eklerken.
-- `changing-code-safely` — bir sembolü değiştirmeden önce impact analizi.
+- `changing-code-safely` — bir sembolü değiştirmeden önce impact analizi. Sadece Codex; Claude Code ve Copilot'ta kartlar hook'larla geldiği için yok (IntelliJ'in Copilot'u `~/.claude/skills`'i de okuyor).
 - `ai-orchestration-memory` — Copilot'da seçici proje belleği: dar retrieval, duplicate NOOP/update, codeLocators, pending/approval, archive. Copilot'a özeldir.
 - `ai-orchestration-rules` — instruction vs selector rule; global/project/module kapsam; tam confirmation card ve gerçek insan onayı. Copilot'a özeldir.
 - `ai-orchestration-references` — shared reference katalogu, expected-hash, relation ve bounded graph. Copilot'a özeldir.

@@ -1,38 +1,18 @@
 # AI Orchestration — Copilot terminal workflow
 
-Copilot reaches AI Orchestration through the native `ai-orchestration` MCP tools
-or the `ai_orch` terminal command; both use the same server and the same scopes
-as Claude Code and Codex. `ai_orch --help` lists every command (memory, rules,
-codebase, scan, references, jobs, personal memory); `ai_orch capabilities` shows
-what the server offers. Scan (`ai_orch scan start`) when the code map is missing
-or out of date.
-
-## Startup rules
-
-When the AI Orchestration prompt hook is installed it applies the saved rules preference itself: approved rules arrive with your prompt ("AI Orchestration rules for this repository"), or it says that rules were skipped. Ask the question below only when the prompt says no rules preference is saved; never ask when it says the session is unattended.
-
-Otherwise, at the first request, use Copilot's `ask_user` tool to ask:
-
-> Bu oturum için AI Orchestration global ve proje kurallarını yükleyeyim mi?
-
-Offer the exact choices
-`Evet, yükle (Recommended)` and `Hayır, bu oturumda atla`. On yes:
-
-```bash
-ai_orch rule instructions --scope effective
-```
-
-Read the complete returned statements. Load module scope only for a directory
-listed in the effective response. Remember the decision until project switch,
-context reset, or compaction. Do not ask again during the same session/project.
-On no, do not load global, project, or module
-rules for that session/project, but keep using the other capabilities such as
-`ai_orch memory search` and `ai_orch memory learn`. On a real load failure, stop rule-dependent
-work and report it; do not claim there are no rules.
+Copilot reaches AI Orchestration through the `ai_orch` terminal command (or the
+native `ai-orchestration` MCP tools when they are registered); both use the
+same server. The prompt hook adds the memory cards that match each request:
+start from them. Do not look memory up at the start of a task, do not load or
+ask about rules, and do not run `ai_orch --help`; the commands you need are
+written out below.
 
 ## Selective retrieval
 
-Search only when missing historical context could change the task:
+A prompt line `Possibly relevant memory (not loaded)` gives the exact command
+that opens that card; run it when the card fits the task. Otherwise search only
+when you are stuck (an attempt failed, or a second code search did not find
+what you need):
 
 ```bash
 ai_orch memory search --query "<specific query>" --top-k 3
@@ -92,8 +72,8 @@ Archive is a reversible soft delete. Never hard-delete without the user's confir
 
 Rules use `draft -> preview -> explicit human approval -> promote`. Echo the
 server hashes and confirmation card exactly. Never promote from a summary or
-infer approval from silence. `--global` must be explicit. Reload applicable
-instructions after successful promotion.
+infer approval from silence. `--global` must be explicit. Only when the user
+asks for a rule; rules are never loaded in Copilot sessions.
 
 ## Failures
 

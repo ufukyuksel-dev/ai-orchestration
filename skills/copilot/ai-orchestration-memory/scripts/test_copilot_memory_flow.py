@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import copilot_memory_gate as gate
 
@@ -71,7 +71,7 @@ class PromptHookTest(FlowTestCase):
         self.assertIn("AI Orchestration, memory for this request:", answer["additionalContext"])
         self.assertIn("Token auth for API routes. Use token_auth.login_required. Files: app/api/auth.py.",
                       answer["additionalContext"])
-        root, prompt, timeout, _ = self.fetch.call_args.args
+        root, prompt, timeout = self.fetch.call_args.args
         self.assertEqual((root, prompt), (str(self.repo.resolve()), "add a posts endpoint"))
         self.assertTrue(0 < timeout <= gate.DEADLINE)
         self.assertEqual(block(self.prompt()), "")  # shown before in this session: not repeated
@@ -512,32 +512,32 @@ class StepSyncTest(PostHookTest):
         self.assertIsNone(gate.refusal(self.step.VERIFY_QUERY + ": python tests.py"))
 
 
-class RulesPreferenceTest(FlowTestCase):
-    def answer(self, result: dict, env: dict | None = None) -> str:
-        with patch.object(gate, "fetch_bootstrap", return_value=result), patch.dict(os.environ, env or {}):
+class RulesNeverLoadedTest(FlowTestCase):
+    """Copilot never loads rules and never asks about them: the bootstrap says loadRules=false, and whatever the
+    server would send about rules does not reach the prompt."""
+
+    def answer(self, result: dict) -> str:
+        with patch.object(gate, "fetch_bootstrap", return_value=result):
             return block(gate.prompt_hook({"sessionId": "s1", "cwd": str(self.repo), "prompt": "x"}))
 
-    def test_saved_load_preference_delivers_the_rules_and_does_not_resend_them(self) -> None:
-        rules = {"rulesLoaded": True, "rulesEtag": "e1", "rules": [{"scope": "project", "statement": "Use UTC."}]}
-        long_rules = {"rulesLoaded": True, "rulesEtag": "e0",
-                      "rules": [{"statement": f"Rule {i}: " + "x" * 300} for i in range(15)]}
-        text = self.answer(long_rules)
-        self.assertIn("Rule 14:", text)  # all rules the server sent, never cut
-        self.assertIn("AI Orchestration rules for this repository (approved; follow them):\n- Use UTC. (project)",
-                      self.answer(rules))
-        with patch.object(gate, "fetch_bootstrap", return_value={"rulesUnchanged": True}) as fetch:
-            gate.prompt_hook({"sessionId": "s1", "cwd": str(self.repo), "prompt": "next"})
-        self.assertEqual(fetch.call_args.args[3], "e1")  # the next prompt sends the etag: rules are not resent
+    def test_the_bootstrap_asks_for_no_rules(self) -> None:
+        import memory_bridge
+        client = MagicMock()
+        client.__enter__.return_value = client
+        client._rpc.return_value = {}
+        with patch.object(memory_bridge, "McpHttpClient", return_value=client), \
+                patch.object(memory_bridge, "decode_tool_result", return_value={"memory": []}):
+            gate._bootstrap(str(self.repo), "add a posts endpoint", 1.0)
+        arguments = client._rpc.call_args.args[1]["arguments"]
+        self.assertIs(arguments["loadRules"], False)
+        self.assertNotIn("knownEtag", arguments)
 
-    def test_no_saved_preference_asks_interactively_and_skips_unattended(self) -> None:
-        ask = {"askUser": "Load the rules?"}
-        self.assertIn("Ask the user once with ask_user", self.answer(ask, {gate.UNATTENDED_ENV: ""}))
-        unattended = self.answer(ask, {gate.UNATTENDED_ENV: "1"})
-        self.assertIn("rules not loaded", unattended)
-        self.assertNotIn("Ask the user", unattended)
-
-    def test_saved_skip_preference_says_nothing(self) -> None:
-        self.assertEqual(self.answer({"rulesLoaded": False}), "")
+    def test_rules_or_a_rules_question_never_reach_the_prompt(self) -> None:
+        for result in ({"rulesLoaded": True, "rules": [{"statement": "Use UTC."}]}, {"askUser": "Load the rules?"}):
+            text = self.answer(result)
+            self.assertNotIn("Use UTC.", text)
+            self.assertNotIn("ask_user", text)
+            self.assertNotIn("rules", text.lower())
 
 
 class LearningOnlyNewTest(PostHookTest):
@@ -582,16 +582,6 @@ class LearningOnlyNewTest(PostHookTest):
         # the reminder arriving as a prompt is still recognised: the request goes on
         self.assertEqual(gate.prompt_hook({"sessionId": "s1", "cwd": str(self.repo), "prompt": reason}), {})
 
-
-
-class IncompleteRulesTest(RulesPreferenceTest):
-    def test_incomplete_rules_keep_no_etag_and_say_how_to_load_the_rest(self) -> None:
-        page = {"rulesLoaded": False, "rulesEtag": "e2", "nextCursor": "c1",
-                "rules": [{"statement": "First page rule."}]}
-        text = self.answer(page)
-        self.assertIn("First page rule.", text)
-        self.assertIn("`ai_orch rule instructions --scope effective`", text)
-        self.assertIsNone(gate._load(gate.state_file("s1")).get("rules_etag"))  # the next prompt asks again
 
 
 class LocatedCardFilesTest(FlowTestCase):

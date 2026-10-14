@@ -61,12 +61,12 @@ class InstallAndCheckTest(InstallerTestCase):
 
         text = self.bootstrap.read_text(encoding="utf-8")
         self.assertIn(installer.BEGIN, text)
-        self.assertIn("ai_orch rule instructions --scope effective", text)
-        self.assertIn("`ask_user`", text)
-        self.assertIn("global ve proje kurallarını yükleyeyim mi?", text)
-        self.assertIn("Hayır, bu oturumda atla", text)
+        self.assertIn("do not load or ask about rules", text)
+        self.assertIn("do not run `ai_orch --help`", text)
+        self.assertIn('ai_orch memory search --query', text)
+        self.assertNotIn("ask_user", text)
+        self.assertNotIn("rule instructions", text)
         self.assertIn("Never hard-delete memory without the user's confirmation", text)
-        self.assertIn("unresolvedLocators", text)
         for restriction in ("only supported interface", "Never run a scan", "approval gate",
                             "natively", "retired commands"):
             self.assertNotIn(restriction, text)

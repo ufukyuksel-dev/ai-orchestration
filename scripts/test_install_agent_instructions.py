@@ -183,6 +183,24 @@ class InstallerTest(unittest.TestCase):
         self.assertIn('startup workflow', target.read_text())
         self.assertNotIn('When first using AI Orchestration', target.read_text())
 
+    def test_a_skill_the_checkout_no_longer_ships_is_unlinked_and_its_backup_restored(self):
+        backed_up = self.home / '.claude/skills/example'
+        backed_up.parent.mkdir(parents=True)
+        shutil.copytree(self.repo / 'skills/claude/example', backed_up)
+        self.run_cli()
+        self.assertTrue(backed_up.is_symlink())
+        shutil.rmtree(self.repo / 'skills/claude/example')
+        shutil.rmtree(self.repo / 'skills/claude/ai-orchestration-learning')
+        (self.repo / 'skills/claude/kept').mkdir()
+        (self.repo / 'skills/claude/kept/SKILL.md').write_text('kept')
+        self.run_cli()
+        self.assertFalse(backed_up.is_symlink())
+        self.assertEqual((backed_up / 'SKILL.md').read_text(), 'canonical example skill')  # the user's copy is back
+        self.assertFalse((self.home / '.claude/skills/ai-orchestration-learning').exists())
+        self.assertTrue((self.home / '.codex/skills/example').is_symlink())  # codex still ships it
+        self.run_cli('--check')
+        self.run_cli('--uninstall')
+
     def test_exact_copy_backed_up_and_restored(self):
         target = self.home / '.codex/skills/example'
         target.parent.mkdir(parents=True)
@@ -339,10 +357,8 @@ class InstallerTest(unittest.TestCase):
             self.assertIn('unresolvedLocators', text)
             self.assertIn('stale card', text)
 
-        safe_change = (repo / 'skills/copilot/changing-code-safely/SKILL.md').read_text()
-        self.assertIn('Focused fast path', safe_change)
-        self.assertNotIn('plan check', safe_change)
-        self.assertIn('security/auth/permission change', safe_change)
+        # Copilot gets the memory cards from its hooks: no skill that loads on every code change
+        self.assertFalse((repo / 'skills/copilot/changing-code-safely').exists())
 
         focused_verification = (repo / 'skills/copilot/implementation-verification/SKILL.md').read_text()
         self.assertIn('run the user-requested repository test command once', focused_verification)

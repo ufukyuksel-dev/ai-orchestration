@@ -221,8 +221,10 @@ instructions, every file read so far and every earlier step. A task's cost is th
   MCP server once the folder is trusted. It also writes the compact agent to `.github/agents`, its tool list in
   both Copilot CLI's names (`bash`, `view`, `edit`, …) and the JetBrains agent's names (`run_in_terminal`,
   `read_file`, `insert_edit_into_file`, …): each client ignores the other's names, so neither loses its terminal or
-  edit tools (an earlier CLI-only list left the IDE without its terminal). In IntelliJ chat pick the
-  `ai-orchestration` agent. Checked live with an empty user home, everything from `.github` only: the agent's first
+  edit tools (an earlier CLI-only list left the IDE without its terminal). In IntelliJ chat choose **Copilot CLI**
+  as the agent provider (`/migrate:workspace` moves an old session) and pick the `ai-orchestration` agent. The
+  older local harness (plugin 1.18) rejects `agentStop` (`[HookParser] Invalid event type`), so the learning is
+  never saved, and refuses the `~/.copilot/hooks` file as an untrusted workspace folder. Checked live with an empty user home, everything from `.github` only: the agent's first
   call was 12.4k tokens (default agent 26.0k), it worked with `bash`/`view`/`edit`, the prompt hook added its
   context, and the stop hook saved the task's learning; in another run a card saved by the stop hook was delivered
   by the next task's prompt hook.

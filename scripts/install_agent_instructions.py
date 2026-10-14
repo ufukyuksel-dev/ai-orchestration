@@ -152,6 +152,15 @@ def load_record(home):
         raise Conflict(f'invalid ownership record: {exc}') from exc
 
 
+def retired_source(source, repo):
+    """A skill directory of this checkout (skills/<codex|claude>/<name>) that is no longer there."""
+    if not isinstance(source, str):
+        return False
+    path = Path(source)
+    return (path.parent.parent == repo / 'skills' and path.parent.name in ('codex', 'claude')
+            and not path.exists())
+
+
 def validate_record(record, allowed_links, allowed_instructions, backups):
     if len({r.get('target') for r in record['links'] if isinstance(r, dict)}) != len(record['links']):
         raise Conflict('invalid or duplicate owned link records')
@@ -189,6 +198,17 @@ def plan(args):
         backups.update({str(dest / p.parent.name): home / '.ai-orchestration-backups' / f'{runtime}-skills' / p.parent.name for p in paths})
     if not (repo / 'skills/session-instructions.md').is_file():
         raise Conflict('canonical startup workflow is missing')
+    # Links to a skill this checkout no longer ships: removed (the backup they replaced comes back) and forgotten.
+    retired_actions = []
+    shipped = {str(t) for _, t, _ in sources}
+    retired = [r for r in record['links'] if isinstance(r, dict) and r.get('target') not in shipped
+               and retired_source(r.get('source'), repo)]
+    for row in retired:
+        target = Path(row['target'])
+        if target.is_symlink() and os.readlink(target) == row['source']:
+            backup = Path(row['backup']) if row.get('backup') else None
+            retired_actions.append(('unlink', target, backup if backup and backup.is_dir() else None))
+    record = dict(record, links=[r for r in record['links'] if r not in retired])
     codex_instruction = codex_home / 'AGENTS.md'
     override = codex_home / 'AGENTS.override.md'
     if text_file(override).strip():
@@ -203,7 +223,7 @@ def plan(args):
                 raise Conflict(f'configuration parent is a symlink: {parent}')
             if exists(parent) and not parent.is_dir():
                 raise Conflict(f'configuration parent is not a directory: {parent}')
-    actions, new = [], {'version': 2, 'links': [], 'instructions': []}
+    actions, new = list(retired_actions), {'version': 2, 'links': [], 'instructions': []}
     old_links = {r['target']: r for r in record['links']}
     for source, target, runtime in sources:
         previous = old_links.get(str(target))
