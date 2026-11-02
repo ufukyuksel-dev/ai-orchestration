@@ -6,6 +6,8 @@ line (ids, verdicts, counts and an optional repository path; no text). A missing
 
 from __future__ import annotations
 
+import trace_isolation  # noqa: F401 - before anything runs a hook: the trace goes to a throw-away directory
+
 import json
 import unittest
 from unittest.mock import patch
@@ -226,6 +228,71 @@ class FeedbackTraceTest(CardFeedbackTestCase):
         state["fixed_after_failure"] = True
         gate._save(gate.state_file("s1"), state)
         self.assertEqual(self.stop(answer="Done.")["reason"], gate.LEARN_REASON)
+
+    def test_a_pointer_card_is_labelled_asked_for_and_judged(self) -> None:
+        context = self.prompt(cards=[POINTER])["additionalContext"]
+        self.assertIn("- [m1] Possibly relevant memory (not loaded): Pagination helper.", context)
+        self.assertTrue(context.endswith(gate.FEEDBACK_LINE))
+        self.assertIn("pointer", gate.FEEDBACK_LINE)  # the agent is told pointers are judged too
+        self.assertEqual(self.state()["refs"], {"m1": POINTER["id"]})
+        self.stop(answer=comment({"memoryFeedback": [{"ref": "m1", "verdict": "helped", "savedCalls": 2}]}))
+        self.assertEqual(self.feedback()[0]["cards"], [{"cardId": POINTER["id"], "verdict": "helped",
+                                                         "savedCalls": 2}])
+
+    def test_an_example_comment_inside_the_answer_is_not_the_verdict(self) -> None:
+        self.prompt(cards=[FULL])
+        example = '<!-- ai-orch-learn {"memoryFeedback":[{"ref":"m1","verdict":"misled","wastedCalls":5}]} -->'
+        self.stop(answer=f"The hook reads a comment such as\n{example}\nat the end of the answer. Done.")
+        self.assertEqual((self.feedback()[0]["parsed"], self.feedback()[0]["cards"]), (False, []))
+
+    def test_the_request_tokens_come_from_the_transcripts_usage_records(self) -> None:
+        self.prompt(cards=[FULL])
+        transcript = self.tmp / "events.jsonl"
+
+        def usage(inp: int, out: int) -> dict:
+            return {"type": "session.usage_record", "data": {"usage": {"inputTokens": inp, "outputTokens": out,
+                                                                       "model": "m"}}}
+
+        with transcript.open("a") as stream:
+            for event in (usage(999, 999),  # an earlier request
+                          {"type": "user.message", "data": {"content": "TOPSECRET-PROMPT"}},
+                          usage(1000, 50), {"type": "assistant.message", "data": {"content": "x"}},
+                          usage(2000, 70)):
+                stream.write(json.dumps(event) + "\n")
+        self.stop(answer=comment({"memoryFeedback": [{"ref": "m1", "verdict": "unused"}]}))
+        self.assertEqual(self.feedback()[0]["requestTokens"], {"input": 3000, "output": 120})
+        self.assertNotIn("TOPSECRET", self.raw())
+
+    def test_the_learn_reminder_reply_stays_in_the_same_request_for_the_tokens(self) -> None:
+        self.prompt(cards=[FULL])
+        (self.repo / "a.py").write_text("x = 2\n")
+        state = self.state()
+        state["fixed_after_failure"] = True
+        gate._save(gate.state_file("s1"), state)
+        transcript = self.tmp / "events.jsonl"
+        usage = {"type": "session.usage_record", "data": {"usage": {"inputTokens": 100, "outputTokens": 10}}}
+        with transcript.open("a") as stream:
+            for event in ({"type": "user.message", "data": {"content": "the request"}}, usage):
+                stream.write(json.dumps(event) + "\n")
+        self.assertEqual(self.stop(answer="Done.")["decision"], "block")
+        with transcript.open("a") as stream:
+            for event in ({"type": "user.message", "data": {"content": gate.learn_reason(self.state())}}, usage):
+                stream.write(json.dumps(event) + "\n")
+        self.stop(active=True, answer=comment({"memoryFeedback": [{"ref": "m1", "verdict": "unused"}]}))
+        self.assertEqual(self.feedback()[0]["requestTokens"], {"input": 200, "output": 20})
+
+    def test_without_usage_records_no_request_tokens_are_written(self) -> None:
+        self.prompt(cards=[FULL])
+        self.stop(answer=comment({"memoryFeedback": [{"ref": "m1", "verdict": "unused"}]}))
+        self.assertNotIn("requestTokens", self.feedback()[0])
+        self.prompt(text="next request", cards=[STALE])
+        transcript = self.tmp / "events.jsonl"
+        with transcript.open("a") as stream:
+            for event in ({"type": "user.message", "data": {"content": "next request"}},
+                          {"type": "session.usage_record", "data": {"usage": {"inputTokens": 5}}}):  # no output count
+                stream.write(json.dumps(event) + "\n")
+        self.stop(answer=comment({"memoryFeedback": [{"ref": "m1", "verdict": "unused"}]}))
+        self.assertNotIn("requestTokens", self.feedback()[1])
 
     def test_a_feedback_failure_is_fail_open(self) -> None:
         self.prompt(cards=[FULL])

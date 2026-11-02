@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import trace_isolation  # noqa: F401 - before anything runs a hook: the trace goes to a throw-away directory
+
 import argparse
 import io
 import json

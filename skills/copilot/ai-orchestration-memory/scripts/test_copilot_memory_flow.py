@@ -5,6 +5,8 @@ hidden comment, and asks once (one short reply) only when the agent fixed its ow
 
 from __future__ import annotations
 
+import trace_isolation  # noqa: F401 - before anything runs a hook: the trace goes to a throw-away directory
+
 import io
 import json
 import os
@@ -301,6 +303,14 @@ class LearningPayloadTest(FlowTestCase):
         for nothing in ("Done.", "<!-- ai-orch-learn not json -->", '<!-- ai-orch-learn {"learningCandidates":[]} -->',
                         "<!-- other comment -->"):
             self.assertIsNone(gate.learning_payload(nothing))
+
+    def test_only_a_comment_that_ends_the_answer_counts(self) -> None:
+        example = '<!-- ai-orch-learn {"learningCandidates":[{"summary":"example"}]} -->'
+        real = '<!-- ai-orch-learn {"learningCandidates":[{"summary":"real"}]} -->'
+        self.assertIsNone(gate.learning_payload(f"Write it like {example} at the end."))
+        self.assertIsNone(gate.learning_payload(f"Like this:\n```ai-orch-learn\n{{}}\n```\nthen more text"))
+        self.assertEqual(gate.learning_payload(f"Write it like {example}.\nDone.\n{real}\n  \n"), [{"summary": "real"}])
+        self.assertIsNone(gate.learning_payload(f"Done.\n{real}\nAnd one more sentence."))
 
     def test_the_final_answer_is_the_last_assistant_message_before_this_stop(self) -> None:
         transcript = self.tmp / "t.jsonl"

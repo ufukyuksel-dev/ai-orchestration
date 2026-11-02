@@ -5,6 +5,8 @@ changes nothing in the hooks' answers, lines stay within 16 KiB and old day file
 
 from __future__ import annotations
 
+import trace_isolation  # noqa: F401 - before anything runs a hook: the trace goes to a throw-away directory
+
 import datetime as dt
 import hashlib
 import io
@@ -406,6 +408,68 @@ class ToolFactsTraceTest(TraceMixin, flow.FlowTestCase):
     def test_memory_op_only_for_shell_commands(self) -> None:
         line = self.call("view", {"command": f"ai_orch memory archive --memory-id {self.ID}", "path": "a.py"})
         self.assertNotIn("memoryOp", line)
+
+
+class BashReadTraceTest(ToolFactsTraceTest):
+    """A shell command made only of simple reads (cat, head, tail, sed -n, grep/rg, wc, ls, nl, awk), alone or joined
+    by `|` / `&&`, names the repository files and folders it reads: only arguments that are not options, not the
+    pattern / expression, and that exist in the repository. Anything that writes, redirects, runs a sub-shell or
+    expands a variable stays `run` with no paths. The command text itself never reaches the trace."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        (self.repo / "src").mkdir()
+        (self.repo / "src" / "a.py").write_text("TOPSECRET-CONTENT\n")
+        (self.repo / "src" / "b.py").write_text("y = 2\n")
+
+    def test_simple_reads_name_their_files(self) -> None:
+        cases = [
+            ("cat src/a.py", "read", ["src/a.py"]),
+            (f"cat {self.root}/src/a.py", "read", ["src/a.py"]),
+            ("sed -n '10,40p' src/a.py", "read", ["src/a.py"]),
+            ("sed -n '$p' src/a.py", "read", ["src/a.py"]),
+            ("head -n 50 src/a.py", "read", ["src/a.py"]),
+            ("tail -20 src/b.py", "read", ["src/b.py"]),
+            ("grep -n TOPSECRET-PATTERN src/a.py", "read", ["src/a.py"]),
+            ("grep -n src/b.py src/a.py", "read", ["src/a.py"]),  # the first operand is the pattern, not a file
+            ("grep -A 3 -n TOPSECRET-PATTERN src/a.py", "read", ["src/a.py"]),
+            ("grep -e TOPSECRET-PATTERN src/a.py src/b.py", "read", ["src/a.py", "src/b.py"]),
+            ("rg -n TOPSECRET-PATTERN src", "read", ["src"]),
+            ("wc -l src/a.py src/b.py", "read", ["src/a.py", "src/b.py"]),
+            ("nl -ba src/a.py | head -40", "read", ["src/a.py"]),
+            ("awk '{print $1}' src/a.py", "read", ["src/a.py"]),
+            ("cat src/a.py && sed -n '1,5p' src/b.py", "read", ["src/a.py", "src/b.py"]),
+            ("cat src/missing.py src/a.py", "read", ["src/a.py"]),  # only what exists
+            ("ls src", "search", ["src"]),
+            ("ls -la src && cat src/b.py", "read", ["src", "src/b.py"]),
+        ]
+        for command, access, paths in cases:
+            with self.subTest(command=command):
+                line = self.call("bash", {"command": command, "description": "TOPSECRET-DESCRIPTION"})
+                self.assertEqual((line["access"], line.get("paths")), (access, paths))
+        self.assertNotIn("TOPSECRET", self.raw())
+        self.assertNotIn("sed -n", self.raw())
+
+    def test_anything_else_stays_run_without_paths(self) -> None:
+        commands = [
+            "cat src/a.py > out.txt", "cat src/a.py >> out.txt", "cat src/a.py 2>/dev/null", "cat < src/a.py",
+            "cat src/a.py | tee out.txt", "sed -i 's/a/b/' src/a.py", "sed -n 'w out' src/a.py",
+            "sed 's/a/b/' src/a.py", "cat $(echo src/a.py)", 'cat "$F"', "cat `echo src/a.py`",
+            "cat ${HOME}/src/a.py", "cat $F", "(cat src/a.py)", "cat src/a.py; rm -rf x", "cat src/a.py || true",
+            "cat src/a.py &", "python x.py src/a.py", "FOO=1 cat src/a.py", "cd src && cat a.py",
+            "awk '{print > \"o\"}' src/a.py", "awk -f p.awk src/a.py", "awk '{system(\"x\")}' src/a.py",
+            "cat 'src/a.py", "cat ../outside.py", "cat /etc/passwd", "grep -rn TOPSECRET-PATTERN .",
+            "find src -name a.py", "git show HEAD:src/a.py", "rm src/a.py",
+        ]
+        for command in commands:
+            with self.subTest(command=command):
+                line = self.call("bash", {"command": command})
+                self.assertEqual((line["access"], line.get("paths")), ("run", None))
+        self.assertNotIn("TOPSECRET", self.raw())
+
+    def test_a_memory_command_is_still_a_memory_op(self) -> None:
+        line = self.call("bash", {"command": f"ai_orch memory archive --memory-id {self.ID}"})
+        self.assertEqual((line["access"], line["memoryOp"]), ("run", {"op": "archive", "cardIds": [self.ID]}))
 
 
 class StopTraceTest(TraceMixin, flow.FlowTestCase):

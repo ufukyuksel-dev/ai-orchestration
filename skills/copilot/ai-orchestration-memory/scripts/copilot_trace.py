@@ -12,8 +12,9 @@ own, no symbolic link, and closed to group and others (0700 / 0600). A loose mod
 is someone else's, a link, or cannot be tightened is not written.
 
 Privacy: no prompt, answer, command or tool output text is written; the prompt only as its length and a short hash.
-A tool line names the repository files of the tool's path fields (never a pattern, query or content) and, for an
-`ai_orch memory` command, only its sub-command and card UUIDs.
+A tool line names the repository files of the tool's path fields (never a pattern, query or content), the existing
+repository files a plain shell read names (`cat`, `sed -n`, `grep` ...: `shell_reads`; never the command, its pattern
+or expression) and, for an `ai_orch memory` command, only its sub-command and card UUIDs.
 Card summaries come from the memory store, not from the user. Writing never raises and never delays the hook: in a
 hook run (`hold` ... `flush`) lines are kept in memory and written after the answer is out, within FLUSH_SECONDS; a
 trace that cannot be written in time is dropped.
@@ -205,6 +206,127 @@ def repo_relative(value: Any, cwd: str, root: str) -> str | None:
             rel = candidate[len(top.rstrip("/")) + 1:]
             return rel if rel and len(rel) <= MAX_PATH_CHARS else None
     return None
+
+
+# Shell reads: a command made only of these, alone or joined by `|` / `&&`, names the files it reads. Per command: the
+# options whose value is a separate argument (that value is never a path) and, for grep / rg / sed / awk, that the
+# first operand is the pattern or program (unless the pattern came with -e / -f).
+SHELL_READS: dict[str, frozenset[str]] = {
+    "cat": frozenset(), "wc": frozenset(), "ls": frozenset(),
+    "head": frozenset({"-n", "-c", "--lines", "--bytes"}),
+    "tail": frozenset({"-n", "-c", "--lines", "--bytes"}),
+    "nl": frozenset({"-b", "-d", "-f", "-h", "-i", "-l", "-n", "-s", "-v", "-w"}),
+    "grep": frozenset({"-e", "-f", "-m", "-A", "-B", "-C", "-d", "-D", "--regexp", "--file", "--max-count",
+                       "--after-context", "--before-context", "--context", "--include", "--exclude",
+                       "--exclude-dir"}),
+    "rg": frozenset({"-e", "-f", "-g", "-t", "-T", "-m", "-A", "-B", "-C", "-j", "-M", "--regexp", "--file", "--glob",
+                     "--iglob", "--type", "--type-not", "--max-count", "--after-context", "--before-context",
+                     "--context", "--threads", "--max-columns", "--max-depth"}),
+    "sed": frozenset({"-e", "--expression"}),
+    "awk": frozenset({"-F", "-v"}),
+}
+PATTERN_FIRST = frozenset({"grep", "rg", "sed", "awk"})
+PATTERN_GIVEN = frozenset({"-e", "-f", "--regexp", "--file", "--files"})  # grep / rg: no pattern operand then
+SED_OPTIONS = frozenset({"-n", "-e", "-E", "-r", "-s", "-u", "-z", "--quiet", "--silent", "--expression",
+                         "--regexp-extended"})
+SED_PRINT = re.compile(r"^[\d\s,$;pnq]*$")  # line ranges that only print (`10,40p`, `$p`, `5q`): no w, e, s or i
+AWK_UNSAFE = re.compile(r"[>|]|\bsystem\b|\bgetline\b")
+SHELL_JOIN = frozenset({"|", "&&"})
+
+
+def _unquoted_expansion(command: str) -> bool:
+    """A `$` or backquote outside single quotes (a variable, a sub-shell or arithmetic the shell would expand), or a
+    backslash outside single quotes (an escape is not followed here: such a command is not read)."""
+    quote = ""
+    for char in command:
+        if quote == "'":
+            quote = "" if char == "'" else quote
+        elif char in "$`\\":
+            return True
+        elif char == "'" and not quote:
+            quote = "'"
+        elif char == '"':
+            quote = "" if quote == '"' else '"'
+    return False
+
+
+def shell_reads(command: str, cwd: str, root: str | None) -> tuple[str, list[str]] | None:
+    """`(access, paths)` of a shell command that only reads: `read`, or `search` when it only lists (ls), and the
+    repository files / folders it names that exist (repository-relative, at most MAX_PATHS). None for anything else
+    (a write, a redirection, another command, `;` / `||` / `&`, a sub-shell, an expansion, a parse error) and when it
+    names no file of the repository: such a command stays `run`. Only paths are kept, never the command text."""
+    if not root or not isinstance(command, str) or len(command) > 4096 or _unquoted_expansion(command):
+        return None
+    try:
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        tokens = list(lexer)
+    except ValueError:
+        return None
+    segments: list[list[str]] = [[]]
+    for token in tokens:
+        if token in SHELL_JOIN:
+            segments.append([])
+        elif token and all(c in "();<>|&" for c in token):
+            return None  # any other operator: `;`, `||`, `&`, `>`, `<`, `(` ...
+        else:
+            segments[-1].append(token)
+    names: list[str] = []
+    only_lists = True
+    for segment in segments:
+        operands = _read_operands(segment)
+        if operands is None:
+            return None
+        only_lists = only_lists and segment[0] == "ls"
+        names.extend(operands)
+    paths: list[str] = []
+    top = os.path.normpath(root)
+    for name in names:
+        if len(paths) >= MAX_PATHS:
+            break
+        entry = repo_relative(name, cwd, root)
+        if entry and entry not in paths and os.path.exists(os.path.join(top, entry)):
+            paths.append(entry)
+    return ("search" if only_lists else "read", paths) if paths else None
+
+
+def _read_operands(segment: list[str]) -> list[str] | None:
+    """The file operands of one simple read command, or None when it is not one."""
+    if not segment or segment[0] not in SHELL_READS:
+        return None  # also a path to the program, `NAME=value` or any other command
+    name, valued = segment[0], SHELL_READS[segment[0]]
+    operands: list[str] = []
+    pattern_given = False
+    program: str | None = None
+    i, options_done = 1, False
+    while i < len(segment):
+        token = segment[i]
+        if options_done or token == "-" or not token.startswith("-"):
+            operands.append(token)
+        elif token == "--":
+            options_done = True
+        else:
+            option = token.split("=", 1)[0]
+            if name == "sed" and option not in SED_OPTIONS:
+                return None  # -i, --in-place and anything unknown
+            if name == "awk" and option not in valued:
+                return None  # -f progfile and anything unknown
+            if option in PATTERN_GIVEN:
+                pattern_given = True
+            if token in valued:  # the value is the next argument
+                if name in ("sed", "awk") and token in ("-e", "--expression"):
+                    program = segment[i + 1] if i + 1 < len(segment) else ""
+                i += 1
+        i += 1
+    if name in PATTERN_FIRST and not pattern_given and program is None:
+        if not operands:
+            return None
+        program = operands.pop(0)
+    if name == "sed" and not SED_PRINT.match(program or ""):
+        return None
+    if name == "awk" and AWK_UNSAFE.search(program or ""):
+        return None
+    return operands
 
 
 def memory_op(command: str) -> dict[str, Any] | None:

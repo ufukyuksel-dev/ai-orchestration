@@ -7,7 +7,9 @@ The record belongs to the Copilot session: Copilot gives its shell commands `COP
 record of that `sessionId`. The same hook delivers the prompt's memory cards (`additionalContext`), and the `agentStop`
 hook (`copilot_memory_gate.py stop`) saves what the final answer's hidden `ai-orch-learn` comment holds, with no extra
 model call: the two moments Claude Code and Codex get from their prompt and Stop hooks. The same comment carries the
-agent's verdict on the prompt's labelled cards (`memoryFeedback`), traced as one `feedback` line. Without the session id (not run by Copilot) nothing is gated. Only an answer the server
+agent's verdict on the prompt's labelled cards and pointers (`memoryFeedback`), traced as one `feedback` line with
+the request's model tokens from Copilot's transcript; only a comment that ends the answer counts (one earlier in the
+answer may be an example). Without the session id (not run by Copilot) nothing is gated. Only an answer the server
 gave successfully with zero items closes the request; a failed call closes nothing and does not count as asked.
 """
 from __future__ import annotations
@@ -158,10 +160,11 @@ LEARN_LINE = ("AI Orchestration learning: if this task taught you something reus
               "Only knowledge about this repository, not about this machine or sandbox. No tool call is needed for "
               "it; leave it out when nothing is new.")
 # only for a request whose prompt delivered labelled cards: the agent's verdict on them, in the same comment
-FEEDBACK_LINE = ("Memory feedback: also judge each [mN] memory card above in that comment, even when nothing is new: "
+FEEDBACK_LINE = ("Memory feedback: also judge each [mN] memory card and pointer above in that comment, even when "
+                 "nothing is new (a pointer you did not open is unused): "
                  '<!-- ai-orch-learn {"memoryFeedback":[{"ref":"m1","verdict":"helped|unused|misled","savedCalls":0,'
                  '"wastedCalls":0,"evidencePath":"<repo-relative file>"}]} --> (next to learningCandidates when there '
-                 "are any). helped: it saved you tool calls (savedCalls: about how many); unused: you did not need "
+                 "are any; the comment must end the answer). helped: it saved you tool calls (savedCalls: about how many); unused: you did not need "
                  "it, unused is a normal answer; misled: it was wrong or sent you the wrong way (wastedCalls: calls "
                  "it cost). evidencePath is optional: the file that shows it.")
 FEEDBACK_REASON = (" If this request gave you [mN] memory cards, add their memoryFeedback to that comment (a comment "
@@ -546,8 +549,12 @@ def post_hook(payload: dict[str, Any]) -> dict[str, Any]:
             trace.inject(text, profile=False, learn_line=False, shown=delivered)
 
 
+SHELL_TOOLS = frozenset({"bash", "shell"})  # their `command` may be a plain read (copilot_trace.shell_reads)
+
+
 def _tool_facts(tool_name: str, raw_args: Any, cwd: str, root: str | None) -> dict[str, Any]:
-    """The trace's `paths`, `access` and `memoryOp` of a tool call (copilot_trace); none when they cannot be had."""
+    """The trace's `paths`, `access` and `memoryOp` of a tool call (copilot_trace); none when they cannot be had. A
+    shell command that only reads (`cat`, `sed -n`, `grep` ... on repository files) is traced as a read of them."""
     try:
         if not copilot_trace.enabled():
             return {}
@@ -560,6 +567,10 @@ def _tool_facts(tool_name: str, raw_args: Any, cwd: str, root: str | None) -> di
             op = copilot_trace.memory_op(args["command"])
             if op:
                 facts["memoryOp"] = op
+            elif tool_name in SHELL_TOOLS:
+                read = copilot_trace.shell_reads(args["command"], cwd, root)  # cat, sed -n, grep ...: their files
+                if read:
+                    facts["access"], facts["paths"] = read
         return facts
     except Exception:  # noqa: BLE001 - the trace never breaks a hook
         return {}
@@ -670,13 +681,16 @@ LEARN_FENCE = re.compile(r"```ai-orch-learn[ \t]*\n(.*?)```", re.S)
 
 
 def _learn_block(answer: str) -> Any:
-    """The JSON of the answer's last `<!-- ai-orch-learn {...} -->` comment (a fenced ```ai-orch-learn``` block is
-    accepted too); None when there is none or it is not JSON."""
-    found = [(m.start(), m.group(1)) for pattern in (LEARN_COMMENT, LEARN_FENCE) for m in pattern.finditer(answer)]
+    """The JSON of the `<!-- ai-orch-learn {...} -->` comment (a fenced ```ai-orch-learn``` block is accepted too)
+    that ends the answer: only white space may follow it. One written earlier in the answer (an example of the format,
+    say) is not the agent's comment, for its learning candidates and its card verdicts alike. None when the answer
+    does not end with one or it is not JSON."""
+    found = [m.group(1) for pattern in (LEARN_COMMENT, LEARN_FENCE) for m in pattern.finditer(answer)
+             if not answer[m.end():].strip()]
     if not found:
         return None
     try:
-        return json.loads(max(found)[1].strip())
+        return json.loads(found[0].strip())
     except ValueError:
         return None
 
@@ -772,6 +786,12 @@ def final_answer(transcript: str, stamp: Any, wait: float | None = None) -> str 
     followed by some hook, so only this record proves the final turn is written); then the last assistant message after
     the last user message before it. None when this stop cannot be confirmed (no timestamp, no record by the deadline):
     what the file holds then may be an earlier answer, which must not be saved for this request."""
+    events = _turn_events(transcript, stamp, wait)
+    return None if events is None else _final_answer(events)
+
+
+def _turn_events(transcript: str, stamp: Any, wait: float | None = None) -> list[dict[str, Any]] | None:
+    """The transcript's events before this stop's own record (see `final_answer`); None when it cannot be confirmed."""
     if stamp is None:
         return None
     deadline = time.monotonic() + (TRANSCRIPT_WAIT if wait is None else wait)
@@ -779,12 +799,15 @@ def final_answer(transcript: str, stamp: Any, wait: float | None = None) -> str 
         events = _events(transcript)
         mark = next((i for i in range(len(events) - 1, -1, -1) if _this_stop(events[i], stamp)), None)
         if mark is not None:
-            break
+            return events[:mark]
         if time.monotonic() >= deadline:
             return None
         time.sleep(0.1)
+
+
+def _final_answer(events: list[dict[str, Any]]) -> str:
     last = ""
-    for event in events[:mark]:
+    for event in events:
         data = event.get("data")
         if event.get("type") == "user.message":
             last = ""  # an answer belongs to the turn after the last user message
@@ -793,7 +816,33 @@ def final_answer(transcript: str, stamp: Any, wait: float | None = None) -> str 
     return last
 
 
-ABSOLUTE = re.compile(r"(?<![\w.~:/-])(/[^\s`'\"(),;<>\[\]{}]+)")
+def request_tokens(events: list[dict[str, Any]]) -> dict[str, int] | None:
+    """This request's model tokens `{input, output}`: the sum of Copilot's per-call `session.usage_record` events
+    (`usage.inputTokens` / `usage.outputTokens`) after the user message that started the request (the stop reminder's
+    reply, a prompt starting with LEARN_REASON, does not start one) and before this stop. Only the numbers are read.
+    None when the transcript has no usage record there (older Copilot) or one without both whole counts (not to be
+    trusted then)."""
+    total: dict[str, int] | None = None
+    broken = False
+    for event in events:
+        kind = event.get("type")
+        data = event.get("data") if isinstance(event.get("data"), dict) else {}
+        if kind == "user.message":
+            if not str(data.get("content") or "").lstrip().startswith(LEARN_REASON):
+                total, broken = None, False  # a new request
+        elif kind == "session.usage_record":
+            usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+            counts = [usage.get("inputTokens"), usage.get("outputTokens")]
+            if not all(isinstance(c, int) and not isinstance(c, bool) and c >= 0 for c in counts):
+                broken = True
+                continue
+            total = total or {"input": 0, "output": 0}
+            total["input"] += counts[0]
+            total["output"] += counts[1]
+    return None if broken else total
+
+
+ABSOLUTE =re.compile(r"(?<![\w.~:/-])(/[^\s`'\"(),;<>\[\]{}]+)")
 
 
 def _exists_exact(path: str) -> bool:
@@ -898,12 +947,14 @@ def stop_hook(payload: dict[str, Any]) -> dict[str, Any]:
     trace.repo = _traced_root(state, cwd)
     reason = "none"
     answer: str | None = None
+    events: list[dict[str, Any]] | None = None
     feedback_due = bool(state.get("refs")) and not state.get("feedback_done")  # the verdict on the prompt's cards
     try:
         learning_open = not (state.get("receipt") or state.get("learned") or not state.get("tree"))
         if not learning_open and not feedback_due:
             return {}
-        answer = final_answer(str(payload.get("transcriptPath") or ""), payload.get("timestamp"))
+        events = _turn_events(str(payload.get("transcriptPath") or ""), payload.get("timestamp"))
+        answer = None if events is None else _final_answer(events)
         if answer is None or not learning_open:
             return {}  # an unconfirmed answer: nothing is saved and nothing is asked
         raw = learning_payload(answer)
@@ -929,15 +980,17 @@ def stop_hook(payload: dict[str, Any]) -> dict[str, Any]:
         return {"decision": "block", "reason": learn_reason(state)}
     finally:
         if feedback_due and answer is not None:
-            _trace_feedback(trace, session_id, answer, cwd, waiting=reason == "learn_request")
+            _trace_feedback(trace, session_id, answer, cwd, waiting=reason == "learn_request", events=events)
         trace.emit("stop", decision="block" if reason == "learn_request" else "allow", reason=reason,
                    stopHookActive=active)
 
 
-def _trace_feedback(trace: Any, session_id: str, answer: str, cwd: str, waiting: bool) -> None:
+def _trace_feedback(trace: Any, session_id: str, answer: str, cwd: str, waiting: bool,
+                    events: list[dict[str, Any]] | None = None) -> None:
     """The request's one `feedback` trace line: the agent's verdicts (parsed) or, when it gave none, an empty one
-    (not parsed); none yet while the stop reminder's reply may still bring them. Never a reason to stop the agent, and
-    never breaks the hook (fail-open)."""
+    (not parsed), with the request's model tokens when the transcript has them (`request_tokens`); none yet while the
+    stop reminder's reply may still bring them. Never a reason to stop the agent, and never breaks the hook
+    (fail-open)."""
     try:
         path = state_file(session_id)
         state = _load(path)
@@ -947,7 +1000,9 @@ def _trace_feedback(trace: Any, session_id: str, answer: str, cwd: str, waiting:
             return
         state["feedback_done"] = True
         _save(path, state)
-        trace.emit("feedback", cards=cards or [], parsed=cards is not None)
+        tokens = request_tokens(events) if events else None
+        trace.emit("feedback", cards=cards or [], parsed=cards is not None,
+                   **({"requestTokens": tokens} if tokens else {}))
     except Exception:  # noqa: BLE001
         pass
 
