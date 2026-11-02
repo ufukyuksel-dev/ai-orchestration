@@ -23,6 +23,11 @@ import time
 from pathlib import Path
 from typing import Any
 
+try:
+    import copilot_trace
+except Exception:  # noqa: BLE001 - the hooks work without their trace
+    copilot_trace = None
+
 SESSION_ENV = "COPILOT_AGENT_SESSION_ID"
 EMPTY = ("AI Orchestration: memory already had nothing for this task (query: '{query}'). This is final for this task: "
          "do not search memory again through any tool or command; continue from the code.")
@@ -194,9 +199,10 @@ def tree_fingerprint(root: str, timeout: float = 10) -> str | None:  # timeout: 
 
 
 def render(cards: list[dict[str, Any]], shown: set[str], pointers: set[str] = frozenset(),
-           budget: int = CARD_CHARS) -> tuple[str, list[dict[str, Any]]]:
+           budget: int = CARD_CHARS, details: list | None = None) -> tuple[str, list[dict[str, Any]]]:
     """The card block (same lines as the Claude prompt hook) within `budget` characters, and the cards it shows. A
-    card shown in full is never shown again; one shown as a pointer may still come in full, not as a pointer again."""
+    card shown in full is never shown again; one shown as a pointer may still come in full, not as a pointer again.
+    `details`, when given, receives (card, characters added for it, of which its code) per shown card."""
     lines, ids, used, code_used = [], [], len(HEADER), 0
     for card in cards:
         if not isinstance(card, dict) or card.get("id") in shown or (card.get("pointer") and card.get("id") in pointers):
@@ -216,6 +222,9 @@ def render(cards: list[dict[str, Any]], shown: set[str], pointers: set[str] = fr
             code_used += len(code) + 1
         else:
             lines.append(line)
+            code = ""
+        if details is not None:
+            details.append((card, len(lines[-1]), len(code)))
         ids.append(card)
         used += cost
     return (HEADER + "\n".join(lines), ids) if lines else ("", [])
@@ -367,11 +376,45 @@ def changed_paths(root: str, timeout: float = 2.0) -> set[str] | None:
     return {line[3:].strip() for line in out.stdout.splitlines() if len(line) > 3}
 
 
+def tracer(hook: str, session_id: str) -> Any:
+    """The local trace of this hook call (copilot_trace); a stand-in that writes nothing when it cannot load."""
+    try:
+        return copilot_trace.Hook(hook, session_id)
+    except Exception:  # noqa: BLE001
+        return _NoTrace()
+
+
+class _NoTrace:
+    repo = None
+
+    def emit(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def prompt(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def inject(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+
+def _traced_root(state: dict[str, Any], cwd: str) -> str | None:
+    """The repository the request's prompt hook found, when `cwd` is inside it (no extra git call for the trace)."""
+    root = str(state.get("root") or "")
+    if not root or not cwd:
+        return None
+    inside = [p for p in {cwd, os.path.realpath(cwd)} if p == root or p.startswith(root.rstrip("/") + "/")]
+    return root if inside else None
+
+
 def prompt_hook(payload: dict[str, Any]) -> dict[str, Any]:
     """userPromptSubmitted: a new request (search record, start tree, step lookups) and the prompt's memory cards."""
     session_id = str(payload.get("sessionId") or "").strip()
     cwd = str(payload.get("cwd") or "")
-    if not session_id or str(payload.get("prompt") or "").strip().startswith(LEARN_REASON):
+    trace = tracer("userPromptSubmitted", session_id)
+    if not session_id:
+        return {}
+    if str(payload.get("prompt") or "").strip().startswith(LEARN_REASON):
+        trace.emit("skip", reason="learn_reminder")
         return {}  # the stop hook's own reminder arrives as a prompt: the same request goes on
     started = time.monotonic()
 
@@ -381,17 +424,28 @@ def prompt_hook(payload: dict[str, Any]) -> dict[str, Any]:
     root = repo_root(cwd, left()) if cwd else None
     reset(session_id, tree_fingerprint(root, left()) if root else None)  # the new request starts even when late
     prompt = str(payload.get("prompt") or "").strip()
+    path = state_file(session_id)
+    trace.repo = root
+    trace.prompt(prompt, int(_load(path).get("request") or 0))
     if not root or not prompt:
+        trace.emit("skip", reason="no_repo" if not root else "no_prompt")
         return {}
     _reset_steps(session_id, root)
-    path = state_file(session_id)
     result = fetch_bootstrap(root, prompt, left())  # bounded by the time left
     profile = "" if _load(path).get("profile_shown") else profile_text(root, prompt, left())
     if left() <= 0:
+        trace.emit("skip", reason="late")
+        trace.inject(LEARN_LINE, profile=False, learn_line=True, shown=[])
         return {"additionalContext": LEARN_LINE}  # too late: no card or advice is shown or recorded as shown
     state = _load(path)
+    state["root"] = root
     cards = result.get("memory") if isinstance(result.get("memory"), list) else []
-    text, shown = render(cards, set(state.get("shown", [])), set(state.get("pointers", [])))
+    details: list = []
+    text, shown = render(cards, set(state.get("shown", [])), set(state.get("pointers", [])), details=details)
+    if not result:
+        trace.emit("skip", reason="server_unreachable")  # no answer from the server within the time left
+    elif not text:
+        trace.emit("skip", reason="no_cards")
     if profile:
         state["profile_shown"] = True
     if text:
@@ -402,7 +456,9 @@ def prompt_hook(payload: dict[str, Any]) -> dict[str, Any]:
     _save(path, state)
     if text:
         _remember_delivery(session_id, text, at_failure=False)
-    return {"additionalContext": "\n\n".join(part for part in (profile, text, LEARN_LINE) if part)}
+    context = "\n\n".join(part for part in (profile, text, LEARN_LINE) if part)
+    trace.inject(context, profile=bool(profile), learn_line=True, shown=details)
+    return {"additionalContext": context}
 
 
 def _reset_steps(session_id: str, root: str) -> None:
@@ -423,31 +479,44 @@ def post_hook(payload: dict[str, Any]) -> dict[str, Any]:
     module; and the check outcomes the stop fallback's learning signal needs (recorded also when memory is closed)."""
     session_id = str(payload.get("sessionId") or "").strip()
     cwd = str(payload.get("cwd") or "")
-    if not session_id or str(payload.get("toolName") or "") != "bash" or not cwd.startswith("/"):
+    if not session_id:
         return {}
-    step = shared_hooks()
-    if step is None:
-        return {}
-    command = str((payload.get("toolArgs") or {}).get("command") or "")
-    result = payload.get("toolResult") or {}
-    output = str(result.get("textResultForLlm") or "")
-    failed_tool = str(result.get("resultType") or "success") != "success"
-    path = state_file(session_id)
-    state = _load(path)
-    failed = False
-    if step.session.is_verify(command):  # the stop fallback's signal
-        if failed_tool or step.FAILED.search(output):
-            failed = state["check_failed"] = True
-        elif state.get("check_failed"):
-            if any(fix in command for fix in state.get("memory_fixes", [])):
-                state["fixed_from_memory"] = True  # the fix a delivered card gave: known, not learned here
-            else:
-                state["fixed_after_failure"] = True
-        _save(path, state)
-    text = "" if state.get("empty") else _step_memory(step, session_id, cwd, command, output, failed_tool)
-    if text:
-        _remember_delivery(session_id, text, at_failure=failed)
-    return {"additionalContext": text} if text else {}
+    tool_name = str(payload.get("toolName") or "")
+    trace = tracer("postToolUse", session_id)
+    trace.repo = _traced_root(_load(state_file(session_id)), cwd)
+    verify, outcome, fixed_now = False, "other", False
+    try:
+        if tool_name != "bash" or not cwd.startswith("/"):
+            trace.emit("skip", reason="not_shell" if tool_name != "bash" else "no_repo")
+            return {}
+        step = shared_hooks()
+        if step is None:
+            return {}
+        command = str((payload.get("toolArgs") or {}).get("command") or "")
+        result = payload.get("toolResult") or {}
+        output = str(result.get("textResultForLlm") or "")
+        failed_tool = str(result.get("resultType") or "success") != "success"
+        path = state_file(session_id)
+        state = _load(path)
+        failed = False
+        if step.session.is_verify(command):  # the stop fallback's signal
+            verify = True
+            if failed_tool or step.FAILED.search(output):
+                failed = state["check_failed"] = True
+            elif state.get("check_failed"):
+                if any(fix in command for fix in state.get("memory_fixes", [])):
+                    fixed_now = not state.get("fixed_from_memory")
+                    state["fixed_from_memory"] = True  # the fix a delivered card gave: known, not learned here
+                else:
+                    state["fixed_after_failure"] = True
+            outcome = "failed" if failed else "passed"
+            _save(path, state)
+        text = "" if state.get("empty") else _step_memory(step, session_id, cwd, command, output, failed_tool)
+        if text:
+            _remember_delivery(session_id, text, at_failure=failed)
+        return {"additionalContext": text} if text else {}
+    finally:  # every tool call is one more model call in the request: counted whatever the hook did with it
+        trace.emit("tool", toolName=tool_name[:60], verify=verify, outcome=outcome, fixedFromMemory=fixed_now)
 
 
 CARD_LINE = re.compile(r"^- Memory card(?: \([^)]*\))?: (.+?)\. ")
@@ -704,30 +773,60 @@ def stop_hook(payload: dict[str, Any]) -> dict[str, Any]:
     session_id = str(payload.get("sessionId") or "").strip()
     if not session_id:
         return {}
+    trace = tracer("agentStop", session_id)
+    active = bool(payload.get("stop_hook_active"))
     path = state_file(session_id)
     state = _load(path)
-    if state.get("receipt") or state.get("learned") or not state.get("tree"):
-        return {}
     cwd = str(payload.get("cwd") or "")
-    answer = final_answer(str(payload.get("transcriptPath") or ""), payload.get("timestamp"))
-    if answer is None:
-        return {}  # this stop's answer cannot be confirmed: nothing is saved and nothing is asked
-    raw = learning_payload(answer)
-    if raw is not None:
-        root = repo_root(cwd) if cwd else None
-        result = capture(root, run_id(session_id, state), raw) if root else None
-        if result and result.get("status") == "ACCEPTED":
-            state = _load(path)
-            state["receipt"] = {"runId": run_id(session_id, state), "created": result.get("created", 0),
-                                "reused": result.get("reused", 0)}
-            state["learned"] = True
-            _save(path, state)
-        return {}
-    if payload.get("stop_hook_active") or state.get("asked") or not learning_signal(state, cwd):
-        return {}
-    state["asked"] = True
-    _save(path, state)
-    return {"decision": "block", "reason": learn_reason(state)}
+    trace.repo = _traced_root(state, cwd)
+    reason = "none"
+    try:
+        if state.get("receipt") or state.get("learned") or not state.get("tree"):
+            return {}
+        answer = final_answer(str(payload.get("transcriptPath") or ""), payload.get("timestamp"))
+        if answer is None:
+            return {}  # this stop's answer cannot be confirmed: nothing is saved and nothing is asked
+        raw = learning_payload(answer)
+        if raw is not None:
+            root = repo_root(cwd) if cwd else None
+            result = capture(root, run_id(session_id, state), raw) if root else None
+            trace.emit("learned", **learned_counts(raw, result))
+            if result and result.get("status") == "ACCEPTED":
+                state = _load(path)
+                state["receipt"] = {"runId": run_id(session_id, state), "created": result.get("created", 0),
+                                    "reused": result.get("reused", 0)}
+                state["learned"] = True
+                _save(path, state)
+            return {}
+        if active or state.get("asked"):
+            reason = "max_blocks"  # asked once in this request already: never twice
+            return {}
+        if not learning_signal(state, cwd):
+            return {}
+        state["asked"] = True
+        _save(path, state)
+        reason = "learn_request"
+        return {"decision": "block", "reason": learn_reason(state)}
+    finally:
+        trace.emit("stop", decision="block" if reason == "learn_request" else "allow", reason=reason,
+                   stopHookActive=active)
+
+
+def learned_counts(raw: list[Any], result: dict[str, Any] | None) -> dict[str, Any]:
+    """The trace's `learned` fields from the server's receipt: saved = created + updated + reused; nothing is counted
+    as rejected when no receipt came back (nothing valid, or the server did not answer)."""
+    receipt = result if isinstance(result, dict) else {}
+
+    def count(key: str) -> int:
+        value = receipt.get(key)
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    fields: dict[str, Any] = {"candidates": len(raw), "saved": count("created") + count("updated") + count("reused"),
+                              "rejected": count("rejected") + count("conflicts")}
+    ids = receipt.get("cardIds") or receipt.get("memoryIds")
+    if isinstance(ids, list):
+        fields["cardIds"] = [str(i)[:64] for i in ids if isinstance(i, (str, int))][:20]
+    return fields
 
 
 def learn_reason(state: dict[str, Any]) -> str:
@@ -743,14 +842,19 @@ def main(argv: list[str] | None = None) -> int:
     """Copilot hook entry: `copilot_memory_gate.py` (userPromptSubmitted), `copilot_memory_gate.py post`
     (postToolUse) or `copilot_memory_gate.py stop` (agentStop), the hook payload on stdin. Prints the hook's JSON answer; any error prints nothing (fail-open)."""
     argv = sys.argv[1:] if argv is None else argv
+    mode = argv[:1]
+    payload: Any = None
     try:
         payload = json.loads(sys.stdin.read(), strict=False)  # tool output may carry raw control characters
         if not isinstance(payload, dict):
             return 0
-        mode = argv[:1]
         answer = (stop_hook(payload) if mode == ["stop"] else post_hook(payload) if mode == ["post"]
                   else prompt_hook(payload))
-    except Exception:  # noqa: BLE001 - a hook must never break the user's session
+    except Exception as error:  # noqa: BLE001 - a hook must never break the user's session
+        if isinstance(payload, dict):  # the error's kind only: its message may hold paths or prompt text
+            hook = "agentStop" if mode == ["stop"] else "postToolUse" if mode == ["post"] else "userPromptSubmitted"
+            tracer(hook, str(payload.get("sessionId") or "").strip()).emit(
+                "error", where=hook, message=type(error).__name__[:80])
         return 0
     if answer:
         print(json.dumps(answer))
