@@ -47,8 +47,10 @@ Two to four avoided calls: ≈ 25–60k; one small avoided read: ≈ 5–10k.
 | `learnTurnCost` | **20 000 (proposed; contract says 2 000)** | 10 000 – 30 000 | the report measures the one-reply learning turn at **≈ 20k**: it is a full model call with the whole context resent, not 2k |
 | `fixBonus` | 20 000 (kept) | — | no bench measurement; one avoided fix loop is a few calls, same order as above |
 
-The cost side needs no coefficient: `injected.tokensEst × (1 + tool events of that request)` is measured from the
-trace (Copilot resends the injected context with every call).
+The cost side needs no coefficient: `injected.tokensEst × (1 + tool events after the inject line in that request)` is
+measured from the trace (Copilot resends the injected context with every call). For the prompt's `inject` that is every
+tool event of the request; a step's `inject` (hook `postToolUse`) is written after the `tool` line of the same `call`,
+so its own tool call is not counted.
 
 ## What would make this a measurement
 

@@ -485,6 +485,8 @@ def post_hook(payload: dict[str, Any]) -> dict[str, Any]:
     trace = tracer("postToolUse", session_id)
     trace.repo = _traced_root(_load(state_file(session_id)), cwd)
     verify, outcome, fixed_now = False, "other", False
+    delivered: list = []  # (card, chars, codeChars) per card the step's block showed
+    text = ""
     try:
         if tool_name != "bash" or not cwd.startswith("/"):
             trace.emit("skip", reason="not_shell" if tool_name != "bash" else "no_repo")
@@ -511,12 +513,15 @@ def post_hook(payload: dict[str, Any]) -> dict[str, Any]:
                     state["fixed_after_failure"] = True
             outcome = "failed" if failed else "passed"
             _save(path, state)
-        text = "" if state.get("empty") else _step_memory(step, session_id, cwd, command, output, failed_tool)
+        text = "" if state.get("empty") else _step_memory(step, session_id, cwd, command, output, failed_tool,
+                                                         delivered)
         if text:
             _remember_delivery(session_id, text, at_failure=failed)
         return {"additionalContext": text} if text else {}
     finally:  # every tool call is one more model call in the request: counted whatever the hook did with it
         trace.emit("tool", toolName=tool_name[:60], verify=verify, outcome=outcome, fixedFromMemory=fixed_now)
+        if text:  # after its tool line: the context is paid for by the model calls after this tool call
+            trace.inject(text, profile=False, learn_line=False, shown=delivered)
 
 
 CARD_LINE = re.compile(r"^- Memory card(?: \([^)]*\))?: (.+?)\. ")
@@ -543,9 +548,11 @@ def _remember_delivery(session_id: str, text: str, at_failure: bool) -> None:
     _save(path, state)
 
 
-def _step_memory(step: Any, session_id: str, cwd: str, command: str, output: str, failed_tool: bool) -> str:
+def _step_memory(step: Any, session_id: str, cwd: str, command: str, output: str, failed_tool: bool,
+                 delivered: list | None = None) -> str:
     """The shared step lookup, with this session's records synced both ways: cards shown at the prompt are not shown
-    again, and queries asked or closed by `ai_orch memory search` count for the step lookups and the reverse."""
+    again, and queries asked or closed by `ai_orch memory search` count for the step lookups and the reverse.
+    `delivered`, when given, receives (card, characters of its line(s), of which its code) per card the block shows."""
     path = state_file(session_id)
     state = _load(path)
     root = step.session.repo_root(cwd)
@@ -565,8 +572,24 @@ def _step_memory(step: Any, session_id: str, cwd: str, command: str, output: str
     seen["pointers"] = sorted(set(seen.get("pointers", [])) | set(state.get("pointers", [])))
     seen_file.write_text(json.dumps(seen))
     step.pointer_line = pointer_line  # Copilot opens a pointer with its search command, not `extras`
-    text = step.context({"tool_name": "Bash", "tool_input": {"command": command}, "cwd": cwd,
-                         "session_id": session_id, "tool_response": {"stdout": output, "is_error": failed_tool}})
+    shown: list = []
+    lines_of = step.lines_of
+
+    def kept_lines(cards: list, budget: int) -> tuple[list, list]:  # the block's lines and cards, for the trace
+        lines, cards_shown = lines_of(cards, budget)
+        shown[:] = list(zip(lines, cards_shown))
+        return lines, cards_shown
+
+    step.lines_of = kept_lines
+    try:
+        text = step.context({"tool_name": "Bash", "tool_input": {"command": command}, "cwd": cwd,
+                             "session_id": session_id, "tool_response": {"stdout": output, "is_error": failed_tool}})
+    finally:
+        step.lines_of = lines_of
+    if text and delivered is not None:
+        for line, card in shown:
+            code = str(card.get("code") or "")
+            delivered.append((card, len(line), len(code) if code and line.endswith("\n" + code) else 0))
     try:
         seen = json.loads(seen_file.read_text())
     except (OSError, ValueError):
@@ -842,6 +865,20 @@ def main(argv: list[str] | None = None) -> int:
     """Copilot hook entry: `copilot_memory_gate.py` (userPromptSubmitted), `copilot_memory_gate.py post`
     (postToolUse) or `copilot_memory_gate.py stop` (agentStop), the hook payload on stdin. Prints the hook's JSON answer; any error prints nothing (fail-open)."""
     argv = sys.argv[1:] if argv is None else argv
+    try:
+        copilot_trace.hold()  # the run's trace lines wait in memory until its answer is out
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        return _main(argv)
+    finally:
+        try:
+            copilot_trace.flush()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def _main(argv: list[str]) -> int:
     mode = argv[:1]
     payload: Any = None
     try:
@@ -857,7 +894,8 @@ def main(argv: list[str] | None = None) -> int:
                 "error", where=hook, message=type(error).__name__[:80])
         return 0
     if answer:
-        print(json.dumps(answer))
+        sys.stdout.write(json.dumps(answer) + "\n")
+        sys.stdout.flush()  # out before the trace is written
     return 0
 
 

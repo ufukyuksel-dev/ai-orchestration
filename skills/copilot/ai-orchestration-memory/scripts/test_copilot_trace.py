@@ -12,6 +12,7 @@ import json
 import os
 import stat
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -95,6 +96,32 @@ class PromptTraceTest(TraceMixin, flow.FlowTestCase):
         self.assertEqual(self.prompt("next one", cards=[])["additionalContext"], gate.LEARN_LINE)
         self.assertEqual(self.events("prompt")[-1]["request"], 2)
         self.assertEqual(self.skips(), ["no_cards"])
+
+    def test_one_call_id_per_hook_run(self) -> None:
+        self.prompt(cards=[{"id": "c1", "summary": "A", "text": "B"}])
+        self.prompt("next one", cards=[])
+        lines = self.lines()
+        for line in lines:
+            self.assertRegex(line["call"], r"^[0-9a-f]{12}$")
+        first = [line["call"] for line in lines[:2]]
+        second = [line["call"] for line in lines[2:]]
+        self.assertEqual(len(set(first)), 1)
+        self.assertEqual(len(set(second)), 1)
+        self.assertNotEqual(first[0], second[0])
+        durations = [line["durationMs"] for line in lines[2:]]
+        self.assertEqual(durations, sorted(durations))  # since the call began: cumulative
+
+    def test_a_hook_run_through_main_and_its_error_share_one_call(self) -> None:
+        def failing(payload):
+            gate.tracer("userPromptSubmitted", "s1").emit("skip", reason="no_cards")
+            raise ValueError("x")
+
+        payload = json.dumps({"sessionId": "s1", "cwd": str(self.repo), "prompt": "fix it"})
+        with patch.object(gate, "prompt_hook", side_effect=failing), patch("sys.stdin", io.StringIO(payload)), \
+                patch("sys.stdout", new_callable=io.StringIO):
+            gate.main([])
+        self.assertEqual([line["event"] for line in self.lines()], ["skip", "error"])
+        self.assertEqual(len({line["call"] for line in self.lines()}), 1)
 
     def test_the_prompt_text_never_reaches_the_file(self) -> None:
         self.prompt(SECRET_PROMPT)
@@ -213,8 +240,40 @@ class PostTraceTest(TraceMixin, flow.FlowTestCase):
             self.assertTrue(COMMON <= set(line))
             self.assertEqual((line["hook"], line["repo"]), ("postToolUse", str(self.repo.resolve())))
         self.assertEqual(self.skips(), ["no_cards", "not_shell"])
-        for secret in ("TOPSECRET", "pytest", "tests.py 2>&1"):
+        for secret in ("TOPSECRET", "-m pytest", "tests.py 2>&1"):
             self.assertNotIn(secret, self.raw())
+
+
+    def test_a_step_delivery_is_traced_as_an_inject_after_its_tool_line(self) -> None:
+        self.prompt(cards=[])
+        card = self.card("Run the suite with `python tests.py`.")
+        with patch.object(self.step, "fetch", return_value=("found", [card])):
+            answer = self.post("python -m pytest -q", self.FAIL)
+        text = answer["additionalContext"]
+        lines = [line for line in self.lines() if line["hook"] == "postToolUse"]
+        self.assertEqual([line["event"] for line in lines], ["tool", "inject"])  # the cost counts the calls after it
+        tool, inject = lines
+        self.assertEqual(tool["call"], inject["call"])
+        self.assertLessEqual(tool["durationMs"], inject["durationMs"])
+        self.assertEqual(inject["injected"], {"chars": len(text), "tokensEst": -(-len(text) * 2 // 7)})
+        self.assertEqual(inject["parts"], {"profile": False, "cards": 1, "pointers": 0, "learnLine": False})
+        entry = inject["cards"][0]
+        self.assertEqual((entry["id"], entry["summary"], entry["paths"], entry["pointer"], entry["codeChars"]),
+                         ("t9", "No pytest here", ["tests.py"], False, 0))
+        line = "- Memory card: No pytest here. Run the suite with `python tests.py`. Files: tests.py."
+        self.assertIn(line, text)
+        self.assertEqual(entry["chars"], len(line))
+        self.post("echo hi", "hi")  # nothing delivered: no inject
+        self.assertEqual(len(self.events("inject")), 2)  # the prompt's and the step's
+
+    def test_a_step_pointer_is_traced_as_a_pointer(self) -> None:
+        self.prompt(cards=[])
+        with patch.object(self.step, "fetch", return_value=("found", [self.card("", pointer=True)])):
+            self.post("python -m pytest -q", self.FAIL)
+        inject = self.events("inject")[-1]
+        self.assertEqual((inject["hook"], inject["parts"]["cards"], inject["parts"]["pointers"]),
+                         ("postToolUse", 0, 1))
+        self.assertEqual((inject["cards"][0]["pointer"], inject["cards"][0]["paths"]), (True, []))
 
 
 class StopTraceTest(TraceMixin, flow.FlowTestCase):
@@ -309,9 +368,9 @@ class EncodingAndFilesTest(TraceMixin, unittest.TestCase):
         real_open, real_write = os.open, os.write
         flags: list[int] = []
 
-        def spy_open(path, flag, mode=0o777):
+        def spy_open(path, flag, mode=0o777, **kwargs):
             flags.append(flag)
-            return real_open(path, flag, mode)
+            return real_open(path, flag, mode, **kwargs)
 
         def spy_write(fd, data):
             writes.append((fd, data))
@@ -323,7 +382,178 @@ class EncodingAndFilesTest(TraceMixin, unittest.TestCase):
                                                          fixedFromMemory=False)
         self.assertEqual(len(writes), 1)
         self.assertTrue(writes[0][1].endswith(b"\n") and writes[0][1].count(b"\n") == 1)
-        self.assertTrue(flags[0] & os.O_APPEND)
+        appends = [flag for flag in flags if flag & os.O_APPEND]
+        self.assertEqual(len(appends), 1)
+        self.assertTrue(appends[0] & os.O_NOFOLLOW and appends[0] & os.O_CREAT)
+
+
+class SafeTargetTest(TraceMixin, unittest.TestCase):
+    """The trace is only written into a directory and a file the user alone owns and can read (0700 / 0600), never
+    through a symbolic link; a loose mode the user owns is tightened first, and dropped when it cannot be."""
+
+    def setUp(self) -> None:
+        self.use_trace_dir()
+        self.trace_dir.parent.chmod(0o700)
+
+    def emit(self) -> None:
+        copilot_trace.Hook("agentStop", "s").emit("stop", decision="allow", reason="none", stopHookActive=False)
+
+    def today(self, folder: Path | None = None) -> Path:
+        return (folder or self.trace_dir) / f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%d}.jsonl"
+
+    def test_a_loose_existing_directory_and_file_are_tightened(self) -> None:
+        self.trace_dir.mkdir(mode=0o755)
+        self.trace_dir.chmod(0o755)
+        self.today().write_text("")
+        self.today().chmod(0o644)
+        self.emit()
+        self.assertEqual(stat.S_IMODE(self.trace_dir.stat().st_mode), 0o700)
+        self.assertEqual(stat.S_IMODE(self.today().stat().st_mode), 0o600)
+        self.assertEqual(len(self.lines()), 1)
+
+    def test_a_loose_directory_that_cannot_be_tightened_is_not_written(self) -> None:
+        self.trace_dir.mkdir()
+        self.trace_dir.chmod(0o755)
+        with patch.object(copilot_trace.os, "fchmod", side_effect=PermissionError), \
+                patch.object(copilot_trace.os, "chmod", side_effect=PermissionError):
+            self.emit()
+        self.assertEqual(list(self.trace_dir.iterdir()), [])
+
+    def test_a_loose_file_that_cannot_be_tightened_is_not_written(self) -> None:
+        self.trace_dir.mkdir(mode=0o700)
+        self.today().write_text("")
+        self.today().chmod(0o644)
+        with patch.object(copilot_trace.os, "fchmod", side_effect=PermissionError), \
+                patch.object(copilot_trace.os, "chmod", side_effect=PermissionError):
+            self.emit()
+        self.assertEqual(self.today().read_text(), "")
+
+    def test_a_directory_owned_by_someone_else_is_not_written(self) -> None:
+        self.trace_dir.mkdir(mode=0o700)
+        with patch.object(copilot_trace.os, "getuid", return_value=os.getuid() + 1):
+            self.emit()
+        self.assertEqual(list(self.trace_dir.iterdir()), [])
+
+    def test_a_file_owned_by_someone_else_is_not_written(self) -> None:
+        self.trace_dir.mkdir(mode=0o700)
+        self.today().write_text("")
+        self.today().chmod(0o600)
+        real = os.fstat
+
+        def foreign(fd):
+            result = real(fd)
+            if stat.S_ISREG(result.st_mode):  # the day file only: its directory stays the user's
+                values = list(result)
+                values[stat.ST_UID] = os.getuid() + 1
+                return os.stat_result(values)
+            return result
+
+        with patch.object(copilot_trace.os, "fstat", side_effect=foreign):
+            self.emit()
+        self.assertEqual(self.today().read_text(), "")
+
+    def test_a_symlinked_directory_is_not_followed(self) -> None:
+        elsewhere = self.trace_dir.parent / "elsewhere"
+        elsewhere.mkdir(mode=0o700)
+        self.trace_dir.symlink_to(elsewhere, target_is_directory=True)
+        self.emit()
+        self.assertEqual(list(elsewhere.iterdir()), [])
+
+    def test_a_symlinked_file_is_not_followed(self) -> None:
+        self.trace_dir.mkdir(mode=0o700)
+        target = self.trace_dir.parent / "target.txt"
+        target.write_text("keep")
+        self.today().symlink_to(target)
+        self.emit()
+        self.assertEqual(target.read_text(), "keep")
+
+    def test_the_default_location_checks_ai_orch_too(self) -> None:
+        home = self.trace_dir.parent / "copilot-home"
+        home.mkdir()
+        with patch.dict(os.environ, {"AI_ORCH_TRACE_DIR": "", "COPILOT_HOME": str(home)}):
+            elsewhere = self.trace_dir.parent / "elsewhere"
+            (elsewhere / "trace").mkdir(parents=True, mode=0o700)
+            (home / "ai-orch").symlink_to(elsewhere, target_is_directory=True)
+            self.emit()
+            self.assertEqual(list((elsewhere / "trace").iterdir()), [])
+            (home / "ai-orch").unlink()
+            (home / "ai-orch").mkdir()
+            (home / "ai-orch").chmod(0o755)
+            self.emit()
+            self.assertEqual(stat.S_IMODE((home / "ai-orch").stat().st_mode), 0o700)
+            self.assertEqual(stat.S_IMODE((home / "ai-orch" / "trace").stat().st_mode), 0o700)
+            self.assertTrue(self.today(home / "ai-orch" / "trace").is_file())
+
+
+class DeferredWriteTest(TraceMixin, flow.FlowTestCase):
+    """Through `main` the trace is written after the hook's answer is on stdout, within a short time bound: a slow
+    disk can neither delay the answer nor eat the prompt hook's time for the cards."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.use_trace_dir()
+
+    def run_main(self, prompt: str = "add a posts endpoint") -> tuple[str, float]:
+        payload = json.dumps({"sessionId": "s1", "cwd": str(self.repo), "prompt": prompt})
+        started = time.monotonic()
+        with patch.object(gate, "fetch_bootstrap", return_value={"memory": [flow.CARD]}), \
+                patch("sys.stdin", io.StringIO(payload)), patch("sys.stdout", new_callable=io.StringIO) as out:
+            self.assertEqual(gate.main([]), 0)
+        return out.getvalue(), time.monotonic() - started
+
+    def test_a_slow_writer_changes_neither_the_answer_nor_the_cards(self) -> None:
+        with patch.object(gate, "DEADLINE", 0.5):
+            with patch.dict(os.environ, {"AI_ORCH_TRACE": "0"}):
+                expected, _ = self.run_main()
+            self.assertIn("Token auth for API routes", expected)
+            gate._save(gate.state_file("s1"), {})
+            real_write = os.write
+            order: list[str] = []
+
+            def slow(fd, data):
+                order.append("trace")
+                time.sleep(0.6)  # longer than the prompt hook's whole budget
+                return real_write(fd, data)
+
+            with patch.object(copilot_trace.os, "write", side_effect=slow):
+                answer, elapsed = self.run_main()
+        self.assertEqual(answer, expected)
+        self.assertLess(elapsed, 1.2)  # the trace's own bound, not the writer's pace
+
+    def test_the_answer_is_on_stdout_before_any_trace_write(self) -> None:
+        order: list[str] = []
+        real_write = os.write
+
+        class Out(io.StringIO):
+            def flush(self) -> None:
+                order.append("flush")
+                super().flush()
+
+        def spy(fd, data):
+            order.append("trace")
+            return real_write(fd, data)
+
+        payload = json.dumps({"sessionId": "s1", "cwd": str(self.repo), "prompt": "add a posts endpoint"})
+        with patch.object(gate, "fetch_bootstrap", return_value={"memory": [flow.CARD]}), \
+                patch("sys.stdin", io.StringIO(payload)), patch("sys.stdout", new=Out()) as out, \
+                patch.object(copilot_trace.os, "write", side_effect=spy):
+            gate.main([])
+        self.assertIn("Token auth", out.getvalue())
+        self.assertEqual(order[0], "flush")
+        self.assertIn("trace", order)
+        self.assertEqual([line["event"] for line in self.lines()], ["prompt", "inject"])
+
+    def test_a_slow_cleanup_does_not_hold_the_hook(self) -> None:
+        self.trace_dir.mkdir(mode=0o700)
+        (self.trace_dir / "2000-01-01.jsonl").write_text("{}\n")
+
+        def slow(*args, **kwargs):
+            time.sleep(1.5)
+
+        with patch.object(copilot_trace, "cleanup", side_effect=slow):
+            answer, elapsed = self.run_main()
+        self.assertIn("Token auth", answer)
+        self.assertLess(elapsed, 1.2)
 
 
 if __name__ == "__main__":
