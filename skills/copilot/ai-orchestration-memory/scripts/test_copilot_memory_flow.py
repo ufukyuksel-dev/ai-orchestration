@@ -21,8 +21,10 @@ CARD = {"id": "c1", "summary": "Token auth for API routes", "text": "Use token_a
 
 
 def block(answer: dict) -> str:
-    """The memory cards of a prompt answer, without the learning line every prompt carries."""
-    return answer.get("additionalContext", "").replace(gate.LEARN_LINE, "").strip()
+    """The memory cards of a prompt answer, without the learning line every prompt carries (and the feedback line
+    a prompt with cards carries)."""
+    context = answer.get("additionalContext", "").replace(" " + gate.FEEDBACK_LINE, "")
+    return context.replace(gate.LEARN_LINE, "").strip()
 
 
 def stop_event(stamp: int) -> dict:
@@ -99,7 +101,7 @@ class PromptHookTest(FlowTestCase):
         cards = [dict(CARD, id=f"c{i}", text="t" * 900) for i in range(6)]
         text = block(self.prompt(cards=cards))
         self.assertLessEqual(len(text), gate.CARD_CHARS)
-        self.assertGreaterEqual(text.count("- Memory card"), 2)
+        self.assertGreaterEqual(text.count("] Memory card"), 2)
 
     def test_a_card_first_shown_as_a_pointer_can_come_in_full_but_a_pointer_does_not_repeat(self) -> None:
         pointer = {"id": "p1", "summary": "Pagination helper", "pointer": True}
@@ -482,7 +484,7 @@ class StopFallbackSignalTest(FlowTestCase):
 
     def test_every_prompt_carries_the_learning_line_also_with_empty_memory(self) -> None:
         self.assertEqual(self.prompt(cards=[]), {"additionalContext": gate.LEARN_LINE})
-        self.assertTrue(self.prompt()["additionalContext"].endswith(gate.LEARN_LINE))
+        self.assertTrue(self.prompt()["additionalContext"].endswith(gate.LEARN_LINE + " " + gate.FEEDBACK_LINE))
         for part in ("<!-- ai-orch-learn", '"learningCandidates"', "<=700 chars", "not about this machine",
                      "No tool call is needed"):
             self.assertIn(part, gate.LEARN_LINE)
@@ -620,7 +622,7 @@ class CardCodeTest(FlowTestCase):
         self.assertEqual(gate.card_files(text), {"app/api/auth.py"})
         big = [dict(CARD, id=f"k{i}", code="x" * 2000) for i in range(2)]
         text = block(self.prompt(cards=big))
-        self.assertEqual(text.count("- Memory card"), 2)  # both cards
+        self.assertEqual(text.count("] Memory card"), 2)  # both cards
         self.assertEqual(text.count("x" * 2000), 1)       # only the code that fits the code budget
 
 

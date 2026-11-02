@@ -6,7 +6,8 @@ The record belongs to the Copilot session: Copilot gives its shell commands `COP
 `userPromptSubmitted` hook (this script, run with the hook payload on stdin) starts a new request by clearing the
 record of that `sessionId`. The same hook delivers the prompt's memory cards (`additionalContext`), and the `agentStop`
 hook (`copilot_memory_gate.py stop`) saves what the final answer's hidden `ai-orch-learn` comment holds, with no extra
-model call: the two moments Claude Code and Codex get from their prompt and Stop hooks. Without the session id (not run by Copilot) nothing is gated. Only an answer the server
+model call: the two moments Claude Code and Codex get from their prompt and Stop hooks. The same comment carries the
+agent's verdict on the prompt's labelled cards (`memoryFeedback`), traced as one `feedback` line. Without the session id (not run by Copilot) nothing is gated. Only an answer the server
 gave successfully with zero items closes the request; a failed call closes nothing and does not count as asked.
 """
 from __future__ import annotations
@@ -126,7 +127,8 @@ def reset(session_id: str, tree: str | None = None) -> None:
                  "shown": old.get("shown", []), "pointers": old.get("pointers", []), "card_files": [],
                  "profile_shown": old.get("profile_shown", False),
                  "check_failed": False, "fixed_after_failure": False,
-                 "fixed_from_memory": False, "delivered": [], "memory_fixes": [], "full_delivered": False})
+                 "fixed_from_memory": False, "delivered": [], "memory_fixes": [], "full_delivered": False,
+                 "refs": {}, "feedback_done": False})
 
 
 def record_learned() -> None:
@@ -155,6 +157,15 @@ LEARN_LINE = ("AI Orchestration learning: if this task taught you something reus
               '{"kind":"symbol","ref":"pkg.Class#method","path":"<repo-relative file>","role":"supporting"}). '
               "Only knowledge about this repository, not about this machine or sandbox. No tool call is needed for "
               "it; leave it out when nothing is new.")
+# only for a request whose prompt delivered labelled cards: the agent's verdict on them, in the same comment
+FEEDBACK_LINE = ("Memory feedback: also judge each [mN] memory card above in that comment, even when nothing is new: "
+                 '<!-- ai-orch-learn {"memoryFeedback":[{"ref":"m1","verdict":"helped|unused|misled","savedCalls":0,'
+                 '"wastedCalls":0,"evidencePath":"<repo-relative file>"}]} --> (next to learningCandidates when there '
+                 "are any). helped: it saved you tool calls (savedCalls: about how many); unused: you did not need "
+                 "it, unused is a normal answer; misled: it was wrong or sent you the wrong way (wastedCalls: calls "
+                 "it cost). evidencePath is optional: the file that shows it.")
+FEEDBACK_REASON = (" If this request gave you [mN] memory cards, add their memoryFeedback to that comment (a comment "
+                   "with only memoryFeedback when nothing is new).")
 LEARN_REASON = ("AI Orchestration, before you finish: this task changed code and saved nothing for the next one. If it "
                 "taught something reusable about this repository, reply with only the ai-orch-learn HTML comment "
                 "described in this request's AI Orchestration learning line; otherwise reply with the word none. Do "
@@ -202,7 +213,9 @@ def render(cards: list[dict[str, Any]], shown: set[str], pointers: set[str] = fr
            budget: int = CARD_CHARS, details: list | None = None) -> tuple[str, list[dict[str, Any]]]:
     """The card block (same lines as the Claude prompt hook) within `budget` characters, and the cards it shows. A
     card shown in full is never shown again; one shown as a pointer may still come in full, not as a pointer again.
-    `details`, when given, receives (card, characters added for it, of which its code) per shown card."""
+    Each shown card's line starts with its label in the block (`- [m1] ...`, the n-th shown card is `mn`), which the
+    agent's memoryFeedback names it by. `details`, when given, receives (card, characters added for it, of which its
+    code) per shown card."""
     lines, ids, used, code_used = [], [], len(HEADER), 0
     for card in cards:
         if not isinstance(card, dict) or card.get("id") in shown or (card.get("pointer") and card.get("id") in pointers):
@@ -213,6 +226,7 @@ def render(cards: list[dict[str, Any]], shown: set[str], pointers: set[str] = fr
             files = f" Files: {', '.join(map(str, card['files']))}." if card.get("files") else ""
             stale = " (may be outdated: the code changed since)" if card.get("stale") else ""
             line = f"- Memory card{stale}: {str(card.get('summary') or '').rstrip('.')}. {card.get('text') or ''}{files}"
+        line = f"- [m{len(ids) + 1}] {line[2:]}"
         cost = len(line) + (1 if lines else 0)
         if used + cost > budget:
             break
@@ -451,6 +465,7 @@ def prompt_hook(payload: dict[str, Any]) -> dict[str, Any]:
         trace.emit("skip", reason="no_cards")
     if profile:
         state["profile_shown"] = True
+    state["refs"] = {f"m{i}": str(card.get("id")) for i, card in enumerate(shown, 1)}
     if text:
         state["shown"] = sorted(set(state.get("shown", [])) | {str(c.get("id")) for c in shown if not c.get("pointer")})
         state["pointers"] = sorted(set(state.get("pointers", [])) | {str(c.get("id")) for c in shown
@@ -459,7 +474,8 @@ def prompt_hook(payload: dict[str, Any]) -> dict[str, Any]:
     _save(path, state)
     if text:
         _remember_delivery(session_id, text, at_failure=False)
-    context = "\n\n".join(part for part in (profile, text, LEARN_LINE) if part)
+    learn = f"{LEARN_LINE} {FEEDBACK_LINE}" if text else LEARN_LINE  # no cards: no verdict asked, no extra text
+    context = "\n\n".join(part for part in (profile, text, learn) if part)
     trace.inject(context, profile=bool(profile), learn_line=True, shown=details)
     return {"additionalContext": context}
 
@@ -549,7 +565,7 @@ def _tool_facts(tool_name: str, raw_args: Any, cwd: str, root: str | None) -> di
         return {}
 
 
-CARD_LINE = re.compile(r"^- Memory card(?: \([^)]*\))?: (.+?)\. ")
+CARD_LINE = re.compile(r"^- (?:\[m\d+\] )?Memory card(?: \([^)]*\))?: (.+?)\. ")
 COMMAND = re.compile(r"`([^`]{3,200})`")
 
 
@@ -653,19 +669,72 @@ LEARN_COMMENT = re.compile(r"<!--\s*ai-orch-learn\b(.*?)-->", re.S)
 LEARN_FENCE = re.compile(r"```ai-orch-learn[ \t]*\n(.*?)```", re.S)
 
 
-def learning_payload(answer: str) -> list[Any] | None:
-    """The learning candidates the final answer carries: the last `<!-- ai-orch-learn {...} -->` comment (a fenced
-    ```ai-orch-learn``` block is accepted too); None when there is none or it is not JSON."""
+def _learn_block(answer: str) -> Any:
+    """The JSON of the answer's last `<!-- ai-orch-learn {...} -->` comment (a fenced ```ai-orch-learn``` block is
+    accepted too); None when there is none or it is not JSON."""
     found = [(m.start(), m.group(1)) for pattern in (LEARN_COMMENT, LEARN_FENCE) for m in pattern.finditer(answer)]
     if not found:
         return None
     try:
-        value = json.loads(max(found)[1].strip())
+        return json.loads(max(found)[1].strip())
     except ValueError:
         return None
+
+
+def learning_payload(answer: str) -> list[Any] | None:
+    """The learning candidates the final answer carries in its last ai-orch-learn comment; None when there are none."""
+    value = _learn_block(answer)
     if isinstance(value, dict):
         value = value.get("learningCandidates")
     return value if isinstance(value, list) and value else None
+
+
+VERDICTS = frozenset({"helped", "unused", "misled"})
+VERDICT_COUNT = {"helped": "savedCalls", "misled": "wastedCalls"}  # the count each verdict carries
+MAX_CALLS = 20
+MAX_EVIDENCE_CHARS = 1024
+
+
+def memory_feedback(answer: str, refs: dict[str, str], root: str | None) -> list[dict[str, Any]] | None:
+    """The agent's verdicts on this request's labelled cards, from the `memoryFeedback` of the answer's last
+    ai-orch-learn comment, as trace `feedback` cards: `{cardId, verdict, savedCalls? | wastedCalls?, evidencePath?}`.
+    An entry with an unknown label or a verdict outside helped | unused | misled is left out, and so is a count that
+    is not a whole number from 0 to 20 or an evidence path that is not a file inside the repository (written
+    repo-relative); one verdict per card, the first. None when no valid verdict is left."""
+    value = _learn_block(answer)
+    entries = value.get("memoryFeedback") if isinstance(value, dict) else None
+    if not isinstance(entries, list):
+        return None
+    cards: list[dict[str, Any]] = []
+    judged: set[str] = set()
+    for entry in entries[:MAX_CALLS]:
+        if not isinstance(entry, dict) or not isinstance(entry.get("ref"), str):
+            continue
+        ref = entry["ref"].strip().strip("[]").lower()
+        verdict = entry.get("verdict")
+        if ref not in refs or ref in judged or verdict not in VERDICTS:
+            continue
+        judged.add(ref)
+        card: dict[str, Any] = {"cardId": str(refs[ref])[:64], "verdict": verdict}
+        count = entry.get(VERDICT_COUNT.get(verdict, ""))
+        if isinstance(count, int) and not isinstance(count, bool) and 0 <= count <= MAX_CALLS:
+            card[VERDICT_COUNT[verdict]] = count
+        evidence = _evidence_path(entry.get("evidencePath"), root)
+        if evidence:
+            card["evidencePath"] = evidence
+        cards.append(card)
+    return cards or None
+
+
+def _evidence_path(value: Any, root: str | None) -> str | None:
+    """A verdict's evidence file, repository-relative; None outside the repository, with `..`, a glob or a NUL, too
+    long, or when the repository is not known."""
+    if not root or not isinstance(value, str) or len(value) > MAX_EVIDENCE_CHARS or copilot_trace is None:
+        return None
+    try:
+        return copilot_trace.repo_relative(value, root, root)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 TRANSCRIPT_WAIT = 3.0  # seconds the stop hook waits for Copilot to finish writing the turn to its transcript
@@ -828,12 +897,15 @@ def stop_hook(payload: dict[str, Any]) -> dict[str, Any]:
     cwd = str(payload.get("cwd") or "")
     trace.repo = _traced_root(state, cwd)
     reason = "none"
+    answer: str | None = None
+    feedback_due = bool(state.get("refs")) and not state.get("feedback_done")  # the verdict on the prompt's cards
     try:
-        if state.get("receipt") or state.get("learned") or not state.get("tree"):
+        learning_open = not (state.get("receipt") or state.get("learned") or not state.get("tree"))
+        if not learning_open and not feedback_due:
             return {}
         answer = final_answer(str(payload.get("transcriptPath") or ""), payload.get("timestamp"))
-        if answer is None:
-            return {}  # this stop's answer cannot be confirmed: nothing is saved and nothing is asked
+        if answer is None or not learning_open:
+            return {}  # an unconfirmed answer: nothing is saved and nothing is asked
         raw = learning_payload(answer)
         if raw is not None:
             root = repo_root(cwd) if cwd else None
@@ -856,8 +928,28 @@ def stop_hook(payload: dict[str, Any]) -> dict[str, Any]:
         reason = "learn_request"
         return {"decision": "block", "reason": learn_reason(state)}
     finally:
+        if feedback_due and answer is not None:
+            _trace_feedback(trace, session_id, answer, cwd, waiting=reason == "learn_request")
         trace.emit("stop", decision="block" if reason == "learn_request" else "allow", reason=reason,
                    stopHookActive=active)
+
+
+def _trace_feedback(trace: Any, session_id: str, answer: str, cwd: str, waiting: bool) -> None:
+    """The request's one `feedback` trace line: the agent's verdicts (parsed) or, when it gave none, an empty one
+    (not parsed); none yet while the stop reminder's reply may still bring them. Never a reason to stop the agent, and
+    never breaks the hook (fail-open)."""
+    try:
+        path = state_file(session_id)
+        state = _load(path)
+        root = state.get("root") or (repo_root(cwd) if cwd else None)
+        cards = memory_feedback(answer, state.get("refs") or {}, str(root) if root else None)
+        if cards is None and waiting:
+            return
+        state["feedback_done"] = True
+        _save(path, state)
+        trace.emit("feedback", cards=cards or [], parsed=cards is not None)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def learned_counts(raw: list[Any], result: dict[str, Any] | None) -> dict[str, Any]:
@@ -880,9 +972,10 @@ def learned_counts(raw: list[Any], result: dict[str, Any] | None) -> dict[str, A
 def learn_reason(state: dict[str, Any]) -> str:
     """The stop reminder, naming what this task already received, so only knowledge that is new gets saved."""
     known = state.get("delivered", [])[:8]
+    base = LEARN_REASON + (FEEDBACK_REASON if state.get("refs") and not state.get("feedback_done") else "")
     if not known:
-        return LEARN_REASON
-    return (LEARN_REASON + " Already known (delivered to you in this task, do not save again): "
+        return base
+    return (base + " Already known (delivered to you in this task, do not save again): "
             + "; ".join(known) + ".")
 
 

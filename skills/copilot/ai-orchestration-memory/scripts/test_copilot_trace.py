@@ -85,7 +85,7 @@ class PromptTraceTest(TraceMixin, flow.FlowTestCase):
         self.assertEqual(cards["c1"]["paths"], ["app/api/auth.py", "app/x.py"])  # repo-relative, outside left out
         self.assertEqual((cards["c1"]["codeChars"], cards["c1"]["score"], cards["c1"]["kind"]),
                          (len(CODE), 0.83, "procedure"))
-        line = (f"- Memory card: Token auth for API routes. Use token_auth.login_required. Files: "
+        line = (f"- [m1] Memory card: Token auth for API routes. Use token_auth.login_required. Files: "
                 f"{', '.join(full['files'])}.\n{CODE}")
         self.assertIn(line, context)
         self.assertEqual(cards["c1"]["chars"], len(line))

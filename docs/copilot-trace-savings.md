@@ -57,3 +57,11 @@ so its own tool call is not counted.
 Record, per bench task, the trace itself (cards and pointers delivered at the prompt and at steps) and run a
 `Bnomem` arm on the main suites, two or more repetitions: then `B − Bnomem` per delivered card is the coefficient, with
 an interval.
+
+## The agent's own verdict (contract v4)
+
+The prompt hook labels each card it delivers (`[m1]`, `[m2]` …; the labels restart with every request) and, only in a
+request that delivered cards, asks for `"memoryFeedback":[{"ref","verdict":"helped|unused|misled","savedCalls",
+"wastedCalls","evidencePath"}]` in the same hidden `ai-orch-learn` comment: no extra model call. The stop hook maps the
+labels back to card ids and writes one `feedback` line (`parsed:false` with no cards when the agent judged none). A
+missing verdict never stops the agent; the reader falls back to the behavioral estimate above.
