@@ -276,6 +276,138 @@ class PostTraceTest(TraceMixin, flow.FlowTestCase):
         self.assertEqual((inject["cards"][0]["pointer"], inject["cards"][0]["paths"]), (True, []))
 
 
+class ToolFactsTraceTest(TraceMixin, flow.FlowTestCase):
+    """`tool` lines carry `access`, repository-relative `paths` from the tool's path fields only, and `memoryOp` for
+    `ai_orch memory` commands: no file content, pattern, query, command text or memory text reaches the trace."""
+    ID = "3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b"
+    ID2 = "0d9e8f7a-6b5c-4d3e-a2b1-c0d9e8f7a6b5"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.use_trace_dir()
+        self.step = gate.shared_hooks()
+        self.assertIsNotNone(self.step)
+        for patcher in (patch.object(self.step, "fetch", return_value=("empty", [])),
+                        patch.object(self.step.session, "state_path",
+                                     side_effect=lambda sid, root: self.tmp / f"shared-{sid}.json"),
+                        patch.object(self.step.tempfile, "gettempdir", return_value=str(self.tmp))):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.prompt(cards=[])
+        self.root = str(self.repo.resolve())
+
+    def call(self, tool: str, args: object, output: str = "TOPSECRET-OUTPUT", cwd: str | None = None) -> dict:
+        gate.post_hook({"sessionId": "s1", "cwd": cwd or str(self.repo), "toolName": tool, "toolArgs": args,
+                        "toolResult": {"resultType": "success", "textResultForLlm": output}})
+        return self.events("tool")[-1]
+
+    def test_every_tool_kind_gets_its_access_and_paths(self) -> None:
+        cases = [
+            ("view", {"path": f"{self.root}/src/a.py", "view_range": [1, 9]}, "read", ["src/a.py"]),
+            ("view", {"path": "src/b.py"}, "read", ["src/b.py"]),
+            ("create", {"path": "new/c.py", "file_text": "TOPSECRET-CONTENT"}, "write", ["new/c.py"]),
+            ("edit", {"path": "a.py", "old_str": "TOPSECRET-OLD", "new_str": "TOPSECRET-NEW"}, "write", ["a.py"]),
+            ("str_replace", {"path": "a.py", "old_str": "TOPSECRET-OLD"}, "write", ["a.py"]),
+            ("str_replace_editor", {"command": "view", "path": "a.py"}, "read", ["a.py"]),
+            ("str_replace_editor", {"command": "str_replace", "path": "a.py", "old_str": "TOPSECRET"}, "write",
+             ["a.py"]),
+            ("rg", {"pattern": "TOPSECRET-PATTERN", "paths": [f"{self.root}/src"], "glob": "*.py", "-n": True},
+             "search", ["src"]),
+            ("rg", {"pattern": "TOPSECRET-PATTERN", "output_mode": "content"}, "search", None),
+            ("grep", {"pattern": "TOPSECRET-PATTERN", "path": "lib"}, "search", ["lib"]),
+            ("glob", {"pattern": "**/TOPSECRET*.py", "paths": [self.root]}, "search", None),
+            ("apply_patch", "*** Begin Patch\n*** Update File: " + self.root + "/a.py\n@@\n-TOPSECRET-OLD\n"
+             "+TOPSECRET-NEW\n*** Add File: docs/n.md\n+TOPSECRET-CONTENT\n*** End Patch", "write",
+             ["a.py", "docs/n.md"]),
+            ("bash", {"command": "cat src/TOPSECRET.py && grep TOPSECRET-PATTERN -r ."}, "run", None),
+            ("read_file", {"filePath": f"{self.root}/x/y.ts"}, "read", ["x/y.ts"]),
+            ("write_file", {"file": "x/z.ts", "content": "TOPSECRET-CONTENT"}, "write", ["x/z.ts"]),
+            ("edit_file", {"path": "x/z.ts", "edits": "TOPSECRET-NEW"}, "write", ["x/z.ts"]),
+            ("list_files", {"path": "x"}, "search", ["x"]),
+            ("search", {"query": "TOPSECRET-PATTERN", "path": "x", "file": "TOPSECRET.ts"}, "search", ["x"]),
+            ("run_command", {"command": "TOPSECRET-CMD x/z.ts"}, "run", None),
+            ("skill", {"skill": "TOPSECRET-SKILL", "path": "a.py"}, "other", None),
+            ("mcp__srv__tool", {"path": "a.py"}, "other", None),
+        ]
+        for tool, args, access, paths in cases:
+            with self.subTest(tool=tool, args=args):
+                line = self.call(tool, args)
+                self.assertEqual((line["toolName"], line["access"], line.get("paths")), (tool, access, paths))
+                self.assertNotIn("memoryOp", line)
+        self.assertNotIn("TOPSECRET", self.raw())
+
+    def test_tool_args_given_as_json_text_are_read(self) -> None:
+        line = self.call("view", json.dumps({"path": "a.py"}))
+        self.assertEqual((line["access"], line["paths"]), ("read", ["a.py"]))
+
+    def test_paths_that_escape_the_repository_are_left_out(self) -> None:
+        outside = str(self.tmp / "elsewhere.py")
+        line = self.call("view", {"paths": ["../repo/a.py", "src/../../x.py", "/etc/passwd", outside, "a\x00b.py",
+                                            "src/*.py", "~/notes.md", "", 7, None, self.root, self.root + "/",
+                                            f"{self.root}-other/a.py", "ok.py"]})
+        self.assertEqual(line["paths"], ["ok.py"])
+        nested = self.repo / "sub"
+        nested.mkdir()
+        line = self.call("view", {"path": "../a.py"}, cwd=str(nested))
+        self.assertNotIn("paths", line)
+        line = self.call("view", {"path": "b.py"}, cwd=str(nested))
+        self.assertEqual(line["paths"], ["sub/b.py"])
+
+    def test_no_repository_no_paths(self) -> None:
+        line = self.call("view", {"path": "/x/a.py"}, cwd=str(self.tmp))  # cwd outside the request's repository
+        self.assertEqual(line["access"], "read")
+        self.assertNotIn("paths", line)
+
+    def test_path_limits(self) -> None:
+        many = [f"d/f{i}.py" for i in range(30)] + ["d/f0.py"]
+        line = self.call("view", {"paths": many})
+        self.assertEqual(line["paths"], [f"d/f{i}.py" for i in range(20)])
+        long_ok, too_long = "d/" + "a" * 1000, "d/" + "a" * 1100
+        line = self.call("view", {"paths": [long_ok, too_long]})
+        self.assertEqual(line["paths"], [long_ok])
+
+    def test_an_oversized_tool_line_drops_whole_paths(self) -> None:
+        paths = ["d/" + str(i) * 1000 for i in range(10)] + ["e/" + "x" * 1000 for _ in range(1)]
+        paths = [p + str(i) for i, p in enumerate(paths)] + [f"g/{i}" + "y" * 1000 for i in range(9)]
+        line = self.call("view", {"paths": paths})
+        self.assertLess(len(json.dumps(line)), copilot_trace.MAX_LINE)
+        self.assertTrue(set(line["paths"]) < set(paths))  # whole paths only, none cut short
+        self.assertEqual(line["paths"], paths[:len(line["paths"])])
+
+    def test_memory_ops_keep_only_the_sub_command_and_card_ids(self) -> None:
+        cases = [
+            (f"ai_orch memory archive --memory-id {self.ID} --reason 'TOPSECRET wrong card'",
+             {"op": "archive", "cardIds": [self.ID]}),
+            (f"cd {self.root} && ai_orch memory update --memory-id={self.ID.upper()} --file TOPSECRET.json",
+             {"op": "update", "cardIds": [self.ID]}),
+            ('ai_orch memory search --query "TOPSECRET query" --top-k 3', {"op": "search"}),
+            ("ai_orch memory learn --summary 'TOPSECRET summary' --content TOPSECRET", {"op": "learn"}),
+            (f"AI_ORCH_X=1 python3 /opt/s/ai_orch.py memory update --memory-id {self.ID} --memory-id {self.ID2}",
+             {"op": "update", "cardIds": [self.ID, self.ID2]}),
+            ("ai_orch memory archive --memory-id TOPSECRET-not-a-uuid --reason x", {"op": "archive"}),
+            ("ai_orch memory archive --memory-id '$(cat TOPSECRET)'", {"op": "archive"}),
+            (f"ai_orch memory search --query a; ai_orch memory archive --memory-id {self.ID}", {"op": "search"}),
+            (f"ai_orch memory archive --reason x | ai_orch memory update --memory-id {self.ID}", {"op": "archive"}),
+            (f"ai_orch memory get --memory-id {self.ID} && ai_orch memory archive --memory-id {self.ID}", None),
+            (f"echo ai_orch memory archive --memory-id {self.ID}", None),
+            (f"git log -1 && ai_orch memory archive --memory-id {self.ID} 2>&1 | tail -5",
+             {"op": "archive", "cardIds": [self.ID]}),
+            ("ai_orch memory archive --reason 'TOPSECRET unbalanced", None),
+            ("ai_orch rule show TOPSECRET", None),
+        ]
+        for command, expected in cases:
+            with self.subTest(command=command):
+                line = self.call("bash", {"command": command, "description": "TOPSECRET-DESC"})
+                self.assertEqual((line["access"], line.get("memoryOp")), ("run", expected))
+                self.assertNotIn("paths", line)
+        self.assertNotIn("TOPSECRET", self.raw())
+        self.assertNotIn("--reason", self.raw())
+
+    def test_memory_op_only_for_shell_commands(self) -> None:
+        line = self.call("view", {"command": f"ai_orch memory archive --memory-id {self.ID}", "path": "a.py"})
+        self.assertNotIn("memoryOp", line)
+
+
 class StopTraceTest(TraceMixin, flow.FlowTestCase):
     own_fix = flow.StopHookTest.own_fix
 

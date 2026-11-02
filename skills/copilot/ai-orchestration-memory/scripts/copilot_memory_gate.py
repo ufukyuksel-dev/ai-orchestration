@@ -497,7 +497,9 @@ def post_hook(payload: dict[str, Any]) -> dict[str, Any]:
         step = shared_hooks()
         if step is None:
             return {}
-        command = str((payload.get("toolArgs") or {}).get("command") or "")
+        args = payload.get("toolArgs")
+        args = copilot_trace.tool_args(args) if copilot_trace else args if isinstance(args, dict) else {}
+        command = str((args if isinstance(args, dict) else {}).get("command") or "")
         result = payload.get("toolResult") or {}
         output = str(result.get("textResultForLlm") or "")
         failed_tool = str(result.get("resultType") or "success") != "success"
@@ -522,9 +524,29 @@ def post_hook(payload: dict[str, Any]) -> dict[str, Any]:
             _remember_delivery(session_id, text, at_failure=failed)
         return {"additionalContext": text} if text else {}
     finally:  # every tool call is one more model call in the request: counted whatever the hook did with it
-        trace.emit("tool", toolName=tool_name[:60], verify=verify, outcome=outcome, fixedFromMemory=fixed_now)
+        trace.emit("tool", toolName=tool_name[:60], verify=verify, outcome=outcome, fixedFromMemory=fixed_now,
+                   **_tool_facts(tool_name, payload.get("toolArgs"), cwd, trace.repo))
         if text:  # after its tool line: the context is paid for by the model calls after this tool call
             trace.inject(text, profile=False, learn_line=False, shown=delivered)
+
+
+def _tool_facts(tool_name: str, raw_args: Any, cwd: str, root: str | None) -> dict[str, Any]:
+    """The trace's `paths`, `access` and `memoryOp` of a tool call (copilot_trace); none when they cannot be had."""
+    try:
+        if not copilot_trace.enabled():
+            return {}
+        args = copilot_trace.tool_args(raw_args)
+        facts: dict[str, Any] = {"access": copilot_trace.tool_access(tool_name, args)}
+        paths = copilot_trace.tool_paths(tool_name, args, cwd, root)
+        if paths:
+            facts["paths"] = paths
+        if facts["access"] == "run" and isinstance(args, dict) and isinstance(args.get("command"), str):
+            op = copilot_trace.memory_op(args["command"])
+            if op:
+                facts["memoryOp"] = op
+        return facts
+    except Exception:  # noqa: BLE001 - the trace never breaks a hook
+        return {}
 
 
 CARD_LINE = re.compile(r"^- Memory card(?: \([^)]*\))?: (.+?)\. ")

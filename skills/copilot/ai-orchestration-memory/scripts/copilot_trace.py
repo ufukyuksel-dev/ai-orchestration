@@ -12,6 +12,8 @@ own, no symbolic link, and closed to group and others (0700 / 0600). A loose mod
 is someone else's, a link, or cannot be tightened is not written.
 
 Privacy: no prompt, answer, command or tool output text is written; the prompt only as its length and a short hash.
+A tool line names the repository files of the tool's path fields (never a pattern, query or content) and, for an
+`ai_orch memory` command, only its sub-command and card UUIDs.
 Card summaries come from the memory store, not from the user. Writing never raises and never delays the hook: in a
 hook run (`hold` ... `flush`) lines are kept in memory and written after the answer is out, within FLUSH_SECONDS; a
 trace that cannot be written in time is dropped.
@@ -25,9 +27,11 @@ import math
 import os
 import re
 import secrets
+import shlex
 import stat
 import threading
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -117,6 +121,140 @@ def repo_paths(files: Any, root: str | None) -> list[str]:
     return paths
 
 
+# A tool call's `access` and the argument fields its `paths` come from (never a pattern, query, content or command).
+READ_TOOLS = frozenset({"view", "read", "read_file"})
+WRITE_TOOLS = frozenset({"create", "edit", "str_replace", "write", "write_file", "edit_file", "create_file",
+                         "apply_patch", "replace_string_in_file", "multi_replace_string_in_file",
+                         "insert_edit_into_file"})
+SEARCH_TOOLS = frozenset({"rg", "grep", "glob", "search", "list_files", "list_dir", "grep_search", "file_search"})
+RUN_TOOLS = frozenset({"bash", "shell", "run_command", "run_in_terminal"})
+PATH_FIELDS = ("path", "paths", "file", "files", "filePath", "filePaths", "file_path")
+SEARCH_PATH_FIELDS = ("path", "paths")  # where a search looks; its pattern / query is never read
+MAX_PATHS = 20
+MAX_PATH_CHARS = 1024
+PATCH_FILE = re.compile(r"^\*\*\* (?:(?:Add|Update|Delete) File|Move to): (.+)$")  # apply_patch headers: the path only
+MEMORY_OPS = frozenset({"search", "learn", "update", "archive"})
+SHELL_BREAK = frozenset({";", "&&", "||", "|", "&", "|&", ";;", "(", ")"})
+ENV_ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+PYTHON = re.compile(r"^python(?:\d+(?:\.\d+)?)?$")
+
+
+def tool_args(raw: Any) -> Any:
+    """The hook's `toolArgs`: an object, or a JSON text of one (kept as text when it is not, e.g. a patch)."""
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except ValueError:
+            return raw
+        return parsed if isinstance(parsed, dict) else raw
+    return raw if isinstance(raw, dict) else {}
+
+
+def tool_access(tool_name: str, args: Any) -> str:
+    """read | write | search | run | other, from the tool's name (`str_replace_editor` by its own sub-command)."""
+    if tool_name == "str_replace_editor":
+        sub = args.get("command") if isinstance(args, dict) else None
+        return "read" if sub == "view" else "write" if isinstance(sub, str) and sub else "other"
+    for access, names in (("read", READ_TOOLS), ("write", WRITE_TOOLS), ("search", SEARCH_TOOLS),
+                          ("run", RUN_TOOLS)):
+        if tool_name in names:
+            return access
+    return "other"
+
+
+def tool_paths(tool_name: str, args: Any, cwd: str, root: str | None) -> list[str]:
+    """The files a tool call names in its path fields, repository-relative: at most MAX_PATHS, each at most
+    MAX_PATH_CHARS. Nothing from a shell command, a pattern or a query; a path with `..`, a NUL or a glob, or one
+    outside the repository is left out, and so is the repository root itself."""
+    access = tool_access(tool_name, args)
+    if not root or access in ("run", "other"):
+        return []
+    raw: list[Any] = []
+    if isinstance(args, str):
+        if tool_name == "apply_patch":
+            raw = [m.group(1) for m in map(PATCH_FILE.match, args.splitlines()) if m]
+    elif isinstance(args, dict):
+        if tool_name == "apply_patch" and isinstance(args.get("input"), str):
+            raw = [m.group(1) for m in map(PATCH_FILE.match, args["input"].splitlines()) if m]
+        for field in SEARCH_PATH_FIELDS if access == "search" else PATH_FIELDS:
+            value = args.get(field)
+            raw.extend(value if isinstance(value, list) else [value])
+    paths: list[str] = []
+    for value in raw:
+        if len(paths) >= MAX_PATHS:
+            break
+        entry = repo_relative(value, cwd, root)
+        if entry and entry not in paths:
+            paths.append(entry)
+    return paths
+
+
+def repo_relative(value: Any, cwd: str, root: str) -> str | None:
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if not value or len(value) > MAX_PATH_CHARS or any(c in value for c in "\x00*?\n\r"):
+        return None
+    if ".." in value.replace("\\", "/").split("/"):
+        return None
+    base = cwd if cwd.startswith("/") else root
+    full = os.path.normpath(os.path.join(base, os.path.expanduser(value) if value.startswith("~") else value))
+    top = os.path.normpath(root)
+    for candidate in (full, os.path.realpath(full)):
+        if candidate.startswith(top.rstrip("/") + "/"):
+            rel = candidate[len(top.rstrip("/")) + 1:]
+            return rel if rel and len(rel) <= MAX_PATH_CHARS else None
+    return None
+
+
+def memory_op(command: str) -> dict[str, Any] | None:
+    """`{op, cardIds?}` for the first `ai_orch memory <search|learn|update|archive>` call in a shell command (at a
+    command position: the start or after `;`, `&&`, `|` ..., past `NAME=value` and a python interpreter). Only the
+    sub-command and the canonical UUIDs given with `--memory-id` are kept; no query, summary or other text."""
+    try:
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        tokens = list(lexer)
+    except ValueError:
+        return None
+    start = 0
+    while start < len(tokens):
+        end = next((i for i in range(start, len(tokens)) if tokens[i] in SHELL_BREAK), len(tokens))
+        segment = tokens[start:end]
+        start = end + 1
+        i = 0
+        while i < len(segment) and ENV_ASSIGN.match(segment[i]):
+            i += 1
+        if i < len(segment) and PYTHON.match(os.path.basename(segment[i])):
+            i += 1
+        if i >= len(segment) or os.path.basename(segment[i]) not in ("ai_orch", "ai_orch.py"):
+            continue
+        if segment[i + 1:i + 2] != ["memory"]:
+            continue
+        op = segment[i + 2] if len(segment) > i + 2 else ""
+        if op not in MEMORY_OPS:
+            return None  # the first memory call is not one the trace counts
+        ids: list[str] = []
+        rest = segment[i + 3:]
+        for j, token in enumerate(rest):
+            value = rest[j + 1] if token == "--memory-id" and j + 1 < len(rest) else \
+                token.split("=", 1)[1] if token.startswith("--memory-id=") else None
+            card = canonical_uuid(value)
+            if card and card not in ids:
+                ids.append(card)
+        return {"op": op, "cardIds": ids[:MAX_PATHS]} if ids else {"op": op}
+    return None
+
+
+def canonical_uuid(value: Any) -> str | None:
+    if not isinstance(value, str) or len(value) > 45:
+        return None
+    try:
+        return str(uuid.UUID(value))
+    except ValueError:
+        return None
+
+
 def card_entry(card: dict[str, Any], root: str | None, chars: int, code_chars: int) -> dict[str, Any]:
     """The trace's Card: what the server sent about the card and what the hook added for it (`chars` the card's
     inserted line(s) with its code, `codeChars` the code alone). `kind` and `score` only when the server gave them."""
@@ -203,12 +341,21 @@ def _cut(value: Any, limit: int) -> Any:
 
 
 def encode(record: dict[str, Any]) -> bytes:
-    """One line of at most MAX_LINE bytes: an oversized record loses card paths first, then cards from the end
-    (`parts.cards` still counts them all), then long strings; the common fields always stay."""
+    """One line of at most MAX_LINE bytes: an oversized record loses a tool's paths from the end, card paths first,
+    then cards from the end (`parts.cards` still counts them all), then long strings; the common fields always stay."""
     line = _dump(record)
     if len(line) <= MAX_LINE:
         return line
     record = dict(record)
+    if isinstance(record.get("paths"), list):  # a tool line: whole paths from the end, never a cut path
+        while len(line) > MAX_LINE and record["paths"]:
+            record["paths"] = record["paths"][:-1]
+            line = _dump(record)
+        if not record["paths"]:
+            del record["paths"]
+            line = _dump(record)
+        if len(line) <= MAX_LINE:
+            return line
     cards = [dict(c) for c in record.get("cards") or [] if isinstance(c, dict)]
     if cards:
         for card in cards:
