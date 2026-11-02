@@ -558,3 +558,11 @@ class DeferredWriteTest(TraceMixin, flow.FlowTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_team_client_is_accepted(monkeypatch):
+    """Copilot Team (VS Code extension) runs the same hooks with AI_ORCH_TRACE_CLIENT=team."""
+    monkeypatch.setenv(copilot_trace.CLIENT_ENV, "team")
+    assert copilot_trace.client() == "team"
+    monkeypatch.setenv(copilot_trace.CLIENT_ENV, "nope")
+    assert copilot_trace.client() is None
