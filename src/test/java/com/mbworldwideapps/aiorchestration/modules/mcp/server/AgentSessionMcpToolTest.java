@@ -46,6 +46,44 @@ class AgentSessionMcpToolTest {
     }
 
     @Test
+    void bootstrapReadsAggregateMemoryWithoutGrantingAWriteBinding() {
+        McpClientContextHolder.set(context(List.of("scanner.scan", "memory.read")));
+        when(scanner.resolveProject("/workspace", null)).thenThrow(
+                new com.mbworldwideapps.aiorchestration.modules.scanner.ProjectWorkspaceResolutionException(
+                        "not_git_worktree_root:AGGREGATE"));
+        when(scanner.resolveMemoryProjectKey("/workspace")).thenReturn("AGGREGATE");
+        var retrieval = mock(com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryRetrievalService.class);
+        when(retrieval.retrieveForInjection("auth", "AGGREGATE", null)).thenReturn(
+                new com.mbworldwideapps.aiorchestration.modules.memoryai.MemoryContextResponse(
+                        List.of(card("workspace auth", 0.90)), List.of(), 1, 30, java.util.Map.of(), 0, 0, 0L));
+        tool.setSessionSupport(retrieval, null, emptyProvider(), null, 0.0);
+        var response = tool.bootstrap("/workspace", "auth", false, null, null, null);
+        assertThat(response.projectKey()).isEqualTo("AGGREGATE");
+        assertThat(response.memory()).extracting(AgentSessionMcpTool.Card::summary).contains("workspace auth");
+        assertThat(response.rulesLoaded()).isFalse();
+        verify(scanner).resolveMemoryProjectKey("/workspace");
+    }
+
+    @Test
+    void bootstrapDoesNotRelaxBearerOrBrokenBindingValidation() {
+        var error = new com.mbworldwideapps.aiorchestration.modules.scanner.ProjectWorkspaceResolutionException(
+                "not_git_worktree_root:OTHER");
+        when(scanner.resolveProject("/workspace", null)).thenThrow(error);
+        McpClientContextHolder.set(new McpClientContext("P", "client", "bearer", List.of("scanner.scan"),
+                McpAuditLogger.sha256Hex("client:s")));
+        assertThatThrownBy(() -> tool.bootstrap("/workspace", "auth", false, null, null, null))
+                .isSameAs(error);
+        verify(scanner, never()).resolveMemoryProjectKey(any());
+        McpClientContextHolder.set(context(List.of("scanner.scan")));
+        var broken = new com.mbworldwideapps.aiorchestration.modules.scanner.ProjectWorkspaceResolutionException(
+                "broken_root_binding:P");
+        org.mockito.Mockito.doThrow(broken).when(scanner).resolveProject("/workspace", null);
+        assertThatThrownBy(() -> tool.bootstrap("/workspace", "auth", false, null, null, null))
+                .isSameAs(broken);
+        verify(scanner, never()).resolveMemoryProjectKey(any());
+    }
+
+    @Test
     void bootstrapResolvesAndLoadsEffectiveRulesInOneCall() {
         McpClientContextHolder.set(context(List.of("scanner.scan", "rules.read", "memory.write")));
         resolves();

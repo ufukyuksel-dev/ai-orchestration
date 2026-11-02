@@ -106,6 +106,20 @@ public class ScannerMcpTool {
         }
     }
 
+    /** Memory reads may use an aggregate workspace; this grants no learning/write binding. */
+    String resolveMemoryProjectKey(String rootPath) {
+        McpClientContext context = McpClientContextHolder.require();
+        if (!McpProjectKeys.isLocalTrust(context)) {
+            throw new McpAccessException("Workspace memory fallback requires local trust");
+        }
+        Path root = Path.of(rootPath);
+        if (!root.isAbsolute() || !java.nio.file.Files.isDirectory(root)) {
+            throw new IllegalArgumentException("rootPath must be an existing absolute directory");
+        }
+        return projectWorkspaceResolver.resolveMemoryProjectKeyByPath(root)
+                .orElseGet(() -> McpProjectKeys.forScan(context, null, rootPath));
+    }
+
     private UUID issueWorkspaceBinding(McpClientContext context, ProjectBindingResolution binding) {
         if (agentLearningService == null || !agentLearningService.enabled() || !binding.verified()
                 || binding.repositoryFingerprint() == null) {

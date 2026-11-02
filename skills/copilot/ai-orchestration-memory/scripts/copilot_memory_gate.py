@@ -421,7 +421,10 @@ def prompt_hook(payload: dict[str, Any]) -> dict[str, Any]:
     def left() -> float:
         return DEADLINE - (time.monotonic() - started)
 
+    # Aggregate workspaces can own memory without Git. Bootstrap resolves their existing project binding.
     root = repo_root(cwd, left()) if cwd else None
+    if root is None and cwd and Path(cwd).is_absolute() and Path(cwd).is_dir():
+        root = str(Path(cwd).resolve())
     reset(session_id, tree_fingerprint(root, left()) if root else None)  # the new request starts even when late
     prompt = str(payload.get("prompt") or "").strip()
     path = state_file(session_id)

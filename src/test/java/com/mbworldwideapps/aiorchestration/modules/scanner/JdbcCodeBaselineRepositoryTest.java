@@ -686,6 +686,8 @@ class JdbcCodeBaselineRepositoryTest {
         ProjectWorkspaceResolver resolver = workspaceResolver();
 
         assertThat(resolver.resolveByPath(child.resolve("pom.xml")).projectKey()).isEqualTo("HCE_AES");
+        assertThat(resolver.resolveMemoryProjectKeyByPath(aggregate)).contains("LEGACY_HCE");
+        assertThat(resolver.resolveMemoryProjectKeyByPath(child)).contains("HCE_AES");
         assertThatThrownBy(() -> resolver.resolveByPath(aggregate))
                 .isInstanceOf(ProjectWorkspaceResolutionException.class)
                 .hasMessageContaining("not_git_worktree_root");

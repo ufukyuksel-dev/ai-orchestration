@@ -183,8 +183,16 @@ public class AgentSessionMcpTool {
             if (rootPath == null || rootPath.isBlank() || !rootPath.startsWith("/")) {
                 throw new IllegalArgumentException("rootPath must be an absolute repository root");
             }
-            ScannerProjectResolveResponse project = scanner.resolveProject(gitRoot(context, rootPath), null);
-            projectKey = project.projectKey();
+            try {
+                ScannerProjectResolveResponse project = scanner.resolveProject(gitRoot(context, rootPath), null);
+                projectKey = project.projectKey();
+            } catch (com.mbworldwideapps.aiorchestration.modules.scanner.ProjectWorkspaceResolutionException invalid) {
+                if (!McpProjectKeys.isLocalTrust(context) || invalid.getMessage() == null
+                        || !invalid.getMessage().startsWith("not_git_worktree_root:")) {
+                    throw invalid;
+                }
+                projectKey = scanner.resolveMemoryProjectKey(rootPath);
+            }
             List<Card> cards = cursor == null || cursor.isBlank() ? cards(task, projectKey) : List.of();
             if (Boolean.TRUE.equals(remember) && loadRules != null && prefs != null) {
                 prefs.rememberRulesAutoload(loadRules);

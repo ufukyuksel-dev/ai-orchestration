@@ -66,6 +66,20 @@ class FlowTestCase(unittest.TestCase):
 
 
 class PromptHookTest(FlowTestCase):
+    def test_non_git_workspace_reaches_bootstrap_and_delivers_cards(self) -> None:
+        workspace = self.tmp / "workspace"
+        workspace.mkdir()
+        with patch.object(gate, "fetch_bootstrap", return_value={"memory": [CARD]}) as fetch:
+            answer = gate.prompt_hook({"sessionId": "s1", "cwd": str(workspace), "prompt": "auth routes"})
+        self.assertIn("Token auth for API routes", answer["additionalContext"])
+        self.assertEqual(fetch.call_args.args[0], str(workspace.resolve()))
+
+    def test_missing_workspace_does_not_call_bootstrap(self) -> None:
+        with patch.object(gate, "fetch_bootstrap") as fetch:
+            answer = gate.prompt_hook({"sessionId": "s1", "cwd": str(self.tmp / "missing"), "prompt": "auth"})
+        self.assertEqual(answer, {})
+        fetch.assert_not_called()
+
     def test_the_prompts_cards_reach_the_model_once_per_session(self) -> None:
         answer = self.prompt()
         self.assertIn("AI Orchestration, memory for this request:", answer["additionalContext"])

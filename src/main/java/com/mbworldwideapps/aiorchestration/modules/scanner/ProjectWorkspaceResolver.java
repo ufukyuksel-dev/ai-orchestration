@@ -13,6 +13,9 @@ public interface ProjectWorkspaceResolver {
 
     ProjectWorkspace resolveByPath(Path path);
 
+    /** Read-only memory binding lookup; does not require Git or issue a write fingerprint. */
+    java.util.Optional<String> resolveMemoryProjectKeyByPath(Path path);
+
     /** Validate and register one canonical Git root without scanning or deleting code data. */
     ProjectWorkspace registerRoot(String projectKey, Path absoluteRoot);
 }

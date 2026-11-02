@@ -131,7 +131,40 @@ class JdbcProjectWorkspaceResolver implements ProjectWorkspaceResolver {
         return resolve(key);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.Optional<String> resolveMemoryProjectKeyByPath(Path path) {
+        Path requested = canonicalizeRequestedPath(path);
+        return allBindings().stream()
+                .flatMap(binding -> {
+                    try {
+                        Path root = canonicalRoot(binding);
+                        return requested.startsWith(root)
+                                ? java.util.stream.Stream.of(new RootBinding(binding.projectKey(), root.toString()))
+                                : java.util.stream.Stream.<RootBinding>empty();
+                    } catch (ProjectWorkspaceResolutionException invalid) {
+                        if (lexicallyEquals(binding.rootPath(), path)) {
+                            throw invalid;
+                        }
+                        return java.util.stream.Stream.<RootBinding>empty();
+                    }
+                })
+                .sorted(Comparator.<RootBinding>comparingInt(binding -> Path.of(binding.rootPath()).getNameCount())
+                        .reversed().thenComparing(RootBinding::projectKey))
+                .map(RootBinding::projectKey)
+                .findFirst();
+    }
+
     private ProjectWorkspace canonicalWorkspace(RootBinding binding) {
+        Path root = canonicalRoot(binding);
+        Path gitMetadata = gitMetadataDirectory(root, binding.projectKey());
+        String fingerprint = sha256(FINGERPRINT_VERSION + "\0" + root + "\0"
+                + physicalKey(root, binding.projectKey()) + "\0" + gitMetadata + "\0"
+                + physicalKey(gitMetadata, binding.projectKey()));
+        return new ProjectWorkspace(require(binding.projectKey(), "projectKey"), root, fingerprint);
+    }
+
+    private Path canonicalRoot(RootBinding binding) {
         Path root;
         try {
             Path configured = Path.of(require(binding.rootPath(), "rootPath"));
@@ -148,11 +181,7 @@ class JdbcProjectWorkspaceResolver implements ProjectWorkspaceResolver {
             }
             throw failure("broken_root_binding", binding.projectKey(), exception);
         }
-        Path gitMetadata = gitMetadataDirectory(root, binding.projectKey());
-        String fingerprint = sha256(FINGERPRINT_VERSION + "\0" + root + "\0"
-                + physicalKey(root, binding.projectKey()) + "\0" + gitMetadata + "\0"
-                + physicalKey(gitMetadata, binding.projectKey()));
-        return new ProjectWorkspace(require(binding.projectKey(), "projectKey"), root, fingerprint);
+        return root;
     }
 
     private java.util.Optional<ProjectWorkspace> canonicalWorkspaceIfValid(RootBinding binding) {
